@@ -23,10 +23,9 @@ export async function subscribeToEvent(
       // Chat events need both broadcaster and user
       condition.broadcaster_user_id = broadcasterId;
       condition.user_id = userId;
-    } else if (eventType === 'channel.follow') {
-      // Follow needs broadcaster and moderator
-      condition.broadcaster_user_id = broadcasterId;
-      condition.moderator_user_id = userId;
+    } else if (eventType === 'channel.raid') {
+      // Raid event - listen for raids TO this broadcaster
+      condition.to_broadcaster_user_id = broadcasterId;
     } else if (eventType.includes('moderator') || eventType.includes('shield_mode')) {
       // Moderator events
       condition.broadcaster_user_id = broadcasterId;
@@ -41,8 +40,7 @@ export async function subscribeToEvent(
     }
 
     // Determine the correct version for each event type
-    const version = '1';
-    // Note: As of 2024, channel.chat.message uses version "1", not "beta"
+    let version = '1';
     // Beta versions are deprecated for most events
 
     const subscriptionResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
