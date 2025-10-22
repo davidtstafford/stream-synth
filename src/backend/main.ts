@@ -14,6 +14,21 @@ function createWindow(): void {
     }
   });
 
+  // Set Content Security Policy
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    // Only apply CSP to local files, not external pages like Twitch
+    if (details.url.startsWith('file://')) {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': ["default-src 'self' 'unsafe-inline' https://api.twitch.tv https://id.twitch.tv wss://eventsub.wss.twitch.tv; script-src 'self' 'unsafe-inline' 'unsafe-eval'"]
+        }
+      });
+    } else {
+      callback({ responseHeaders: details.responseHeaders });
+    }
+  });
+
   // Load the HTML file
   mainWindow.loadFile(path.join(__dirname, '../frontend/index.html'));
 
@@ -40,28 +55,60 @@ ipcMain.handle('twitch-oauth', async (event, clientId: string) => {
     }
   });
 
-  const redirectUri = 'http://localhost';
-  const scope = 'user:read:email chat:read chat:edit';
+  // Don't set CSP for auth window - Twitch needs to load its scripts
+  
+  const redirectUri = 'http://localhost:3300/auth/twitch/callback';
+  // Request all necessary scopes for EventSub subscriptions
+  const scope = [
+    'user:read:email',
+    'user:read:chat',
+    'chat:read',
+    'chat:edit',
+    'channel:read:subscriptions',
+    'channel:read:redemptions',
+    'channel:read:hype_train',
+    'channel:read:polls',
+    'channel:read:predictions',
+    'channel:read:goals',
+    'channel:manage:raids',
+    'moderator:read:followers',
+    'moderator:read:chatters',
+    'moderator:read:shield_mode',
+    'moderator:read:shoutouts',
+    'moderator:manage:shoutouts',
+    'bits:read',
+    'channel:read:charity'
+  ].join(' ');
   const authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=token&scope=${encodeURIComponent(scope)}`;
 
   authWindow.loadURL(authUrl);
 
   return new Promise((resolve, reject) => {
-    authWindow.webContents.on('will-redirect', (event, url) => {
-      if (url.startsWith(redirectUri)) {
+    // Listen for navigation events to catch the redirect with the token
+    const handleNavigation = (event: any, url: string) => {
+      if (url.startsWith('http://localhost:3300/auth/twitch/callback')) {
         event.preventDefault();
-        const hash = url.split('#')[1];
+        
+        // The token is in the URL fragment (after #)
+        const urlObj = new URL(url);
+        const hash = urlObj.hash.substring(1); // Remove the # symbol
         const params = new URLSearchParams(hash);
         const accessToken = params.get('access_token');
         
         if (accessToken) {
           resolve({ success: true, accessToken });
+          authWindow.close();
         } else {
           reject(new Error('Failed to get access token'));
+          authWindow.close();
         }
-        authWindow.close();
       }
-    });
+    };
+
+    // Try both events as Twitch might use either depending on the flow
+    authWindow.webContents.on('will-redirect', handleNavigation);
+    authWindow.webContents.on('will-navigate', handleNavigation);
+    authWindow.webContents.on('did-navigate', handleNavigation);
 
     authWindow.on('closed', () => {
       reject(new Error('Authentication window closed'));
