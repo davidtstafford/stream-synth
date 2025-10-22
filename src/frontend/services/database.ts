@@ -83,3 +83,16 @@ export async function invalidateToken(userId: string): Promise<void> {
 export async function deleteToken(userId: string): Promise<void> {
   await ipcRenderer.invoke('db:delete-token', userId);
 }
+
+// Export/Import
+export async function exportSettings(): Promise<{ success: boolean; filePath?: string; error?: string }> {
+  return await ipcRenderer.invoke('export-settings');
+}
+
+export async function importSettings(): Promise<{ success: boolean; message?: string; error?: string; imported?: any }> {
+  return await ipcRenderer.invoke('import-settings');
+}
+
+export async function getExportPreview(): Promise<{ success: boolean; preview?: any; error?: string }> {
+  return await ipcRenderer.invoke('get-export-preview');
+}

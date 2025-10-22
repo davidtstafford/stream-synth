@@ -4,6 +4,7 @@ import { SettingsRepository } from '../database/repositories/settings';
 import { SessionsRepository } from '../database/repositories/sessions';
 import { EventsRepository } from '../database/repositories/events';
 import { TokensRepository } from '../database/repositories/tokens';
+import { exportSettings, importSettings, getExportPreview } from '../services/export-import';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -104,5 +105,33 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('db:delete-token', async (event, userId: string) => {
     tokensRepo.delete(userId);
     return { success: true };
+  });
+
+  // Export/Import
+  ipcMain.handle('export-settings', async () => {
+    try {
+      const filePath = await exportSettings();
+      return { success: true, filePath };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('import-settings', async () => {
+    try {
+      const result = await importSettings();
+      return result;
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-export-preview', async () => {
+    try {
+      const preview = getExportPreview();
+      return { success: true, preview };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   });
 }

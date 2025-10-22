@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Connection } from '../../components/Connection';
 import { ChannelSelector } from '../../components/ChannelSelector';
 import { EventSubscriptions } from '../../components/EventSubscriptions';
+import { ExportImport } from '../../components/ExportImport';
 import { createWebSocketConnection } from '../../services/websocket';
 import * as db from '../../services/database';
 
@@ -265,6 +266,13 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
     setShowChannelSelector(false);
   };
 
+  const handleImportComplete = () => {
+    setStatusMessage({
+      type: 'success',
+      message: 'Settings imported! Please restart the app to apply changes.'
+    });
+  };
+
   return (
     <div className="content">
       {isAutoReconnecting ? (
@@ -326,6 +334,11 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
           isBroadcaster={isBroadcaster}
         />
       )}
+
+      <ExportImport 
+        userId={userId}
+        onImportComplete={handleImportComplete}
+      />
     </div>
   );
 };
