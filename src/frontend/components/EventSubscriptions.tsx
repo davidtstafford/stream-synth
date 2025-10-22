@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { EVENT_GROUPS, DEFAULT_SUBSCRIPTIONS, MANDATORY_SUBSCRIPTIONS, BROADCASTER_ONLY_EVENTS, EVENT_DISPLAY_INFO, EventSubscriptions as EventSubscriptionsType } from '../config/event-types';
 import { subscribeToEvent, unsubscribeFromEvent } from '../services/twitch-api';
+import * as db from '../services/database';
 
 interface EventSubscriptionsProps {
   clientId: string;
@@ -37,6 +38,35 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
     }
   }, [sessionId, accessToken, clientId, broadcasterId, userId]);
 
+  // Restore saved event subscriptions from database
+  useEffect(() => {
+    async function restoreSubscriptions() {
+      if (!sessionId || !userId || !broadcasterId) return;
+
+      try {
+        const savedEvents = await db.getEnabledEvents(userId, broadcasterId);
+        console.log('Restoring saved events:', savedEvents);
+
+        const newSubscriptions = { ...subscriptions };
+        savedEvents.forEach(eventType => {
+          newSubscriptions[eventType as keyof EventSubscriptionsType] = true;
+        });
+        setSubscriptions(newSubscriptions);
+
+        // Re-subscribe to saved events
+        savedEvents.forEach(eventType => {
+          if (!MANDATORY_SUBSCRIPTIONS.includes(eventType as keyof EventSubscriptionsType)) {
+            subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);
+          }
+        });
+      } catch (error) {
+        console.error('Failed to restore subscriptions:', error);
+      }
+    }
+
+    restoreSubscriptions();
+  }, [sessionId, userId, broadcasterId]);
+
   // When switching between broadcaster/moderator mode, update subscriptions
   useEffect(() => {
     if (!sessionId || !accessToken) return;
@@ -70,6 +100,9 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
       ...prev,
       [eventType]: newValue
     }));
+
+    // Save to database
+    await db.saveSubscription(userId, broadcasterId, eventType, newValue);
 
     if (newValue) {
       await subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);

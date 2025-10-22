@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import * as path from 'path';
-import { setupContentSecurityPolicy } from './security/csp';
+import { setupContentSecurityPolicy } from '../security/csp';
 
 export function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -15,7 +15,8 @@ export function createMainWindow(): BrowserWindow {
 
   setupContentSecurityPolicy(mainWindow);
 
-  mainWindow.loadFile(path.join(__dirname, '../frontend/index.html'));
+  // __dirname will be dist/backend/core, so go up to dist root, then to frontend
+  mainWindow.loadFile(path.join(__dirname, '../../frontend/index.html'));
 
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools();
