@@ -1,0 +1,35 @@
+{
+  "name": "stream-synth",
+  "version": "1.0.0",
+  "description": "Stream Synth - A desktop app for Twitch integration",
+  "main": "dist/backend/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "tsc && webpack --mode production && cp src/frontend/index.html dist/frontend/",
+    "dev": "npm run build && electron .",
+    "watch": "tsc --watch"
+  },
+  "keywords": [
+    "twitch",
+    "electron",
+    "stream"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "@types/ws": "^8.5.10",
+    "electron": "^35.7.5",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "ws": "^8.16.0"
+  }
+}
