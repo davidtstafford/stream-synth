@@ -2,6 +2,18 @@ import React, { useState, useEffect } from 'react';
 import * as ttsService from '../../services/tts';
 import './tts.css';
 
+interface TTSSettings {
+  enabled: boolean;
+  provider: 'webspeech' | 'azure' | 'google';
+  voiceId: string;
+  volume: number;
+  rate: number;
+  pitch: number;
+  azureApiKey?: string;
+  azureRegion?: string;
+  googleApiKey?: string;
+}
+
 interface VoiceGroup {
   category: string;
   voices: Array<{
@@ -14,7 +26,10 @@ interface VoiceGroup {
   }>;
 }
 
+type TabType = 'settings' | 'rules';
+
 export const TTS: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<TabType>('settings');
   const [settings, setSettings] = useState<ttsService.TTSSettings | null>(null);
   const [voiceGroups, setVoiceGroups] = useState<VoiceGroup[]>([]);
   const [providers, setProviders] = useState<string[]>([]);
@@ -254,21 +269,60 @@ export const TTS: React.FC = () => {
         </div>
       )}
 
-      {/* Voice Statistics Bar */}
-      <div className="stats-bar">
-        <div className="stat">
-          <span className="stat-label">Total Voices:</span>
-          <span className="stat-value">{voiceStats.total}</span>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Available:</span>
-          <span className="stat-value available">{voiceStats.available}</span>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Showing:</span>
-          <span className="stat-value">{visibleCount}</span>
-        </div>
+      {/* Tab Navigation */}
+      <div className="tab-navigation">
+        <button
+          className={`tab-button ${activeTab === 'settings' ? 'active' : ''}`}
+          onClick={() => setActiveTab('settings')}
+        >
+          🎙️ Voice Settings
+        </button>
+        <button
+          className={`tab-button ${activeTab === 'rules' ? 'active' : ''}`}
+          onClick={() => setActiveTab('rules')}
+        >
+          📋 TTS Rules
+        </button>
       </div>
+
+      {/* Tab Content */}
+      {activeTab === 'settings' && (
+        <div className="tab-content">
+          {renderVoiceSettingsTab()}
+        </div>
+      )}
+
+      {activeTab === 'rules' && (
+        <div className="tab-content">
+          {renderTTSRulesTab()}
+        </div>
+      )}
+    </div>
+  );
+
+  // Voice Settings Tab Content
+  function renderVoiceSettingsTab() {
+    if (!settings) {
+      return <div>Loading settings...</div>;
+    }
+
+    return (
+      <>
+        {/* Voice Statistics Bar */}
+        <div className="stats-bar">
+          <div className="stat">
+            <span className="stat-label">Total Voices:</span>
+            <span className="stat-value">{voiceStats.total}</span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">Available:</span>
+            <span className="stat-value available">{voiceStats.available}</span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">Showing:</span>
+            <span className="stat-value">{visibleCount}</span>
+          </div>
+        </div>
 
       {/* Enable/Disable Toggle */}
       <div className="setting-group">
@@ -449,7 +503,32 @@ export const TTS: React.FC = () => {
           🔄 Refresh Voices
         </button>
       </div>
-    </div>
-  );
+      </>
+    );
+  }
+
+  // TTS Rules Tab Content
+  function renderTTSRulesTab() {
+    return (
+      <div className="rules-tab">
+        <div className="coming-soon">
+          <h3>🚧 TTS Rules Configuration</h3>
+          <p>Configure voice assignment rules and chat commands here.</p>
+          
+          <div className="feature-list">
+            <h4>Coming Features:</h4>
+            <ul>
+              <li>✨ Default voice for all viewers</li>
+              <li>✨ Per-viewer voice assignments</li>
+              <li>✨ Chat command: <code>~setmyvoice [voice_id]</code></li>
+              <li>✨ Role-based voice rules (subscribers, mods, VIPs)</li>
+              <li>✨ Import/Export voice mappings</li>
+              <li>✨ Voice randomization options</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  }
 };
 

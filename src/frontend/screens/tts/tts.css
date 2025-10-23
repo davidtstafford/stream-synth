@@ -18,6 +18,53 @@
   font-weight: 600;
 }
 
+/* Tab Navigation */
+.tab-navigation {
+  display: flex;
+  gap: 0;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #555;
+}
+
+.tab-button {
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  background: transparent;
+  color: #aaa;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  bottom: -2px;
+}
+
+.tab-button:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-button.active {
+  color: #9147ff;
+  border-bottom-color: #9147ff;
+}
+
+.tab-content {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Error Message */
 .error-message {
   background-color: #ffebee;
@@ -328,6 +375,62 @@
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+/* TTS Rules Tab */
+.rules-tab {
+  padding: 20px 0;
+}
+
+.coming-soon {
+  background: rgba(145, 71, 255, 0.1);
+  border: 2px dashed #9147ff;
+  border-radius: 8px;
+  padding: 32px;
+  text-align: center;
+}
+
+.coming-soon h3 {
+  color: #9147ff;
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+
+.coming-soon p {
+  color: #aaa;
+  font-size: 16px;
+  margin-bottom: 24px;
+}
+
+.feature-list {
+  text-align: left;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.feature-list h4 {
+  color: white;
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+
+.feature-list ul {
+  list-style: none;
+  padding: 0;
+}
+
+.feature-list li {
+  padding: 8px 0;
+  color: #ccc;
+  font-size: 14px;
+}
+
+.feature-list code {
+  background: #2a2a2a;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #9147ff;
+  font-family: 'SF Mono', 'Monaco', monospace;
 }
 
 /* Responsive Design */
