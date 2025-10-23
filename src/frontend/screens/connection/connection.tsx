@@ -330,6 +330,7 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
           accessToken={accessToken}
           sessionId={sessionId}
           broadcasterId={broadcasterId}
+          broadcasterLogin={broadcasterLogin}
           userId={userId}
           isBroadcaster={isBroadcaster}
         />

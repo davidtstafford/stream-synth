@@ -5,6 +5,7 @@ import { SessionsRepository } from '../database/repositories/sessions';
 import { EventsRepository } from '../database/repositories/events';
 import { TokensRepository } from '../database/repositories/tokens';
 import { exportSettings, importSettings, getExportPreview } from '../services/export-import';
+import { twitchIRCService } from '../services/twitch-irc';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -133,5 +134,73 @@ export function setupIpcHandlers(): void {
     } catch (error: any) {
       return { success: false, error: error.message };
     }
+  });
+
+  // IRC: Connect
+  ipcMain.handle('irc:connect', async (event, username: string, token: string, channel?: string) => {
+    try {
+      await twitchIRCService.connect(username, token, channel);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // IRC: Disconnect
+  ipcMain.handle('irc:disconnect', async () => {
+    try {
+      await twitchIRCService.disconnect();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // IRC: Send message
+  ipcMain.handle('irc:send-message', async (event, message: string, channel?: string) => {
+    try {
+      await twitchIRCService.sendMessage(message, channel);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // IRC: Get status
+  ipcMain.handle('irc:get-status', async () => {
+    return twitchIRCService.getStatus();
+  });
+
+  // IRC: Join channel
+  ipcMain.handle('irc:join-channel', async (event, channel: string) => {
+    try {
+      await twitchIRCService.joinChannel(channel);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // IRC: Leave channel
+  ipcMain.handle('irc:leave-channel', async (event, channel: string) => {
+    try {
+      await twitchIRCService.leaveChannel(channel);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // IRC: Forward events to renderer
+  twitchIRCService.on('chat.join', (event) => {
+    mainWindow?.webContents.send('irc:chat-join', event);
+  });
+
+  twitchIRCService.on('chat.part', (event) => {
+    mainWindow?.webContents.send('irc:chat-part', event);
+  });
+
+  twitchIRCService.on('status', (status) => {
+    mainWindow?.webContents.send('irc:status', status);
   });
 }
