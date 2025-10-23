@@ -472,14 +472,14 @@ export class TTSManager {
     // Handle emojis
     if (this.settings?.maxEmojisPerMessage && emojis.length > this.settings.maxEmojisPerMessage) {
       if (this.settings.stripExcessiveEmotes) {
-        // Remove excess emojis
-        filtered = message;
-        emojis.forEach((emoji, i) => {
-          if (i >= this.settings!.maxEmojisPerMessage!) {
-            filtered = filtered.replace(emoji, '');
-          }
+        // Keep only the allowed number of emojis, remove the rest
+        let emojiCount = 0;
+        filtered = message.replace(emojiRegex, (match) => {
+          emojiCount++;
+          // Keep emojis within the limit, remove the rest
+          return emojiCount <= this.settings!.maxEmojisPerMessage! ? match : '';
         });
-        console.log('[TTS] Stripped excessive emojis');
+        console.log('[TTS] Stripped excessive emojis (kept first', this.settings.maxEmojisPerMessage, ')');
       } else {
         console.log('[TTS] Too many emojis:', emojis.length);
         return null;
@@ -500,9 +500,16 @@ export class TTSManager {
   }
 
   /**
-   * Limit repeated characters (e.g., "hahahaha" -> "haha")
+   * Limit repeated characters (e.g., "woooooow" -> "wooow", "lolllll" -> "lolll")
+   * Limits consecutive identical characters, NOT patterns like "haha"
+   * BUT skip this filter for pure numbers to preserve values like "1000000"
    */
   private limitRepeatedCharacters(message: string): string {
+    // Don't apply to pure numbers
+    if (/^\d+$/.test(message.trim())) {
+      return message;
+    }
+
     const maxRepeats = this.settings?.maxRepeatedChars || 3;
     // Match character repeated more than maxRepeats times
     // e.g., if maxRepeats=3, match 4+ repeats: (.)\\1{3,} means char + 3 more = 4 total

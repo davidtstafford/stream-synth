@@ -814,7 +814,7 @@ export const TTS: React.FC = () => {
               className="slider"
             />
             <p className="setting-hint">
-              "hahahaha" → "haha" (limits to {settings.maxRepeatedChars ?? 3} repeats)
+              "woooooow" → "wooow", "lolllll" → "lolll" (limits consecutive chars to {settings.maxRepeatedChars ?? 3})
             </p>
           </div>
 
