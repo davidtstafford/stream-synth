@@ -21,13 +21,31 @@ export interface TTSSettings {
   azureApiKey?: string;
   azureRegion?: string;
   googleApiKey?: string;
-  // TTS Rules
+  // Basic TTS Rules
   filterCommands?: boolean;
   filterBots?: boolean;
   filterUrls?: boolean;
   announceUsername?: boolean;
   minMessageLength?: number;
   maxMessageLength?: number;
+  // Duplicate Detection
+  skipDuplicateMessages?: boolean;
+  duplicateMessageWindow?: number;
+  // Rate Limiting
+  userCooldownEnabled?: boolean;
+  userCooldownSeconds?: number;
+  globalCooldownEnabled?: boolean;
+  globalCooldownSeconds?: number;
+  maxQueueSize?: number;
+  // Emote/Emoji Limits
+  maxEmotesPerMessage?: number;
+  maxEmojisPerMessage?: number;
+  stripExcessiveEmotes?: boolean;
+  // Character Repetition
+  maxRepeatedChars?: number;
+  maxRepeatedWords?: number;
+  // Content Filters
+  copypastaFilterEnabled?: boolean;
 }
 
 export interface TTSOptions {

@@ -122,7 +122,20 @@ export function runMigrations(db: Database.Database): void {
       ('filter_urls', 'true'),
       ('announce_username', 'true'),
       ('min_message_length', '0'),
-      ('max_message_length', '500')
+      ('max_message_length', '500'),
+      ('skip_duplicate_messages', 'true'),
+      ('duplicate_message_window', '300'),
+      ('user_cooldown_enabled', 'true'),
+      ('user_cooldown_seconds', '30'),
+      ('global_cooldown_enabled', 'false'),
+      ('global_cooldown_seconds', '5'),
+      ('max_queue_size', '20'),
+      ('max_emotes_per_message', '5'),
+      ('max_emojis_per_message', '3'),
+      ('strip_excessive_emotes', 'true'),
+      ('max_repeated_chars', '3'),
+      ('max_repeated_words', '2'),
+      ('copypasta_filter_enabled', 'false')
   `);
 
   // Create tts_voices table for discovered voices

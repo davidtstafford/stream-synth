@@ -623,6 +623,238 @@ export const TTS: React.FC = () => {
           </div>
         </div>
 
+        {/* Duplicate Detection */}
+        <div className="rules-section">
+          <h4>🔁 Duplicate Message Detection</h4>
+          
+          <div className="setting-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.skipDuplicateMessages ?? true}
+                onChange={(e) => handleSettingChange('skipDuplicateMessages', e.target.checked)}
+              />
+              <span className="checkbox-text">
+                Skip Duplicate Messages
+                <span className="setting-hint">Don't read the same message twice within the time window</span>
+              </span>
+            </label>
+          </div>
+
+          <div className="setting-group">
+            <label className="setting-label">
+              Duplicate Window: {settings.duplicateMessageWindow ?? 300} seconds ({Math.floor((settings.duplicateMessageWindow ?? 300) / 60)} minutes)
+            </label>
+            <input
+              type="range"
+              min="60"
+              max="600"
+              step="30"
+              value={settings.duplicateMessageWindow ?? 300}
+              onChange={(e) => handleSettingChange('duplicateMessageWindow', parseInt(e.target.value))}
+              className="slider"
+            />
+            <p className="setting-hint">
+              How long to remember messages. Same message can only be read once per window.
+            </p>
+          </div>
+        </div>
+
+        {/* Rate Limiting & Cooldowns */}
+        <div className="rules-section">
+          <h4>⏱️ Rate Limiting & Cooldowns</h4>
+          
+          <div className="setting-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.userCooldownEnabled ?? true}
+                onChange={(e) => handleSettingChange('userCooldownEnabled', e.target.checked)}
+              />
+              <span className="checkbox-text">
+                Per-User Cooldown
+                <span className="setting-hint">Limit how often each user can trigger TTS</span>
+              </span>
+            </label>
+          </div>
+
+          {settings.userCooldownEnabled && (
+            <div className="setting-group" style={{ marginLeft: '28px' }}>
+              <label className="setting-label">
+                User Cooldown: {settings.userCooldownSeconds ?? 30} seconds
+              </label>
+              <input
+                type="range"
+                min="5"
+                max="120"
+                step="5"
+                value={settings.userCooldownSeconds ?? 30}
+                onChange={(e) => handleSettingChange('userCooldownSeconds', parseInt(e.target.value))}
+                className="slider"
+              />
+            </div>
+          )}
+
+          <div className="setting-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.globalCooldownEnabled ?? false}
+                onChange={(e) => handleSettingChange('globalCooldownEnabled', e.target.checked)}
+              />
+              <span className="checkbox-text">
+                Global Cooldown
+                <span className="setting-hint">Limit TTS frequency across all users (prevents spam during raids)</span>
+              </span>
+            </label>
+          </div>
+
+          {settings.globalCooldownEnabled && (
+            <div className="setting-group" style={{ marginLeft: '28px' }}>
+              <label className="setting-label">
+                Global Cooldown: {settings.globalCooldownSeconds ?? 5} seconds
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="30"
+                value={settings.globalCooldownSeconds ?? 5}
+                onChange={(e) => handleSettingChange('globalCooldownSeconds', parseInt(e.target.value))}
+                className="slider"
+              />
+            </div>
+          )}
+
+          <div className="setting-group">
+            <label className="setting-label">
+              Max Queue Size: {settings.maxQueueSize ?? 20} messages
+            </label>
+            <input
+              type="range"
+              min="5"
+              max="50"
+              step="5"
+              value={settings.maxQueueSize ?? 20}
+              onChange={(e) => handleSettingChange('maxQueueSize', parseInt(e.target.value))}
+              className="slider"
+            />
+            <p className="setting-hint">
+              Maximum messages in queue. New messages dropped if queue is full.
+            </p>
+          </div>
+        </div>
+
+        {/* Emote & Emoji Limits */}
+        <div className="rules-section">
+          <h4>😀 Emote & Emoji Limits</h4>
+          
+          <div className="setting-group">
+            <label className="setting-label">
+              Max Emotes per Message: {settings.maxEmotesPerMessage ?? 5}
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="20"
+              value={settings.maxEmotesPerMessage ?? 5}
+              onChange={(e) => handleSettingChange('maxEmotesPerMessage', parseInt(e.target.value))}
+              className="slider"
+            />
+            <p className="setting-hint">
+              Limit Twitch emotes per message. Set to 0 for no limit.
+            </p>
+          </div>
+
+          <div className="setting-group">
+            <label className="setting-label">
+              Max Emojis per Message: {settings.maxEmojisPerMessage ?? 3}
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              value={settings.maxEmojisPerMessage ?? 3}
+              onChange={(e) => handleSettingChange('maxEmojisPerMessage', parseInt(e.target.value))}
+              className="slider"
+            />
+            <p className="setting-hint">
+              Limit Unicode emojis per message. Set to 0 for no limit.
+            </p>
+          </div>
+
+          <div className="setting-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.stripExcessiveEmotes ?? true}
+                onChange={(e) => handleSettingChange('stripExcessiveEmotes', e.target.checked)}
+              />
+              <span className="checkbox-text">
+                Strip Excessive Emotes
+                <span className="setting-hint">Remove excess emotes instead of skipping the entire message</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* Character Repetition */}
+        <div className="rules-section">
+          <h4>🔤 Character & Word Repetition</h4>
+          
+          <div className="setting-group">
+            <label className="setting-label">
+              Max Repeated Characters: {settings.maxRepeatedChars ?? 3}
+            </label>
+            <input
+              type="range"
+              min="2"
+              max="10"
+              value={settings.maxRepeatedChars ?? 3}
+              onChange={(e) => handleSettingChange('maxRepeatedChars', parseInt(e.target.value))}
+              className="slider"
+            />
+            <p className="setting-hint">
+              "hahahaha" → "haha" (limits to {settings.maxRepeatedChars ?? 3} repeats)
+            </p>
+          </div>
+
+          <div className="setting-group">
+            <label className="setting-label">
+              Max Repeated Words: {settings.maxRepeatedWords ?? 2}
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              value={settings.maxRepeatedWords ?? 2}
+              onChange={(e) => handleSettingChange('maxRepeatedWords', parseInt(e.target.value))}
+              className="slider"
+            />
+            <p className="setting-hint">
+              "really really really really" → "really really"
+            </p>
+          </div>
+        </div>
+
+        {/* Content Filters */}
+        <div className="rules-section">
+          <h4>🛡️ Content Filters</h4>
+          
+          <div className="setting-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.copypastaFilterEnabled ?? false}
+                onChange={(e) => handleSettingChange('copypastaFilterEnabled', e.target.checked)}
+              />
+              <span className="checkbox-text">
+                Block Known Copypastas
+                <span className="setting-hint">Skip common copypasta spam (basic list included)</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
         {/* Future Features */}
         <div className="rules-section">
           <h4>✨ Coming Soon</h4>
@@ -630,10 +862,11 @@ export const TTS: React.FC = () => {
             <li>Per-viewer voice assignments</li>
             <li>Chat command: <code>~setmyvoice [voice_id]</code></li>
             <li>Muted viewers list</li>
-            <li>Emoji/emote filtering and limits</li>
-            <li>Duplicate message detection</li>
+            <li>Account age requirements</li>
+            <li>Watch time requirements</li>
             <li>Role-based voice rules (subscribers, mods, VIPs)</li>
             <li>Priority queue for specific users</li>
+            <li>Custom copypasta blocklist</li>
           </ul>
         </div>
       </div>
