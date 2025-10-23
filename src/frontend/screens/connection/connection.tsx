@@ -99,12 +99,31 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
 
         // Initialize WebSocket
         const ws = createWebSocketConnection({
-          onSessionWelcome: (sessionIdValue: string) => {
+          onSessionWelcome: async (sessionIdValue: string) => {
             setSessionId(sessionIdValue);
             setStatusMessage({
               type: 'success',
               message: `Auto-reconnected! Monitoring: ${lastChannelLogin || user.login}`
             });
+            
+            // Connect to IRC for JOIN/PART events
+            try {
+              console.log('🔌 Connecting to IRC (auto-reconnect)...');
+              const { ipcRenderer } = window.require('electron');
+              const channelToJoin = lastChannelLogin || user.login;
+              const ircResult = await ipcRenderer.invoke('irc:connect', user.login, savedToken.accessToken, channelToJoin);
+              if (ircResult.success) {
+                console.log('✅ IRC connected');
+                setStatusMessage({
+                  type: 'success',
+                  message: `Auto-reconnected! Monitoring: ${channelToJoin} (EventSub + IRC)`
+                });
+              } else {
+                console.error('❌ IRC connection failed:', ircResult.error);
+              }
+            } catch (error) {
+              console.error('❌ IRC connection error:', error);
+            }
           },
           onKeepalive: () => {},
           onNotification: async (data: any) => {
@@ -242,12 +261,30 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
     });
 
     const ws = createWebSocketConnection({
-      onSessionWelcome: (sessionIdValue: string) => {
+      onSessionWelcome: async (sessionIdValue: string) => {
         setSessionId(sessionIdValue);
         setStatusMessage({
           type: 'success',
           message: `WebSocket session established! Monitoring: ${userLoginValue}`
         });
+        
+        // Connect to IRC for JOIN/PART events
+        try {
+          console.log('🔌 Connecting to IRC...');
+          const { ipcRenderer } = window.require('electron');
+          const ircResult = await ipcRenderer.invoke('irc:connect', userLoginValue, accessTokenValue, userLoginValue);
+          if (ircResult.success) {
+            console.log('✅ IRC connected');
+            setStatusMessage({
+              type: 'success',
+              message: `Connected! Monitoring: ${userLoginValue} (EventSub + IRC)`
+            });
+          } else {
+            console.error('❌ IRC connection failed:', ircResult.error);
+          }
+        } catch (error) {
+          console.error('❌ IRC connection error:', error);
+        }
       },
       onKeepalive: () => {
         // Keepalive received

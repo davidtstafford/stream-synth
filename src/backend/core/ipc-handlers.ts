@@ -325,13 +325,89 @@ export function setupIpcHandlers(): void {
     }
   });
 
-  // IRC: Forward events to renderer
-  twitchIRCService.on('chat.join', (event) => {
+  // IRC: Forward events to renderer AND store in database
+  twitchIRCService.on('chat.join', async (event) => {
     mainWindow?.webContents.send('irc:chat-join', event);
+    
+    // Store JOIN event in database
+    try {
+      // Get current session to find channel_id
+      const session = await sessionsRepo.getCurrentSession();
+      if (session) {
+        // Get or create viewer
+        const viewer = await viewersRepo.getOrCreate(
+          event.username, // Use username as ID for IRC users (no Twitch ID available)
+          event.username,
+          event.username  // Display name = username for IRC
+        );
+        
+        // Store event
+        const eventId = eventsRepo.storeEvent(
+          'irc.chat.join',
+          event,
+          session.channel_id,
+          viewer.id
+        );
+        
+        console.log(`[IRC] JOIN event stored with ID: ${eventId}`);
+        
+        // Broadcast to renderer with viewer info
+        mainWindow?.webContents.send('event:stored', {
+          id: eventId,
+          event_type: 'irc.chat.join',
+          event_data: JSON.stringify(event),
+          viewer_id: viewer.id,
+          channel_id: session.channel_id,
+          created_at: new Date().toISOString(),
+          viewer_username: viewer.username,
+          viewer_display_name: viewer.display_name
+        });
+      }
+    } catch (error) {
+      console.error('[IRC] Failed to store JOIN event:', error);
+    }
   });
 
-  twitchIRCService.on('chat.part', (event) => {
+  twitchIRCService.on('chat.part', async (event) => {
     mainWindow?.webContents.send('irc:chat-part', event);
+    
+    // Store PART event in database
+    try {
+      // Get current session to find channel_id
+      const session = await sessionsRepo.getCurrentSession();
+      if (session) {
+        // Get or create viewer
+        const viewer = await viewersRepo.getOrCreate(
+          event.username, // Use username as ID for IRC users (no Twitch ID available)
+          event.username,
+          event.username  // Display name = username for IRC
+        );
+        
+        // Store event
+        const eventId = eventsRepo.storeEvent(
+          'irc.chat.part',
+          event,
+          session.channel_id,
+          viewer.id
+        );
+        
+        console.log(`[IRC] PART event stored with ID: ${eventId}`);
+        
+        // Broadcast to renderer with viewer info
+        mainWindow?.webContents.send('event:stored', {
+          id: eventId,
+          event_type: 'irc.chat.part',
+          event_data: JSON.stringify(event),
+          viewer_id: viewer.id,
+          channel_id: session.channel_id,
+          created_at: new Date().toISOString(),
+          viewer_username: viewer.username,
+          viewer_display_name: viewer.display_name
+        });
+      }
+    } catch (error) {
+      console.error('[IRC] Failed to store PART event:', error);
+    }
   });
 
   twitchIRCService.on('status', (status) => {

@@ -82,7 +82,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ channelId }) => {
 
   // Listen for new chat messages in real-time
   useEffect(() => {
-    const handleNewEvent = (eventData: any) => {
+    const handleNewEvent = (_event: any, eventData: any) => {
       // Only handle chat messages
       if (eventData.event_type !== 'channel.chat.message') {
         return;
