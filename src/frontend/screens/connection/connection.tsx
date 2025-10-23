@@ -107,8 +107,64 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
             });
           },
           onKeepalive: () => {},
-          onNotification: (data: any) => {
-            console.log('Event received:', data);
+          onNotification: async (data: any) => {
+            console.log('🔔 Event received (full):', JSON.stringify(data, null, 2));
+            
+            // Extract event type and payload
+            const eventType = data.subscription?.type || data.payload?.subscription?.type;
+            const eventPayload = data.event || data.payload?.event;
+            
+            console.log('📝 Event type:', eventType);
+            console.log('📦 Event payload:', eventPayload);
+            
+            if (eventType && eventPayload) {
+              // Extract viewer info if available based on event type
+              let viewerId: string | undefined;
+              let viewerUsername: string | undefined;
+              let viewerDisplayName: string | undefined;
+              
+              // Chat message events
+              if (eventType === 'channel.chat.message') {
+                viewerId = eventPayload.chatter_user_id;
+                viewerUsername = eventPayload.chatter_user_login;
+                viewerDisplayName = eventPayload.chatter_user_name;
+                console.log('💬 Chat message from:', viewerUsername, '(ID:', viewerId, ')');
+              }
+              // Most other events use user_id, user_login, user_name
+              else if (eventPayload.user_id) {
+                viewerId = eventPayload.user_id;
+                viewerUsername = eventPayload.user_login;
+                viewerDisplayName = eventPayload.user_name;
+                console.log('👤 Event from user:', viewerUsername, '(ID:', viewerId, ')');
+              }
+              // Raid events use from_broadcaster_*
+              else if (eventPayload.from_broadcaster_user_id) {
+                viewerId = eventPayload.from_broadcaster_user_id;
+                viewerUsername = eventPayload.from_broadcaster_user_login;
+                viewerDisplayName = eventPayload.from_broadcaster_user_name;
+                console.log('🎯 Raid from:', viewerUsername, '(ID:', viewerId, ')');
+              }
+              
+              // Create or update viewer if we have their info
+              if (viewerId && viewerUsername) {
+                console.log('👥 Creating/updating viewer:', viewerUsername);
+                const viewerResult = await db.getOrCreateViewer(viewerId, viewerUsername, viewerDisplayName);
+                console.log('👥 Viewer result:', viewerResult);
+              }
+              
+              // Store the event
+              const channelId = lastChannelId || user.id;
+              console.log('💾 Storing event for channel:', channelId);
+              const result = await db.storeEvent(eventType, eventPayload, channelId, viewerId);
+              console.log('💾 Store result:', result);
+              if (result.success) {
+                console.log('✅ Event stored with ID:', result.id);
+              } else {
+                console.error('❌ Failed to store event:', result.error);
+              }
+            } else {
+              console.log('⚠️ Missing event type or payload');
+            }
           },
           onReconnect: () => {
             setStatusMessage({
@@ -196,9 +252,63 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
       onKeepalive: () => {
         // Keepalive received
       },
-      onNotification: (data: any) => {
-        // Handle notifications
-        console.log('Event received:', data);
+      onNotification: async (data: any) => {
+        console.log('🔔 Event received (full):', JSON.stringify(data, null, 2));
+        
+        // Extract event type and payload
+        const eventType = data.subscription?.type || data.payload?.subscription?.type;
+        const eventPayload = data.event || data.payload?.event;
+        
+        console.log('📝 Event type:', eventType);
+        console.log('📦 Event payload:', eventPayload);
+        
+        if (eventType && eventPayload) {
+          // Extract viewer info if available based on event type
+          let viewerId: string | undefined;
+          let viewerUsername: string | undefined;
+          let viewerDisplayName: string | undefined;
+          
+          // Chat message events
+          if (eventType === 'channel.chat.message') {
+            viewerId = eventPayload.chatter_user_id;
+            viewerUsername = eventPayload.chatter_user_login;
+            viewerDisplayName = eventPayload.chatter_user_name;
+            console.log('💬 Chat message from:', viewerUsername, '(ID:', viewerId, ')');
+          }
+          // Most other events use user_id, user_login, user_name
+          else if (eventPayload.user_id) {
+            viewerId = eventPayload.user_id;
+            viewerUsername = eventPayload.user_login;
+            viewerDisplayName = eventPayload.user_name;
+            console.log('👤 Event from user:', viewerUsername, '(ID:', viewerId, ')');
+          }
+          // Raid events use from_broadcaster_*
+          else if (eventPayload.from_broadcaster_user_id) {
+            viewerId = eventPayload.from_broadcaster_user_id;
+            viewerUsername = eventPayload.from_broadcaster_user_login;
+            viewerDisplayName = eventPayload.from_broadcaster_user_name;
+            console.log('🎯 Raid from:', viewerUsername, '(ID:', viewerId, ')');
+          }
+          
+          // Create or update viewer if we have their info
+          if (viewerId && viewerUsername) {
+            console.log('👥 Creating/updating viewer:', viewerUsername);
+            const viewerResult = await db.getOrCreateViewer(viewerId, viewerUsername, viewerDisplayName);
+            console.log('👥 Viewer result:', viewerResult);
+          }
+          
+          // Store the event
+          console.log('💾 Storing event for channel:', broadcasterId);
+          const result = await db.storeEvent(eventType, eventPayload, broadcasterId, viewerId);
+          console.log('💾 Store result:', result);
+          if (result.success) {
+            console.log('✅ Event stored with ID:', result.id);
+          } else {
+            console.error('❌ Failed to store event:', result.error);
+          }
+        } else {
+          console.log('⚠️ Missing event type or payload');
+        }
       },
       onReconnect: () => {
         setStatusMessage({
