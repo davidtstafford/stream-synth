@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { EVENT_GROUPS, DEFAULT_SUBSCRIPTIONS, MANDATORY_SUBSCRIPTIONS, BROADCASTER_ONLY_EVENTS, EVENT_DISPLAY_INFO, EventSubscriptions as EventSubscriptionsType } from '../config/event-types';
 import { subscribeToEvent, unsubscribeFromEvent } from '../services/twitch-api';
+import { connectIRC, disconnectIRC } from '../services/irc-api';
 import * as db from '../services/database';
 
 interface EventSubscriptionsProps {
@@ -8,6 +9,7 @@ interface EventSubscriptionsProps {
   accessToken: string;
   sessionId: string;
   broadcasterId: string;
+  broadcasterLogin: string;
   userId: string;
   isBroadcaster: boolean;
 }
@@ -17,6 +19,7 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
   accessToken,
   sessionId,
   broadcasterId,
+  broadcasterLogin,
   userId,
   isBroadcaster
 }) => {
@@ -28,6 +31,7 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
     });
     return initial;
   });
+  const [ircConnected, setIrcConnected] = useState<boolean>(false);
 
   // Auto-subscribe to mandatory events when session is established
   useEffect(() => {
@@ -85,18 +89,12 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
     }
   }, [isBroadcaster, sessionId]);
 
-  const handleEventToggle = async (eventType: keyof EventSubscriptionsType) => {
-    if (MANDATORY_SUBSCRIPTIONS.includes(eventType)) {
-      return;
-    }
-    
-    // Don't allow toggling broadcaster-only events when not a broadcaster
-    if (BROADCASTER_ONLY_EVENTS.includes(eventType) && !isBroadcaster) {
-      return;
-    }
-    
+    const handleEventToggle = async (eventType: keyof EventSubscriptionsType) => {
+    if (MANDATORY_SUBSCRIPTIONS.includes(eventType)) return;
+
     const newValue = !subscriptions[eventType];
-    setSubscriptions((prev: EventSubscriptionsType) => ({
+    
+    setSubscriptions(prev => ({
       ...prev,
       [eventType]: newValue
     }));
@@ -104,14 +102,49 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
     // Save to database
     await db.saveSubscription(userId, broadcasterId, eventType, newValue);
 
-    if (newValue) {
-      await subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);
+    // Check if this is an IRC event
+    const isIRCEvent = eventType.startsWith('irc.');
+    
+    if (isIRCEvent) {
+      // Handle IRC events differently
+      if (newValue) {
+        // Enable IRC event - connect to IRC if not already connected
+        if (!ircConnected) {
+          try {
+            // Connect to IRC with broadcaster's channel
+            await connectIRC(broadcasterLogin, accessToken, broadcasterLogin);
+            setIrcConnected(true);
+          } catch (error) {
+            console.error('Failed to connect to IRC:', error);
+          }
+        }
+      } else {
+        // Disable IRC event - check if any IRC events are still enabled
+        const anyIRCEventEnabled = Object.entries(subscriptions).some(
+          ([key, value]) => key.startsWith('irc.') && key !== eventType && value
+        );
+        
+        if (!anyIRCEventEnabled && ircConnected) {
+          // No IRC events enabled, disconnect
+          try {
+            await disconnectIRC();
+            setIrcConnected(false);
+          } catch (error) {
+            console.error('Failed to disconnect from IRC:', error);
+          }
+        }
+      }
     } else {
-      await unsubscribeFromEvent(eventType, accessToken, clientId);
+      // Handle EventSub events (original logic)
+      if (newValue) {
+        await subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);
+      } else {
+        await unsubscribeFromEvent(eventType, accessToken, clientId);
+      }
     }
   };
 
-  const handleSelectDefault = () => {
+  const handleSelectDefault = async () => {
     const newSubscriptions = { ...subscriptions };
     Object.keys(newSubscriptions).forEach(key => {
       newSubscriptions[key as keyof EventSubscriptionsType] = DEFAULT_SUBSCRIPTIONS.includes(key as keyof EventSubscriptionsType);
@@ -119,15 +152,37 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
     setSubscriptions(newSubscriptions);
 
     if (sessionId && accessToken) {
+      const eventSubEvents: (keyof EventSubscriptionsType)[] = [];
+      const ircEvents: (keyof EventSubscriptionsType)[] = [];
+      
       DEFAULT_SUBSCRIPTIONS.forEach((event: keyof EventSubscriptionsType) => {
         if (!MANDATORY_SUBSCRIPTIONS.includes(event)) {
-          subscribeToEvent(event, accessToken, clientId, sessionId, broadcasterId, userId);
+          if (event.startsWith('irc.')) {
+            ircEvents.push(event);
+          } else {
+            eventSubEvents.push(event);
+          }
         }
       });
+      
+      // Subscribe to EventSub events
+      for (const event of eventSubEvents) {
+        await subscribeToEvent(event, accessToken, clientId, sessionId, broadcasterId, userId);
+      }
+      
+      // Connect to IRC if any IRC events are enabled
+      if (ircEvents.length > 0 && !ircConnected) {
+        try {
+          await connectIRC(broadcasterLogin, accessToken, broadcasterLogin);
+          setIrcConnected(true);
+        } catch (error) {
+          console.error('Failed to connect to IRC:', error);
+        }
+      }
     }
   };
 
-  const handleSelectAll = () => {
+  const handleSelectAll = async () => {
     const newSubscriptions = { ...subscriptions };
     Object.keys(newSubscriptions).forEach(key => {
       const eventType = key as keyof EventSubscriptionsType;
@@ -139,17 +194,39 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
     setSubscriptions(newSubscriptions);
 
     if (sessionId && accessToken) {
+      const eventSubEvents: (keyof EventSubscriptionsType)[] = [];
+      const ircEvents: (keyof EventSubscriptionsType)[] = [];
+      
       Object.keys(newSubscriptions).forEach(event => {
         const eventType = event as keyof EventSubscriptionsType;
         if (!MANDATORY_SUBSCRIPTIONS.includes(eventType) && 
             (!BROADCASTER_ONLY_EVENTS.includes(eventType) || isBroadcaster)) {
-          subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);
+          if (eventType.startsWith('irc.')) {
+            ircEvents.push(eventType);
+          } else {
+            eventSubEvents.push(eventType);
+          }
         }
       });
+      
+      // Subscribe to EventSub events
+      for (const event of eventSubEvents) {
+        await subscribeToEvent(event, accessToken, clientId, sessionId, broadcasterId, userId);
+      }
+      
+      // Connect to IRC if any IRC events are enabled
+      if (ircEvents.length > 0 && !ircConnected) {
+        try {
+          await connectIRC(broadcasterLogin, accessToken, broadcasterLogin);
+          setIrcConnected(true);
+        } catch (error) {
+          console.error('Failed to connect to IRC:', error);
+        }
+      }
     }
   };
 
-  const handleDeselectAll = () => {
+  const handleDeselectAll = async () => {
     const newSubscriptions = { ...subscriptions };
     Object.keys(newSubscriptions).forEach(key => {
       newSubscriptions[key as keyof EventSubscriptionsType] = MANDATORY_SUBSCRIPTIONS.includes(key as keyof EventSubscriptionsType);
@@ -157,11 +234,30 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
     setSubscriptions(newSubscriptions);
 
     if (sessionId && accessToken) {
+      const eventSubEvents: (keyof EventSubscriptionsType)[] = [];
+      
       Object.keys(newSubscriptions).forEach(event => {
         if (!MANDATORY_SUBSCRIPTIONS.includes(event as keyof EventSubscriptionsType)) {
-          unsubscribeFromEvent(event, accessToken, clientId);
+          if (!event.startsWith('irc.')) {
+            eventSubEvents.push(event as keyof EventSubscriptionsType);
+          }
         }
       });
+      
+      // Unsubscribe from EventSub events
+      for (const event of eventSubEvents) {
+        await unsubscribeFromEvent(event, accessToken, clientId);
+      }
+      
+      // Disconnect from IRC
+      if (ircConnected) {
+        try {
+          await disconnectIRC();
+          setIrcConnected(false);
+        } catch (error) {
+          console.error('Failed to disconnect from IRC:', error);
+        }
+      }
     }
   };
 

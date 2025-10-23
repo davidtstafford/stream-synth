@@ -8,7 +8,7 @@ export function setupContentSecurityPolicy(mainWindow: BrowserWindow): void {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self' 'unsafe-inline' https://api.twitch.tv https://id.twitch.tv wss://eventsub.wss.twitch.tv; script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+            "default-src 'self' 'unsafe-inline' https://api.twitch.tv https://id.twitch.tv wss://eventsub.wss.twitch.tv wss://irc-ws.chat.twitch.tv; script-src 'self' 'unsafe-inline' 'unsafe-eval'"
           ]
         }
       });

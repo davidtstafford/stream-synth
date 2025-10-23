@@ -50,6 +50,10 @@ export interface EventSubscriptions {
   'channel.goal.progress': boolean;
   'channel.goal.end': boolean;
   
+  // IRC Events (not available via EventSub)
+  'irc.chat.join': boolean;
+  'irc.chat.part': boolean;
+  
   // Shield Mode
   'channel.shield_mode.begin': boolean;
   'channel.shield_mode.end': boolean;
@@ -118,6 +122,10 @@ export const EVENT_GROUPS: Record<string, string[]> = {
   'Shoutout Events': [
     'channel.shoutout.create',
     'channel.shoutout.receive'
+  ],
+  'IRC Events': [
+    'irc.chat.join',
+    'irc.chat.part'
   ]
 };
 
@@ -343,5 +351,15 @@ export const EVENT_DISPLAY_INFO: Record<keyof EventSubscriptions, { name: string
   'channel.shoutout.receive': { 
     name: 'Shoutout Received', 
     description: 'Broadcaster receives a shoutout from another channel' 
+  },
+  
+  // IRC Events (not available via EventSub)
+  'irc.chat.join': {
+    name: 'User Joined Chat',
+    description: 'User enters the chat room (IRC only)'
+  },
+  'irc.chat.part': {
+    name: 'User Left Chat',
+    description: 'User leaves the chat room (IRC only)'
   }
 };
