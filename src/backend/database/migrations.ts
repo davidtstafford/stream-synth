@@ -57,6 +57,8 @@ export function runMigrations(db: Database.Database): void {
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL,
       display_name TEXT,
+      tts_voice_id TEXT,
+      tts_enabled INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -92,6 +94,29 @@ export function runMigrations(db: Database.Database): void {
   `);
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)
+  `);
+
+  // Create tts_settings table for TTS configuration
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tts_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Insert default TTS settings if not exists
+  db.exec(`
+    INSERT OR IGNORE INTO tts_settings (key, value) VALUES
+      ('tts_enabled', 'false'),
+      ('tts_provider', 'webspeech'),
+      ('tts_voice_id', ''),
+      ('tts_volume', '80'),
+      ('tts_rate', '1.0'),
+      ('tts_pitch', '1.0'),
+      ('azure_api_key', ''),
+      ('azure_region', 'eastus'),
+      ('google_api_key', '')
   `);
 
   console.log('Database migrations completed');

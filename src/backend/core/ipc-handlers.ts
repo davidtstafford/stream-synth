@@ -7,6 +7,8 @@ import { TokensRepository } from '../database/repositories/tokens';
 import { ViewersRepository } from '../database/repositories/viewers';
 import { exportSettings, importSettings, getExportPreview } from '../services/export-import';
 import { twitchIRCService } from '../services/twitch-irc';
+import { TTSManager } from '../services/tts/manager';
+import { getDatabase } from '../database/connection';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -16,6 +18,18 @@ const sessionsRepo = new SessionsRepository();
 const eventsRepo = new EventsRepository();
 const tokensRepo = new TokensRepository();
 const viewersRepo = new ViewersRepository();
+
+// Initialize TTS Manager
+let ttsManager: TTSManager | null = null;
+
+async function initializeTTS() {
+  if (!ttsManager) {
+    const db = getDatabase();
+    ttsManager = new TTSManager(db);
+    await ttsManager.initialize();
+  }
+  return ttsManager;
+}
 
 export function setMainWindow(window: BrowserWindow): void {
   mainWindow = window;
@@ -412,5 +426,111 @@ export function setupIpcHandlers(): void {
 
   twitchIRCService.on('status', (status) => {
     mainWindow?.webContents.send('irc:status', status);
+  });
+
+  // TTS Handlers
+  ipcMain.handle('tts:get-voices', async () => {
+    try {
+      const manager = await initializeTTS();
+      const settings = manager.getSettings();
+      
+      // Web Speech API is handled in renderer process
+      if (settings?.provider === 'webspeech') {
+        return { success: true, voices: [] };
+      }
+      
+      const voices = await manager.getVoices();
+      return { success: true, voices };
+    } catch (error: any) {
+      console.error('[TTS] Error getting voices:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('tts:test-voice', async (event, voiceId: string, options?: any) => {
+    try {
+      const manager = await initializeTTS();
+      const settings = manager.getSettings();
+      
+      // Web Speech API is handled in renderer process
+      if (settings?.provider === 'webspeech') {
+        return { success: true };
+      }
+      
+      await manager.testVoice(voiceId, options);
+      return { success: true };
+    } catch (error: any) {
+      console.error('[TTS] Error testing voice:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('tts:speak', async (event, text: string, options?: any) => {
+    try {
+      const manager = await initializeTTS();
+      const settings = manager.getSettings();
+      
+      // Web Speech API is handled in renderer process
+      if (settings?.provider === 'webspeech') {
+        return { success: true };
+      }
+      
+      await manager.speak(text, options);
+      return { success: true };
+    } catch (error: any) {
+      console.error('[TTS] Error speaking:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('tts:stop', async () => {
+    try {
+      const manager = await initializeTTS();
+      const settings = manager.getSettings();
+      
+      // Web Speech API is handled in renderer process
+      if (settings?.provider === 'webspeech') {
+        return { success: true };
+      }
+      
+      manager.stop();
+      return { success: true };
+    } catch (error: any) {
+      console.error('[TTS] Error stopping:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('tts:get-settings', async () => {
+    try {
+      const manager = await initializeTTS();
+      const settings = manager.getSettings();
+      return { success: true, settings };
+    } catch (error: any) {
+      console.error('[TTS] Error getting settings:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('tts:save-settings', async (event, settings: any) => {
+    try {
+      const manager = await initializeTTS();
+      await manager.saveSettings(settings);
+      return { success: true };
+    } catch (error: any) {
+      console.error('[TTS] Error saving settings:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('tts:get-providers', async () => {
+    try {
+      const manager = await initializeTTS();
+      const providers = manager.getProviderNames();
+      return { success: true, providers };
+    } catch (error: any) {
+      console.error('[TTS] Error getting providers:', error);
+      return { success: false, error: error.message };
+    }
   });
 }
