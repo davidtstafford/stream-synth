@@ -21,6 +21,13 @@ export interface TTSSettings {
   azureApiKey?: string;
   azureRegion?: string;
   googleApiKey?: string;
+  // TTS Rules
+  filterCommands?: boolean;
+  filterBots?: boolean;
+  filterUrls?: boolean;
+  announceUsername?: boolean;
+  minMessageLength?: number;
+  maxMessageLength?: number;
 }
 
 export interface TTSOptions {

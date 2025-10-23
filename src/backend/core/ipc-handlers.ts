@@ -31,6 +31,11 @@ async function initializeTTS() {
     const db = getDatabase();
     ttsManager = new TTSManager(db);
     await ttsManager.initialize();
+    
+    // Set main window for TTS manager
+    if (mainWindow) {
+      ttsManager.setMainWindow(mainWindow);
+    }
   }
   if (!voiceSyncService) {
     voiceSyncService = new VoiceSyncService(voicesRepo);
@@ -40,6 +45,11 @@ async function initializeTTS() {
 
 export function setMainWindow(window: BrowserWindow): void {
   mainWindow = window;
+  
+  // Also set on TTS manager if it's initialized
+  if (ttsManager) {
+    ttsManager.setMainWindow(window);
+  }
 }
 
 export async function runStartupTasks(): Promise<void> {
@@ -578,6 +588,19 @@ export function setupIpcHandlers(): void {
 
   twitchIRCService.on('status', (status) => {
     mainWindow?.webContents.send('irc:status', status);
+  });
+
+  // TTS Chat Message Handler
+  twitchIRCService.on('chat.message', async (event: any) => {
+    try {
+      // Initialize TTS if needed
+      const manager = await initializeTTS();
+      
+      // Handle the message
+      await manager.handleChatMessage(event.username, event.message, event.userId);
+    } catch (error) {
+      console.error('[TTS] Error handling chat message:', error);
+    }
   });
 
   // TTS Handlers (legacy handlers for Azure/Google providers)

@@ -2,18 +2,6 @@ import React, { useState, useEffect } from 'react';
 import * as ttsService from '../../services/tts';
 import './tts.css';
 
-interface TTSSettings {
-  enabled: boolean;
-  provider: 'webspeech' | 'azure' | 'google';
-  voiceId: string;
-  volume: number;
-  rate: number;
-  pitch: number;
-  azureApiKey?: string;
-  azureRegion?: string;
-  googleApiKey?: string;
-}
-
 interface VoiceGroup {
   category: string;
   voices: Array<{
@@ -509,23 +497,144 @@ export const TTS: React.FC = () => {
 
   // TTS Rules Tab Content
   function renderTTSRulesTab() {
+    if (!settings) {
+      return <div>Loading settings...</div>;
+    }
+
     return (
       <div className="rules-tab">
-        <div className="coming-soon">
-          <h3>🚧 TTS Rules Configuration</h3>
-          <p>Configure voice assignment rules and chat commands here.</p>
+        <h3>📋 TTS Filtering & Rules</h3>
+        <p className="section-description">
+          Control which messages are read aloud and how they are processed.
+        </p>
+
+        {/* Message Filtering */}
+        <div className="rules-section">
+          <h4>� Message Filtering</h4>
           
-          <div className="feature-list">
-            <h4>Coming Features:</h4>
-            <ul>
-              <li>✨ Default voice for all viewers</li>
-              <li>✨ Per-viewer voice assignments</li>
-              <li>✨ Chat command: <code>~setmyvoice [voice_id]</code></li>
-              <li>✨ Role-based voice rules (subscribers, mods, VIPs)</li>
-              <li>✨ Import/Export voice mappings</li>
-              <li>✨ Voice randomization options</li>
-            </ul>
+          <div className="setting-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.filterCommands ?? true}
+                onChange={(e) => handleSettingChange('filterCommands', e.target.checked)}
+              />
+              <span className="checkbox-text">
+                Filter Commands
+                <span className="setting-hint">Skip messages starting with ! or ~ (e.g., !followage, ~setmyvoice)</span>
+              </span>
+            </label>
           </div>
+
+          <div className="setting-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.filterBots ?? true}
+                onChange={(e) => handleSettingChange('filterBots', e.target.checked)}
+              />
+              <span className="checkbox-text">
+                Filter Bot Messages
+                <span className="setting-hint">Skip messages from Nightbot, StreamElements, Streamlabs, Moobot, Fossabot, Wizebot</span>
+              </span>
+            </label>
+          </div>
+
+          <div className="setting-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.filterUrls ?? true}
+                onChange={(e) => handleSettingChange('filterUrls', e.target.checked)}
+              />
+              <span className="checkbox-text">
+                Remove URLs
+                <span className="setting-hint">Strip http:// and https:// links from messages before speaking</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* Username Announcement */}
+        <div className="rules-section">
+          <h4>👤 Username Announcement</h4>
+          
+          <div className="setting-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.announceUsername ?? true}
+                onChange={(e) => handleSettingChange('announceUsername', e.target.checked)}
+              />
+              <span className="checkbox-text">
+                Announce Username
+                <span className="setting-hint">Say "Username says:" before each message. Disable to only read the message.</span>
+              </span>
+            </label>
+          </div>
+
+          <div className="example-box">
+            <strong>Example:</strong>
+            <div className="example-text">
+              {settings.announceUsername ?? true
+                ? '🔊 "ViewerName says: Hello everyone!"'
+                : '🔊 "Hello everyone!"'}
+            </div>
+          </div>
+        </div>
+
+        {/* Message Length Limits */}
+        <div className="rules-section">
+          <h4>📏 Message Length Limits</h4>
+          
+          <div className="setting-group">
+            <label className="setting-label">
+              Minimum Length: {settings.minMessageLength ?? 0} characters
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="50"
+              value={settings.minMessageLength ?? 0}
+              onChange={(e) => handleSettingChange('minMessageLength', parseInt(e.target.value))}
+              className="slider"
+            />
+            <p className="setting-hint">
+              Skip messages shorter than this. Set to 0 to disable. Useful for filtering single-emoji spam.
+            </p>
+          </div>
+
+          <div className="setting-group">
+            <label className="setting-label">
+              Maximum Length: {settings.maxMessageLength ?? 500} characters
+            </label>
+            <input
+              type="range"
+              min="50"
+              max="500"
+              step="10"
+              value={settings.maxMessageLength ?? 500}
+              onChange={(e) => handleSettingChange('maxMessageLength', parseInt(e.target.value))}
+              className="slider"
+            />
+            <p className="setting-hint">
+              Truncate messages longer than this. Prevents excessive reading of copypastas.
+            </p>
+          </div>
+        </div>
+
+        {/* Future Features */}
+        <div className="rules-section">
+          <h4>✨ Coming Soon</h4>
+          <ul className="feature-list">
+            <li>Per-viewer voice assignments</li>
+            <li>Chat command: <code>~setmyvoice [voice_id]</code></li>
+            <li>Muted viewers list</li>
+            <li>Emoji/emote filtering and limits</li>
+            <li>Duplicate message detection</li>
+            <li>Role-based voice rules (subscribers, mods, VIPs)</li>
+            <li>Priority queue for specific users</li>
+          </ul>
         </div>
       </div>
     );

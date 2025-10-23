@@ -9,6 +9,8 @@ import { TTS } from './screens/tts/tts';
 import { Discord } from './screens/discord/discord';
 import * as db from './services/database';
 
+const { ipcRenderer } = window.require('electron');
+
 const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<string>('connection');
   const [channelId, setChannelId] = useState<string>('');
@@ -26,6 +28,38 @@ const App: React.FC = () => {
     // Also listen for session changes
     const interval = setInterval(loadSession, 5000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Listen for TTS speak commands from backend
+  useEffect(() => {
+    const handleTTSSpeak = (event: any, data: any) => {
+      const { text, voiceId, volume, rate, pitch } = data;
+      
+      // Use Web Speech API
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      // Find the voice
+      const voices = window.speechSynthesis.getVoices();
+      const voice = voices.find(v => v.voiceURI === voiceId || v.name === voiceId);
+      
+      if (voice) {
+        utterance.voice = voice;
+      }
+      
+      utterance.volume = volume / 100; // Convert 0-100 to 0-1
+      utterance.rate = rate;
+      utterance.pitch = pitch;
+      
+      console.log('[TTS Renderer] Speaking:', text, 'with voice:', voice?.name || 'default');
+      window.speechSynthesis.speak(utterance);
+    };
+
+    ipcRenderer.on('tts:speak', handleTTSSpeak);
+
+    // Cleanup
+    return () => {
+      ipcRenderer.removeListener('tts:speak', handleTTSSpeak);
+    };
   }, []);
 
   const menuItems = [

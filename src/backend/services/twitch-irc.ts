@@ -14,10 +14,12 @@ import tmi from 'tmi.js';
 import { EventEmitter } from 'events';
 
 interface IRCChatEvent {
-  type: 'irc.chat.join' | 'irc.chat.part';
+  type: 'irc.chat.join' | 'irc.chat.part' | 'irc.chat.message';
   channel: string;
   username: string;
   timestamp: string;
+  message?: string;  // For message events
+  userId?: string;   // For message events
 }
 
 interface IRCConnectionStatus {
@@ -136,6 +138,24 @@ export class TwitchIRCService extends EventEmitter {
 
       this.emit('chat.part', event);
       console.log(`[IRC] User left: ${username}`);
+    });
+
+    // MESSAGE event - Chat messages for TTS
+    this.client.on('message', (channel: string, userstate: any, message: string, self: boolean) => {
+      // Don't emit for our own messages
+      if (self) return;
+
+      const event: IRCChatEvent = {
+        type: 'irc.chat.message',
+        channel: channel.replace('#', ''), // Remove # prefix
+        username: userstate.username || userstate['display-name'] || 'unknown',
+        userId: userstate['user-id'],
+        message,
+        timestamp: new Date().toISOString(),
+      };
+
+      this.emit('chat.message', event);
+      console.log(`[IRC] Message from ${event.username}: ${message}`);
     });
 
     // Connection events

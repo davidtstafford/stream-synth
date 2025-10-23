@@ -116,7 +116,13 @@ export function runMigrations(db: Database.Database): void {
       ('tts_pitch', '1.0'),
       ('azure_api_key', ''),
       ('azure_region', 'eastus'),
-      ('google_api_key', '')
+      ('google_api_key', ''),
+      ('filter_commands', 'true'),
+      ('filter_bots', 'true'),
+      ('filter_urls', 'true'),
+      ('announce_username', 'true'),
+      ('min_message_length', '0'),
+      ('max_message_length', '500')
   `);
 
   // Create tts_voices table for discovered voices
