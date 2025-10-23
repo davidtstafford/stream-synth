@@ -56,8 +56,12 @@ export class TwitchIRCService extends EventEmitter {
     try {
       this.client = new tmi.Client({
         options: {
-          debug: false, // Set to true for debugging
+          debug: true, // Enable debug to see IRC messages
           skipUpdatingEmotesets: true, // We don't need emote data
+        },
+        connection: {
+          reconnect: true,
+          secure: true,
         },
         identity: {
           username: username,

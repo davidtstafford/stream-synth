@@ -96,3 +96,88 @@ export async function importSettings(): Promise<{ success: boolean; message?: st
 export async function getExportPreview(): Promise<{ success: boolean; preview?: any; error?: string }> {
   return await ipcRenderer.invoke('get-export-preview');
 }
+
+// Events Storage
+export interface StoredEvent {
+  id: number;
+  event_type: string;
+  event_data: string;
+  viewer_id: string | null;
+  channel_id: string;
+  created_at: string;
+  viewer_username?: string;
+  viewer_display_name?: string;
+}
+
+export interface EventFilters {
+  channelId?: string;
+  eventType?: string;
+  viewerId?: string;
+  startDate?: string;
+  endDate?: string;
+  searchText?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function storeEvent(
+  eventType: string,
+  eventData: any,
+  channelId: string,
+  viewerId?: string
+): Promise<{ success: boolean; id?: number; error?: string }> {
+  return await ipcRenderer.invoke('db:store-event', eventType, eventData, channelId, viewerId);
+}
+
+export async function getEvents(filters: EventFilters): Promise<{ success: boolean; events?: StoredEvent[]; error?: string }> {
+  return await ipcRenderer.invoke('db:get-events', filters);
+}
+
+export async function getChatEvents(channelId: string, limit?: number): Promise<{ success: boolean; events?: StoredEvent[]; error?: string }> {
+  return await ipcRenderer.invoke('db:get-chat-events', channelId, limit);
+}
+
+export async function getEventCount(channelId?: string, eventType?: string): Promise<{ success: boolean; count?: number; error?: string }> {
+  return await ipcRenderer.invoke('db:get-event-count', channelId, eventType);
+}
+
+// Viewers
+export interface Viewer {
+  id: string;
+  username: string;
+  display_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getOrCreateViewer(
+  id: string,
+  username: string,
+  displayName?: string
+): Promise<{ success: boolean; viewer?: Viewer; error?: string }> {
+  return await ipcRenderer.invoke('db:get-or-create-viewer', id, username, displayName);
+}
+
+export async function getViewer(id: string): Promise<{ success: boolean; viewer?: Viewer | null; error?: string }> {
+  return await ipcRenderer.invoke('db:get-viewer', id);
+}
+
+export async function getAllViewers(limit?: number, offset?: number): Promise<{ success: boolean; viewers?: Viewer[]; error?: string }> {
+  return await ipcRenderer.invoke('db:get-all-viewers', limit, offset);
+}
+
+export async function searchViewers(query: string, limit?: number): Promise<{ success: boolean; viewers?: Viewer[]; error?: string }> {
+  return await ipcRenderer.invoke('db:search-viewers', query, limit);
+}
+
+export async function deleteViewer(id: string): Promise<{ success: boolean; error?: string }> {
+  return await ipcRenderer.invoke('db:delete-viewer', id);
+}
+
+export async function deleteAllViewers(): Promise<{ success: boolean; error?: string }> {
+  return await ipcRenderer.invoke('db:delete-all-viewers');
+}
+
+export async function getViewerCount(): Promise<{ success: boolean; count?: number; error?: string }> {
+  return await ipcRenderer.invoke('db:get-viewer-count');
+}
