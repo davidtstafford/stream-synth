@@ -62,20 +62,43 @@ export class VoiceParser {
   private static detectGender(voiceName: string, voiceURI: string): string | null {
     const combined = `${voiceName} ${voiceURI}`.toLowerCase();
     
-    // Known male voices
+    // Known male voices (common TTS voice names)
     const maleIndicators = [
-      'male', 'man', 'boy', 'alex', 'daniel', 'fred', 'jorge', 'juan', 
-      'diego', 'thomas', 'ralph', 'bruce', 'aaron', 'guy', 'tom'
+      'male', 'man', 'boy', 'guy', 'tom',
+      // English male names
+      'alex', 'daniel', 'fred', 'jorge', 'juan', 'diego', 'thomas', 'ralph', 
+      'bruce', 'aaron', 'albert', 'arthur', 'brian', 'carlos', 'gordon',
+      'henrik', 'james', 'lee', 'luca', 'martin', 'matej', 'nicolas', 
+      'oliver', 'otoya', 'reed', 'rocko', 'damayanti', 'grandpa',
+      // International male names
+      'xander', 'yannick', 'eddy', 'majed', 'maged', 'tarik', 'filip',
+      'giorgio', 'diego', 'enrique', 'jorge', 'juan', 'matej', 'oskar',
+      'mikhail', 'yuri', 'pierre', 'thomas', 'henrik', 'emilio'
     ];
     
     // Known female voices
     const femaleIndicators = [
-      'female', 'woman', 'girl', 'samantha', 'victoria', 'kate', 'monica', 
-      'paulina', 'amelie', 'alice', 'emma', 'sophia', 'karen', 'nicky', 'jenny'
+      'female', 'woman', 'girl', 
+      // English female names
+      'samantha', 'victoria', 'kate', 'monica', 'paulina', 'amelie', 
+      'alice', 'emma', 'sophia', 'karen', 'nicky', 'jenny', 'flo',
+      'sara', 'laura', 'anna', 'ava', 'catherine', 'ellen', 'grandma',
+      'martha', 'sandy', 'shelley', 'susan', 'allison', 'kathy', 'melina',
+      'milena', 'nora', 'tessa', 'zuzana', 'joana', 'luciana', 'monica',
+      // International female names
+      'ting', 'mei', 'li', 'yan', 'kyoko', 'sara', 'satu', 'laura',
+      'alva', 'klara', 'petra', 'veena', 'lekha', 'carmit', 'yelda'
     ];
     
-    if (maleIndicators.some(ind => combined.includes(ind))) return 'male';
-    if (femaleIndicators.some(ind => combined.includes(ind))) return 'female';
+    // Check for male indicators
+    for (const indicator of maleIndicators) {
+      if (combined.includes(indicator)) return 'male';
+    }
+    
+    // Check for female indicators
+    for (const indicator of femaleIndicators) {
+      if (combined.includes(indicator)) return 'female';
+    }
     
     return 'neutral';
   }

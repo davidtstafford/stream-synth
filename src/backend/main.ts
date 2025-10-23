@@ -1,6 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import { createMainWindow } from './core/window';
-import { setupIpcHandlers, setMainWindow } from './core/ipc-handlers';
+import { setupIpcHandlers, setMainWindow, runStartupTasks } from './core/ipc-handlers';
 import { initializeDatabase, closeDatabase } from './database/connection';
 
 let mainWindow: BrowserWindow | null = null;
@@ -15,6 +15,11 @@ function initialize(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+  
+  // Run startup tasks after window is ready
+  mainWindow.webContents.on('did-finish-load', () => {
+    runStartupTasks();
   });
 }
 

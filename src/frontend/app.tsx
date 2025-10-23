@@ -6,6 +6,7 @@ import { EventsScreen } from './screens/events/events';
 import { ChatScreen } from './screens/chat/chat';
 import { ViewersScreen } from './screens/viewers/viewers';
 import { TTS } from './screens/tts/tts';
+import { Discord } from './screens/discord/discord';
 import * as db from './services/database';
 
 const App: React.FC = () => {
@@ -32,7 +33,8 @@ const App: React.FC = () => {
     { id: 'events', label: 'Events' },
     { id: 'chat', label: 'Chat' },
     { id: 'viewers', label: 'Viewers' },
-    { id: 'tts', label: 'TTS' }
+    { id: 'tts', label: 'TTS' },
+    { id: 'discord', label: 'Discord' }
   ];
 
   const renderScreen = () => {
@@ -47,6 +49,8 @@ const App: React.FC = () => {
         return <ViewersScreen />;
       case 'tts':
         return <TTS />;
+      case 'discord':
+        return <Discord />;
       default:
         return <ConnectionScreen />;
     }
