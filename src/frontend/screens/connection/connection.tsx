@@ -107,8 +107,43 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
             });
           },
           onKeepalive: () => {},
-          onNotification: (data: any) => {
+          onNotification: async (data: any) => {
             console.log('Event received:', data);
+            
+            // Extract event type and payload
+            const eventType = data.subscription?.type;
+            const eventPayload = data.payload?.event;
+            
+            if (eventType && eventPayload) {
+              // Extract viewer info if available
+              let viewerId: string | undefined;
+              let viewerUsername: string | undefined;
+              let viewerDisplayName: string | undefined;
+              
+              // Different events have user info in different places
+              if (eventPayload.user_id) {
+                viewerId = eventPayload.user_id;
+                viewerUsername = eventPayload.user_login || eventPayload.user_name;
+                viewerDisplayName = eventPayload.user_name;
+              } else if (eventPayload.chatter_user_id) {
+                viewerId = eventPayload.chatter_user_id;
+                viewerUsername = eventPayload.chatter_user_login || eventPayload.chatter_user_name;
+                viewerDisplayName = eventPayload.chatter_user_name;
+              } else if (eventPayload.from_broadcaster_user_id) {
+                viewerId = eventPayload.from_broadcaster_user_id;
+                viewerUsername = eventPayload.from_broadcaster_user_login || eventPayload.from_broadcaster_user_name;
+                viewerDisplayName = eventPayload.from_broadcaster_user_name;
+              }
+              
+              // Create or update viewer if we have their info
+              if (viewerId && viewerUsername) {
+                await db.getOrCreateViewer(viewerId, viewerUsername, viewerDisplayName);
+              }
+              
+              // Store the event
+              const channelId = lastChannelId || user.id;
+              await db.storeEvent(eventType, eventPayload, channelId, viewerId);
+            }
           },
           onReconnect: () => {
             setStatusMessage({
@@ -196,9 +231,43 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
       onKeepalive: () => {
         // Keepalive received
       },
-      onNotification: (data: any) => {
-        // Handle notifications
+      onNotification: async (data: any) => {
+        // Handle notifications and store them
         console.log('Event received:', data);
+        
+        // Extract event type and payload
+        const eventType = data.subscription?.type;
+        const eventPayload = data.payload?.event;
+        
+        if (eventType && eventPayload) {
+          // Extract viewer info if available
+          let viewerId: string | undefined;
+          let viewerUsername: string | undefined;
+          let viewerDisplayName: string | undefined;
+          
+          // Different events have user info in different places
+          if (eventPayload.user_id) {
+            viewerId = eventPayload.user_id;
+            viewerUsername = eventPayload.user_login || eventPayload.user_name;
+            viewerDisplayName = eventPayload.user_name;
+          } else if (eventPayload.chatter_user_id) {
+            viewerId = eventPayload.chatter_user_id;
+            viewerUsername = eventPayload.chatter_user_login || eventPayload.chatter_user_name;
+            viewerDisplayName = eventPayload.chatter_user_name;
+          } else if (eventPayload.from_broadcaster_user_id) {
+            viewerId = eventPayload.from_broadcaster_user_id;
+            viewerUsername = eventPayload.from_broadcaster_user_login || eventPayload.from_broadcaster_user_name;
+            viewerDisplayName = eventPayload.from_broadcaster_user_name;
+          }
+          
+          // Create or update viewer if we have their info
+          if (viewerId && viewerUsername) {
+            await db.getOrCreateViewer(viewerId, viewerUsername, viewerDisplayName);
+          }
+          
+          // Store the event
+          await db.storeEvent(eventType, eventPayload, broadcasterId, viewerId);
+        }
       },
       onReconnect: () => {
         setStatusMessage({

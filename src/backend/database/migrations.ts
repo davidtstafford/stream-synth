@@ -51,5 +51,37 @@ export function runMigrations(db: Database.Database): void {
     )
   `);
 
+  // Create viewers table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewers (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      display_name TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Create events table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      event_data TEXT NOT NULL,
+      viewer_id TEXT,
+      channel_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id)
+    )
+  `);
+
+  // Create indices for faster querying
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_events_channel ON events(channel_id);
+    CREATE INDEX IF NOT EXISTS idx_events_viewer ON events(viewer_id);
+    CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
+  `);
+
   console.log('Database migrations completed');
 }
