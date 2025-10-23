@@ -5,9 +5,11 @@ import { SessionsRepository } from '../database/repositories/sessions';
 import { EventsRepository } from '../database/repositories/events';
 import { TokensRepository } from '../database/repositories/tokens';
 import { ViewersRepository } from '../database/repositories/viewers';
+import { VoicesRepository } from '../database/repositories/voices';
 import { exportSettings, importSettings, getExportPreview } from '../services/export-import';
 import { twitchIRCService } from '../services/twitch-irc';
 import { TTSManager } from '../services/tts/manager';
+import { VoiceSyncService } from '../services/tts/voice-sync';
 import { getDatabase } from '../database/connection';
 
 let mainWindow: BrowserWindow | null = null;
@@ -18,15 +20,20 @@ const sessionsRepo = new SessionsRepository();
 const eventsRepo = new EventsRepository();
 const tokensRepo = new TokensRepository();
 const viewersRepo = new ViewersRepository();
+const voicesRepo = new VoicesRepository();
 
 // Initialize TTS Manager
 let ttsManager: TTSManager | null = null;
+let voiceSyncService: VoiceSyncService | null = null;
 
 async function initializeTTS() {
   if (!ttsManager) {
     const db = getDatabase();
     ttsManager = new TTSManager(db);
     await ttsManager.initialize();
+  }
+  if (!voiceSyncService) {
+    voiceSyncService = new VoiceSyncService(voicesRepo);
   }
   return ttsManager;
 }
@@ -428,25 +435,9 @@ export function setupIpcHandlers(): void {
     mainWindow?.webContents.send('irc:status', status);
   });
 
-  // TTS Handlers
-  ipcMain.handle('tts:get-voices', async () => {
-    try {
-      const manager = await initializeTTS();
-      const settings = manager.getSettings();
-      
-      // Web Speech API is handled in renderer process
-      if (settings?.provider === 'webspeech') {
-        return { success: true, voices: [] };
-      }
-      
-      const voices = await manager.getVoices();
-      return { success: true, voices };
-    } catch (error: any) {
-      console.error('[TTS] Error getting voices:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
+  // TTS Handlers (legacy handlers for Azure/Google providers)
+  // Note: tts:get-voices is now handled by the voice categorization system below
+  
   ipcMain.handle('tts:test-voice', async (event, voiceId: string, options?: any) => {
     try {
       const manager = await initializeTTS();
@@ -531,6 +522,73 @@ export function setupIpcHandlers(): void {
     } catch (error: any) {
       console.error('[TTS] Error getting providers:', error);
       return { success: false, error: error.message };
+    }
+  });
+
+  // TTS Voice Management
+  ipcMain.handle('tts:sync-voices', async (event, provider: string, voices: any[]) => {
+    try {
+      await initializeTTS(); // Ensure services are initialized
+      console.log(`[TTS] Syncing voices for provider: ${provider}, count: ${voices.length}`);
+      let count = 0;
+      
+      if (provider === 'webspeech' && voiceSyncService) {
+        count = await voiceSyncService.syncWebSpeechVoices(voices);
+      }
+      
+      const stats = voiceSyncService?.getStats();
+      console.log(`[TTS] Voice sync complete. Stats:`, stats);
+      
+      return { success: true, count, stats };
+    } catch (error: any) {
+      console.error('[TTS] Error syncing voices:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('tts:get-voices', async () => {
+    try {
+      const voices = voicesRepo.getAvailableVoices();
+      return { success: true, voices };
+    } catch (error: any) {
+      console.error('[TTS] Error getting voices:', error);
+      return { success: false, error: error.message, voices: [] };
+    }
+  });
+
+  ipcMain.handle('tts:get-grouped-voices', async () => {
+    try {
+      const grouped = voicesRepo.getGroupedVoices();
+      const result: Record<string, any[]> = {};
+      
+      grouped.forEach((voices, key) => {
+        result[key] = voices;
+      });
+      
+      return { success: true, grouped: result };
+    } catch (error: any) {
+      console.error('[TTS] Error getting grouped voices:', error);
+      return { success: false, error: error.message, grouped: {} };
+    }
+  });
+
+  ipcMain.handle('tts:get-voice-stats', async () => {
+    try {
+      const stats = voicesRepo.getStats();
+      return { success: true, stats };
+    } catch (error: any) {
+      console.error('[TTS] Error getting voice stats:', error);
+      return { success: false, error: error.message, stats: null };
+    }
+  });
+
+  ipcMain.handle('tts:get-voice-by-id', async (event, numericId: number) => {
+    try {
+      const voice = voicesRepo.getVoiceByNumericId(numericId);
+      return { success: true, voice };
+    } catch (error: any) {
+      console.error('[TTS] Error getting voice by ID:', error);
+      return { success: false, error: error.message, voice: null };
     }
   });
 }

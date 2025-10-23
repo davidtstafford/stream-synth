@@ -243,3 +243,34 @@ export async function getProviders(): Promise<string[]> {
   return result.providers;
 }
 
+export async function syncVoices(provider: string, voices: any[]): Promise<{ success: boolean; count: number; stats: any }> {
+  const result = await ipcRenderer.invoke('tts:sync-voices', provider, voices);
+  if (!result.success) {
+    throw new Error(result.error);
+  }
+  return result;
+}
+
+export async function getGroupedVoices(): Promise<Record<string, any[]>> {
+  const result = await ipcRenderer.invoke('tts:get-grouped-voices');
+  if (!result.success) {
+    throw new Error(result.error);
+  }
+  return result.grouped;
+}
+
+export async function getVoiceStats(): Promise<any> {
+  const result = await ipcRenderer.invoke('tts:get-voice-stats');
+  if (!result.success) {
+    throw new Error(result.error);
+  }
+  return result.stats;
+}
+
+export async function getVoiceByNumericId(numericId: number): Promise<any> {
+  const result = await ipcRenderer.invoke('tts:get-voice-by-id', numericId);
+  if (!result.success) {
+    throw new Error(result.error);
+  }
+  return result.voice;
+}

@@ -119,5 +119,49 @@ export function runMigrations(db: Database.Database): void {
       ('google_api_key', '')
   `);
 
+  // Create tts_voices table for discovered voices
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tts_voices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      voice_id TEXT NOT NULL UNIQUE,
+      provider TEXT NOT NULL,
+      source TEXT,
+      name TEXT NOT NULL,
+      language_code TEXT NOT NULL,
+      language_name TEXT NOT NULL,
+      region TEXT,
+      gender TEXT,
+      is_available INTEGER DEFAULT 1,
+      display_order INTEGER,
+      last_seen_at TEXT,
+      created_at TEXT NOT NULL,
+      metadata TEXT
+    )
+  `);
+
+  // Create indexes for voices table
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tts_voices_provider ON tts_voices(provider)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tts_voices_available ON tts_voices(is_available)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tts_voices_language ON tts_voices(language_code)
+  `);
+
+  // Create tts_voice_ids table for numeric ID mapping
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tts_voice_ids (
+      numeric_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      voice_id TEXT NOT NULL UNIQUE,
+      FOREIGN KEY (voice_id) REFERENCES tts_voices(voice_id)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tts_voice_ids_lookup ON tts_voice_ids(voice_id)
+  `);
+
   console.log('Database migrations completed');
 }
