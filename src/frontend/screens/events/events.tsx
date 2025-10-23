@@ -85,7 +85,7 @@ export const EventsScreen: React.FC<EventsScreenProps> = ({ channelId }) => {
 
   // Listen for real-time event updates
   useEffect(() => {
-    const handleNewEvent = (eventData: any) => {
+    const handleNewEvent = (_event: any, eventData: any) => {
       console.log('[Events Screen] New event received:', eventData);
       
       // Only add events from our current channel if channelId is set
@@ -156,7 +156,17 @@ export const EventsScreen: React.FC<EventsScreenProps> = ({ channelId }) => {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleString();
+    // Show local time (24-hour format)
+    const localTime = date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    return localTime;
   };
 
   const parseEventData = (eventDataString: string) => {
@@ -183,6 +193,32 @@ export const EventsScreen: React.FC<EventsScreenProps> = ({ channelId }) => {
             <strong>{displayName}:</strong> {data.message?.text || ''}
           </span>
         );
+      case 'irc.chat.join':
+        return (
+          <span>
+            <strong style={{ color: '#4CAF50' }}>→ {displayName}</strong> joined the chat
+          </span>
+        );
+      case 'irc.chat.part':
+        return (
+          <span>
+            <strong style={{ color: '#f44336' }}>← {displayName}</strong> left the chat
+          </span>
+        );
+      case 'stream.online':
+        return (
+          <span>
+            <strong style={{ color: '#9146FF' }}>🔴 Stream went live</strong>
+            {data.type && ` (${data.type})`}
+            {data.started_at && ` at ${new Date(data.started_at).toLocaleTimeString()}`}
+          </span>
+        );
+      case 'stream.offline':
+        return (
+          <span>
+            <strong style={{ color: '#808080' }}>⚫ Stream ended</strong>
+          </span>
+        );
       case 'channel.raid':
         return (
           <span>
@@ -204,7 +240,7 @@ export const EventsScreen: React.FC<EventsScreenProps> = ({ channelId }) => {
       default:
         return (
           <span>
-            {displayName && <><strong>{displayName}</strong> - </>}
+            {displayName && displayName !== 'Unknown' && <><strong>{displayName}</strong> - </>}
             {event.event_type}
           </span>
         );
