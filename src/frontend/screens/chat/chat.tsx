@@ -88,6 +88,13 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ channelId }) => {
         return;
       }
 
+      // Filter by channel if channelId is set
+      if (channelId && eventData.channel_id !== channelId) {
+        return;
+      }
+
+      console.log('[Chat Screen] New message received:', eventData);
+
       const data = typeof eventData.event_data === 'string' 
         ? JSON.parse(eventData.event_data) 
         : eventData.event_data;
@@ -116,7 +123,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ channelId }) => {
     return () => {
       ipcRenderer.removeListener('event:stored', handleNewEvent);
     };
-  }, [maxMessages]);
+  }, [maxMessages, channelId]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
