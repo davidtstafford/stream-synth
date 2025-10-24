@@ -670,15 +670,18 @@ export function setupIpcHandlers(): void {
   
   ipcMain.handle('tts:test-voice', async (event, voiceId: string, options?: any) => {
     try {
+      console.log('[IPC] tts:test-voice called with voiceId:', voiceId, 'options:', options);
       const manager = await initializeTTS();
-      const settings = manager.getSettings();
       
-      // Web Speech API is handled in renderer process
-      if (settings?.provider === 'webspeech') {
+      // Check voice ID prefix to determine provider (not the global settings.provider)
+      if (voiceId.startsWith('webspeech_')) {
+        console.log('[IPC] tts:test-voice - Web Speech voice, handled in renderer');
         return { success: true };
       }
       
+      console.log('[IPC] tts:test-voice - Calling manager.testVoice() for Azure/Google voice');
       await manager.testVoice(voiceId, options);
+      console.log('[IPC] tts:test-voice - Completed successfully');
       return { success: true };
     } catch (error: any) {
       console.error('[TTS] Error testing voice:', error);

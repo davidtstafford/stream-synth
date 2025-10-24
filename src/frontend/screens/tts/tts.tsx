@@ -176,15 +176,13 @@ export const TTS: React.FC = () => {
       setIsSpeaking(true);
       setError(null);
       
-      console.log('[TTS Test] Speaking with voiceId:', settings.voiceId, 'options:', {
-        voiceId: settings.voiceId,
+      console.log('[TTS Test] Testing voice with voiceId:', settings.voiceId, 'options:', {
         volume: settings.volume,
         rate: settings.rate,
         pitch: settings.pitch
       });
       
-      await ttsService.speak(testMessage, {
-        voiceId: settings.voiceId,
+      await ttsService.testVoice(settings.voiceId, {
         volume: settings.volume,
         rate: settings.rate,
         pitch: settings.pitch

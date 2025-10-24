@@ -70,10 +70,19 @@ export class TTSManager {
   async initialize(): Promise<void> {
     await this.loadSettings();
     
-    // Only initialize provider if it's not webspeech (handled in renderer)
-    if (this.settings!.provider !== 'webspeech') {
-      await this.setProvider(this.settings!.provider);
+    // Initialize all enabled providers (hybrid architecture)
+    // We no longer rely on the global settings.provider - voices determine the provider
+    if (this.settings!.azureEnabled && this.settings!.azureApiKey) {
+      console.log('[TTS] Initializing Azure provider (enabled and has API key)');
+      await this.setProvider('azure');
     }
+    
+    if (this.settings!.googleEnabled && this.settings!.googleApiKey) {
+      console.log('[TTS] Initializing Google provider (enabled and has API key)');
+      await this.setProvider('google');
+    }
+    
+    console.log('[TTS] Manager initialized. Providers ready:', Array.from(this.providers.keys()).join(', '));
   }
 
   /**
@@ -246,8 +255,11 @@ export class TTSManager {
    * Test a specific voice
    */
   async testVoice(voiceId: string, options?: Partial<TTSOptions>): Promise<void> {
-    // Web Speech is handled in renderer
-    if (this.settings?.provider === 'webspeech') {
+    console.log('[TTS Manager] testVoice() called with voiceId:', voiceId);
+    
+    // Web Speech voices are handled in renderer (check voiceId prefix, not global provider)
+    if (voiceId.startsWith('webspeech_')) {
+      console.log('[TTS Manager] testVoice() - Web Speech voice, returning');
       return;
     }
     
@@ -256,6 +268,7 @@ export class TTSManager {
     }
 
     const actualVoiceId = this.resolveVoiceId(voiceId);
+    console.log('[TTS Manager] testVoice() - Resolved voiceId:', actualVoiceId);
 
     const ttsOptions: TTSOptions = {
       volume: options?.volume ?? this.settings.volume,
@@ -263,21 +276,32 @@ export class TTSManager {
       pitch: options?.pitch ?? this.settings.pitch
     };
 
+    console.log('[TTS Manager] testVoice() - Calling currentProvider.test()');
     await this.currentProvider.test(actualVoiceId, ttsOptions);
+    console.log('[TTS Manager] testVoice() - Provider test completed');
     
     // For Azure voices, retrieve audio data and send to renderer
     if (voiceId.startsWith('azure_')) {
+      console.log('[TTS Manager] testVoice() - Azure voice, retrieving audio data');
       const azureProvider = this.providers.get('azure');
       if (azureProvider) {
         const audioData = (azureProvider as any).getLastAudioData();
+        console.log('[TTS Manager] testVoice() - Audio data retrieved:', audioData ? audioData.length + ' bytes' : 'null');
         if (audioData && this.mainWindow) {
+          console.log('[TTS Manager] testVoice() - Sending audio to renderer');
           this.mainWindow.webContents.send('tts:play-audio', {
             audioData: audioData.toString('base64'), // Convert Buffer to base64 for IPC
             volume: ttsOptions.volume,
             rate: ttsOptions.rate,
             pitch: ttsOptions.pitch
           });
+        } else if (!audioData) {
+          console.error('[TTS Manager] testVoice() - No audio data available!');
+        } else if (!this.mainWindow) {
+          console.error('[TTS Manager] testVoice() - mainWindow is null!');
         }
+      } else {
+        console.error('[TTS Manager] testVoice() - Azure provider not found!');
       }
     }
   }

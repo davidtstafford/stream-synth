@@ -160,6 +160,8 @@ function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): voi
     throw new Error('Web Speech API not available');
   }
   
+  console.log('[TTS] webSpeechSpeak() CALLED - text:', text, 'voiceId:', voiceId);
+  
   // Stop any current speech
   webSpeechSynth.cancel();
   
@@ -184,6 +186,7 @@ function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): voi
   
   console.log('[TTS] webSpeechSpeak() - Speaking with voice:', utterance.voice?.name, 'volume:', utterance.volume, 'rate:', utterance.rate, 'pitch:', utterance.pitch);
   webSpeechSynth.speak(utterance);
+  console.log('[TTS] webSpeechSpeak() - speak() called on SpeechSynthesis');
 }
 
 function webSpeechStop(): void {
@@ -213,10 +216,14 @@ export async function getVoices(): Promise<TTSVoice[]> {
 }
 
 export async function testVoice(voiceId: string, options?: TTSOptions): Promise<void> {
-  const settings = await getSettings();
   const testMessage = 'Hello! This is a test of the text to speech system.';
   
-  if (settings.provider === 'webspeech') {
+  // Determine provider from voice ID prefix
+  const isAzureVoice = voiceId?.startsWith('azure_');
+  const isGoogleVoice = voiceId?.startsWith('google_');
+  
+  // Use Web Speech for non-Azure/Google voices
+  if (!isAzureVoice && !isGoogleVoice) {
     webSpeechSpeak(testMessage, voiceId, options || {});
     return;
   }
@@ -435,13 +442,24 @@ async function playAudioBuffer(audioData: string, volume: number, rate: number, 
 }
 
 // Listen for audio playback requests from backend
+// Remove any existing listeners to prevent duplicates
+let playAudioCallCount = 0;
+let speakCallCount = 0;
+
+ipcRenderer.removeAllListeners('tts:play-audio');
 ipcRenderer.on('tts:play-audio', (_event: any, data: any) => {
+  playAudioCallCount++;
   const { audioData, volume, rate, pitch } = data;
+  console.log('[TTS] Received tts:play-audio event #' + playAudioCallCount);
   playAudioBuffer(audioData, volume, rate, pitch);
 });
 
 // Listen for Web Speech playback requests from backend
+// Remove any existing listeners to prevent duplicates
+ipcRenderer.removeAllListeners('tts:speak');
 ipcRenderer.on('tts:speak', (_event: any, data: any) => {
+  speakCallCount++;
   const { text, voiceId, volume, rate, pitch } = data;
+  console.log('[TTS] Received tts:speak event #' + speakCallCount + ' for voice:', voiceId);
   webSpeechSpeak(text, voiceId, { voiceId, volume, rate, pitch });
 });
