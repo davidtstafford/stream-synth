@@ -358,9 +358,41 @@ export class TTSManager {
     // Reload settings
     await this.loadSettings();
     
-    // If provider changed and it's not webspeech, reinitialize
-    if (settings.provider && settings.provider !== 'webspeech' && settings.provider !== this.settings!.provider) {
-      await this.setProvider(settings.provider);
+    // Re-initialize providers based on enabled flags and credentials
+    // Azure provider
+    if (settings.azureEnabled !== undefined || settings.azureApiKey !== undefined || settings.azureRegion !== undefined) {
+      if (this.settings!.azureEnabled && this.settings!.azureApiKey) {
+        console.log('[TTS] Azure enabled with API key - initializing');
+        await this.setProvider('azure');
+      } else {
+        console.log('[TTS] Azure disabled or no API key - disposing provider');
+        const azureProvider = this.providers.get('azure');
+        if (azureProvider && (azureProvider as any).dispose) {
+          (azureProvider as any).dispose();
+        }
+        // Set currentProvider to null if it was Azure
+        if (this.currentProvider === azureProvider) {
+          this.currentProvider = null;
+        }
+      }
+    }
+    
+    // Google provider
+    if (settings.googleEnabled !== undefined || settings.googleApiKey !== undefined) {
+      if (this.settings!.googleEnabled && this.settings!.googleApiKey) {
+        console.log('[TTS] Google enabled with API key - initializing');
+        await this.setProvider('google');
+      } else {
+        console.log('[TTS] Google disabled or no API key - disposing provider');
+        const googleProvider = this.providers.get('google');
+        if (googleProvider && (googleProvider as any).dispose) {
+          (googleProvider as any).dispose();
+        }
+        // Set currentProvider to null if it was Google
+        if (this.currentProvider === googleProvider) {
+          this.currentProvider = null;
+        }
+      }
     }
   }
 
