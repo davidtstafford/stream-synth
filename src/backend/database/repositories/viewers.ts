@@ -12,9 +12,13 @@ export class ViewersRepository {
   /**
    * Get or create a viewer
    */
-  getOrCreate(id: string, username: string, displayName?: string): Viewer {
+  getOrCreate(id: string, username: string, displayName?: string): Viewer | null {
     const db = getDatabase();
-    
+    // Require numeric IDs (Twitch user IDs). If id is not numeric, do not create a viewer row.
+    if (!/^[0-9]+$/.test(id)) {
+      // Do not create entries with username-only IDs
+      return null;
+    }
     // Try to get existing viewer
     const existing = this.getById(id);
     if (existing) {

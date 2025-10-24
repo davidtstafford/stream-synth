@@ -343,7 +343,7 @@ export function setupIpcHandlers(): void {
       // Add viewer info if available
       if (viewerId) {
         const viewer = viewersRepo.getById(viewerId);
-        if (viewer) {
+  if (viewer) {
           (storedEvent as any).viewer_username = viewer.username;
           (storedEvent as any).viewer_display_name = viewer.display_name;
         }
@@ -391,6 +391,9 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('db:get-or-create-viewer', async (event, id: string, username: string, displayName?: string) => {
     try {
       const viewer = viewersRepo.getOrCreate(id, username, displayName);
+      if (!viewer) {
+        return { success: false, error: 'Viewer not created: numeric ID required' };
+      }
       return { success: true, viewer };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -521,34 +524,58 @@ export function setupIpcHandlers(): void {
       // Get current session to find channel_id
       const session = await sessionsRepo.getCurrentSession();
       if (session) {
-        // Get or create viewer
+        // Get or create viewer (requires numeric ID). For IRC we don't have numeric IDs,
+        // so getOrCreate will return null and we should not create viewer rows.
         const viewer = await viewersRepo.getOrCreate(
-          event.username, // Use username as ID for IRC users (no Twitch ID available)
           event.username,
-          event.username  // Display name = username for IRC
+          event.username,
+          event.username
         );
-        
-        // Store event
-        const eventId = eventsRepo.storeEvent(
-          'irc.chat.join',
-          event,
-          session.channel_id,
-          viewer.id
-        );
-        
-        console.log(`[IRC] JOIN event stored with ID: ${eventId}`);
-        
-        // Broadcast to renderer with viewer info
-        mainWindow?.webContents.send('event:stored', {
-          id: eventId,
-          event_type: 'irc.chat.join',
-          event_data: JSON.stringify(event),
-          viewer_id: viewer.id,
-          channel_id: session.channel_id,
-          created_at: new Date().toISOString(),
-          viewer_username: viewer.username,
-          viewer_display_name: viewer.display_name
-        });
+
+        if (viewer) {
+          // Store event with viewer reference
+          const eventId = eventsRepo.storeEvent(
+            'irc.chat.join',
+            event,
+            session.channel_id,
+            viewer.id
+          );
+
+          console.log(`[IRC] JOIN event stored with ID: ${eventId}`);
+
+          // Broadcast to renderer with viewer info
+          mainWindow?.webContents.send('event:stored', {
+            id: eventId,
+            event_type: 'irc.chat.join',
+            event_data: JSON.stringify(event),
+            viewer_id: viewer.id,
+            channel_id: session.channel_id,
+            created_at: new Date().toISOString(),
+            viewer_username: viewer.username,
+            viewer_display_name: viewer.display_name
+          });
+  } else {
+          // No numeric ID available; store event without viewer reference
+          const eventId = eventsRepo.storeEvent(
+            'irc.chat.join',
+            event,
+            session.channel_id,
+            undefined
+          );
+
+          console.log(`[IRC] JOIN event stored without viewer ID, event ID: ${eventId}`);
+
+          mainWindow?.webContents.send('event:stored', {
+            id: eventId,
+            event_type: 'irc.chat.join',
+            event_data: JSON.stringify(event),
+            viewer_id: undefined,
+            channel_id: session.channel_id,
+            created_at: new Date().toISOString(),
+            viewer_username: event.username,
+            viewer_display_name: event.username
+          });
+        }
       }
     } catch (error) {
       console.error('[IRC] Failed to store JOIN event:', error);
@@ -563,34 +590,58 @@ export function setupIpcHandlers(): void {
       // Get current session to find channel_id
       const session = await sessionsRepo.getCurrentSession();
       if (session) {
-        // Get or create viewer
+        // Get or create viewer (requires numeric ID). For IRC we don't have numeric IDs,
+        // so getOrCreate will return null and we should not create viewer rows.
         const viewer = await viewersRepo.getOrCreate(
-          event.username, // Use username as ID for IRC users (no Twitch ID available)
           event.username,
-          event.username  // Display name = username for IRC
+          event.username,
+          event.username
         );
-        
-        // Store event
-        const eventId = eventsRepo.storeEvent(
-          'irc.chat.part',
-          event,
-          session.channel_id,
-          viewer.id
-        );
-        
-        console.log(`[IRC] PART event stored with ID: ${eventId}`);
-        
-        // Broadcast to renderer with viewer info
-        mainWindow?.webContents.send('event:stored', {
-          id: eventId,
-          event_type: 'irc.chat.part',
-          event_data: JSON.stringify(event),
-          viewer_id: viewer.id,
-          channel_id: session.channel_id,
-          created_at: new Date().toISOString(),
-          viewer_username: viewer.username,
-          viewer_display_name: viewer.display_name
-        });
+
+        if (viewer) {
+          // Store event with viewer reference
+          const eventId = eventsRepo.storeEvent(
+            'irc.chat.part',
+            event,
+            session.channel_id,
+            viewer.id
+          );
+
+          console.log(`[IRC] PART event stored with ID: ${eventId}`);
+
+          // Broadcast to renderer with viewer info
+          mainWindow?.webContents.send('event:stored', {
+            id: eventId,
+            event_type: 'irc.chat.part',
+            event_data: JSON.stringify(event),
+            viewer_id: viewer.id,
+            channel_id: session.channel_id,
+            created_at: new Date().toISOString(),
+            viewer_username: viewer.username,
+            viewer_display_name: viewer.display_name
+          });
+        } else {
+          // No numeric ID available; store event without viewer reference
+          const eventId = eventsRepo.storeEvent(
+            'irc.chat.part',
+            event,
+            session.channel_id,
+            undefined
+          );
+
+          console.log(`[IRC] PART event stored without viewer ID, event ID: ${eventId}`);
+
+          mainWindow?.webContents.send('event:stored', {
+            id: eventId,
+            event_type: 'irc.chat.part',
+            event_data: JSON.stringify(event),
+            viewer_id: undefined,
+            channel_id: session.channel_id,
+            created_at: new Date().toISOString(),
+            viewer_username: event.username,
+            viewer_display_name: event.username
+          });
+        }
       }
     } catch (error) {
       console.error('[IRC] Failed to store PART event:', error);
