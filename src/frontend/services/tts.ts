@@ -231,15 +231,20 @@ export async function testVoice(voiceId: string, options?: TTSOptions): Promise<
 export async function speak(text: string, options?: TTSOptions): Promise<void> {
   const settings = await getSettings();
   
-  if (settings.provider === 'webspeech') {
-    const voiceId = options?.voiceId || settings.voiceId;
-    console.log('[TTS Service] speak() - provider:', settings.provider, 'voiceId:', voiceId, 'options:', options);
+  // Determine provider from voice ID (since we now support multiple providers)
+  const voiceId = options?.voiceId || settings.voiceId;
+  const isAzureVoice = voiceId?.startsWith('azure_');
+  const isGoogleVoice = voiceId?.startsWith('google_');
+  
+  // Use Web Speech for non-Azure/Google voices
+  if (!isAzureVoice && !isGoogleVoice) {
+    console.log('[TTS Service] speak() - Using Web Speech for voiceId:', voiceId);
     webSpeechSpeak(text, voiceId, options || {});
     return;
   }
   
   // For Azure/Google, call backend
-  console.log('[TTS Service] speak() - provider:', settings.provider, 'calling backend with options:', options);
+  console.log('[TTS Service] speak() - Using backend provider for voiceId:', voiceId, 'options:', options);
   const result = await ipcRenderer.invoke('tts:speak', text, options);
   if (!result.success) {
     throw new Error(result.error);
@@ -380,3 +385,63 @@ export async function getAllViewerRules(): Promise<ViewerTTSRule[]> {
   }
   return result.rules;
 }
+
+// Web Audio API for Azure/Google TTS (OBS-compatible)
+let audioContext: AudioContext | null = null;
+
+function getAudioContext(): AudioContext {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+  return audioContext;
+}
+
+async function playAudioBuffer(audioData: string, volume: number, rate: number, pitch: number): Promise<void> {
+  try {
+    const ctx = getAudioContext();
+    
+    // Convert base64 to ArrayBuffer
+    const binaryString = atob(audioData);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Decode audio data
+    const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+    
+    // Create source node
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    
+    // Apply rate (playback speed)
+    source.playbackRate.value = rate;
+    
+    // Create gain node for volume
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = volume / 100; // Convert 0-100 to 0-1
+    
+    // Connect: source -> gain -> destination
+    source.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    // Start playback
+    source.start(0);
+    
+    console.log('[TTS] Playing Azure audio via Web Audio API (OBS-compatible)');
+  } catch (error) {
+    console.error('[TTS] Error playing audio:', error);
+  }
+}
+
+// Listen for audio playback requests from backend
+ipcRenderer.on('tts:play-audio', (_event: any, data: any) => {
+  const { audioData, volume, rate, pitch } = data;
+  playAudioBuffer(audioData, volume, rate, pitch);
+});
+
+// Listen for Web Speech playback requests from backend
+ipcRenderer.on('tts:speak', (_event: any, data: any) => {
+  const { text, voiceId, volume, rate, pitch } = data;
+  webSpeechSpeak(text, voiceId, { voiceId, volume, rate, pitch });
+});

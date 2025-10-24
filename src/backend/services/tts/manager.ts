@@ -175,6 +175,31 @@ export class TTSManager {
   }
 
   /**
+   * Resolve voice ID to actual provider voice name
+   * For Azure voices, looks up the shortName from database metadata
+   */
+  private resolveVoiceId(voiceId: string): string {
+    // For Azure voices, look up the shortName from the database
+    if (voiceId?.startsWith('azure_')) {
+      const voiceRecord = this.voicesRepo.getVoiceById(voiceId);
+      if (voiceRecord?.metadata) {
+        try {
+          const metadata = JSON.parse(voiceRecord.metadata);
+          if (metadata.shortName) {
+            // Use the full Azure voice name (e.g., "en-US-AriaNeural")
+            console.log(`[TTS] Resolved ${voiceId} -> ${metadata.shortName}`);
+            return metadata.shortName;
+          }
+        } catch (err) {
+          console.error('[TTS] Error parsing voice metadata:', err);
+        }
+      }
+    }
+    
+    return voiceId;
+  }
+
+  /**
    * Speak text using current settings
    */
   async speak(text: string, options?: Partial<TTSOptions>): Promise<void> {
@@ -192,7 +217,8 @@ export class TTSManager {
       return;
     }
 
-    const voiceId = options?.voiceId ?? this.settings.voiceId;
+    const voiceId = this.resolveVoiceId(options?.voiceId ?? this.settings.voiceId);
+    
     const ttsOptions: TTSOptions = {
       volume: options?.volume ?? this.settings.volume,
       rate: options?.rate ?? this.settings.rate,
@@ -229,13 +255,31 @@ export class TTSManager {
       throw new Error('TTS not initialized');
     }
 
+    const actualVoiceId = this.resolveVoiceId(voiceId);
+
     const ttsOptions: TTSOptions = {
       volume: options?.volume ?? this.settings.volume,
       rate: options?.rate ?? this.settings.rate,
       pitch: options?.pitch ?? this.settings.pitch
     };
 
-    await this.currentProvider.test(voiceId, ttsOptions);
+    await this.currentProvider.test(actualVoiceId, ttsOptions);
+    
+    // For Azure voices, retrieve audio data and send to renderer
+    if (voiceId.startsWith('azure_')) {
+      const azureProvider = this.providers.get('azure');
+      if (azureProvider) {
+        const audioData = (azureProvider as any).getLastAudioData();
+        if (audioData && this.mainWindow) {
+          this.mainWindow.webContents.send('tts:play-audio', {
+            audioData: audioData.toString('base64'), // Convert Buffer to base64 for IPC
+            volume: ttsOptions.volume,
+            rate: ttsOptions.rate,
+            pitch: ttsOptions.pitch
+          });
+        }
+      }
+    }
   }
 
   /**
@@ -781,6 +825,7 @@ export class TTSManager {
 
         // Determine provider from voice_id prefix (hybrid routing)
         const voiceId = item.voiceId || this.settings?.voiceId || '';
+        const resolvedVoiceId = this.resolveVoiceId(voiceId);
         
         if (voiceId.startsWith('webspeech_')) {
           // Send to renderer process for Web Speech API
@@ -804,11 +849,22 @@ export class TTSManager {
           // Use Azure provider
           const azureProvider = this.providers.get('azure');
           if (azureProvider) {
-            await azureProvider.speak(textToSpeak, voiceId, {
+            await azureProvider.speak(textToSpeak, resolvedVoiceId, {
               volume: this.settings?.volume,
               rate: item.rate ?? this.settings?.rate,
               pitch: item.pitch ?? this.settings?.pitch
             });
+            
+            // Get audio data and send to renderer for playback (OBS-compatible)
+            const audioData = (azureProvider as any).getLastAudioData();
+            if (audioData && this.mainWindow) {
+              this.mainWindow.webContents.send('tts:play-audio', {
+                audioData: audioData.toString('base64'), // Convert Buffer to base64 for IPC
+                volume: this.settings?.volume,
+                rate: item.rate ?? this.settings?.rate,
+                pitch: item.pitch ?? this.settings?.pitch
+              });
+            }
           } else {
             console.error('[TTS] Azure provider not available for voice:', voiceId);
           }

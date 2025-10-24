@@ -13,6 +13,7 @@ export interface TTSVoice {
   provider: 'webspeech' | 'azure' | 'google';
   styles?: string[];             // Voice styles (Azure only)
   sampleRateHertz?: number;      // Sample rate (Google only)
+  shortName?: string;            // Full provider voice name (Azure: "en-US-AriaNeural")
 }
 
 export interface TTSOptions {

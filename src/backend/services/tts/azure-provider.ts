@@ -18,6 +18,7 @@ export class AzureTTSProvider implements TTSProvider {
   private apiKey: string = '';
   private region: string = '';
   private isInitialized: boolean = false;
+  private lastAudioData: Buffer | null = null;
 
   /**
    * Initialize the Azure provider with API credentials
@@ -34,15 +35,17 @@ export class AzureTTSProvider implements TTSProvider {
       // Create speech config
       this.speechConfig = sdk.SpeechConfig.fromSubscription(this.apiKey, this.region);
       
-      // Set output format to highest quality
+      // Set output format to MP3 for web playback
       this.speechConfig.speechSynthesisOutputFormat = sdk.SpeechSynthesisOutputFormat.Audio24Khz96KBitRateMonoMp3;
       
-      // Create synthesizer with default speaker output
-      const audioConfig = sdk.AudioConfig.fromDefaultSpeakerOutput();
-      this.synthesizer = new sdk.SpeechSynthesizer(this.speechConfig, audioConfig);
+      // Use null audio config - we'll handle audio playback ourselves
+      // This allows us to get the audio data and send it to frontend for playback
+      // (Required for OBS browser source capture)
+      this.synthesizer = new sdk.SpeechSynthesizer(this.speechConfig, undefined);
 
       this.isInitialized = true;
       console.log('[Azure TTS] Initialized successfully with region:', this.region);
+      console.log('[Azure TTS] Audio will be sent to frontend for playback (OBS-compatible)');
     } catch (error) {
       console.error('[Azure TTS] Initialization error:', error);
       throw new Error(`Failed to initialize Azure TTS: ${error}`);
@@ -112,7 +115,9 @@ export class AzureTTSProvider implements TTSProvider {
       languageName: voice.LocaleName || voice.Locale,
       gender,
       provider: 'azure',
-      styles: voice.StyleList || []
+      styles: voice.StyleList || [],
+      // Store the full ShortName so we can reconstruct it when speaking
+      shortName: voice.ShortName  // e.g., "en-US-AriaNeural"
     };
   }
 
@@ -153,11 +158,10 @@ export class AzureTTSProvider implements TTSProvider {
    * Generate SSML for Azure TTS with voice options
    */
   private generateSSML(text: string, voiceId: string, options?: TTSOptions): string {
-    // Extract voice name from voice_id (azure_en-US_Aria -> en-US-AriaNeural)
-    const parts = voiceId.replace('azure_', '').split('_');
-    const locale = parts[0];
-    const voiceName = parts[1];
-    const fullVoiceName = `${locale}-${voiceName}Neural`; // Assume Neural for now
+    // voiceId is now the full Azure ShortName (e.g., "en-US-AriaNeural")
+    // Extract locale from voiceId
+    const localeParts = voiceId.split('-');
+    const locale = localeParts.length >= 2 ? `${localeParts[0]}-${localeParts[1]}` : 'en-US';
 
     // Map volume (0-100) to SSML prosody volume
     let volumeAttr = '';
@@ -202,7 +206,7 @@ export class AzureTTSProvider implements TTSProvider {
     // Build SSML
     const ssml = `
       <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${locale}">
-        <voice name="${fullVoiceName}">
+        <voice name="${voiceId}">
           ${prosodyAttrs ? `<prosody ${prosodyAttrs}>` : ''}
             ${escapedText}
           ${prosodyAttrs ? '</prosody>' : ''}
@@ -215,6 +219,7 @@ export class AzureTTSProvider implements TTSProvider {
 
   /**
    * Speak text using specified voice
+   * Returns audio data as Buffer for frontend playback
    */
   async speak(text: string, voiceId: string, options?: TTSOptions): Promise<void> {
     if (!this.isInitialized || !this.synthesizer) {
@@ -228,8 +233,25 @@ export class AzureTTSProvider implements TTSProvider {
       this.synthesizer!.speakSsmlAsync(
         ssml,
         (result: any) => {
+          console.log('[Azure TTS] Result reason:', result.reason);
+          
           if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
-            console.log('[Azure TTS] Speech synthesis completed');
+            console.log('[Azure TTS] Speech synthesis completed successfully');
+            
+            // Get the audio data
+            const audioData = result.audioData;
+            if (!audioData || audioData.byteLength === 0) {
+              console.error('[Azure TTS] No audio data received!');
+              reject(new Error('No audio data received from Azure'));
+              return;
+            }
+            
+            console.log('[Azure TTS] Received audio data:', audioData.byteLength, 'bytes');
+            
+            // Convert ArrayBuffer to Buffer and store for retrieval
+            this.lastAudioData = Buffer.from(audioData);
+            console.log('[Azure TTS] Audio data ready for playback');
+            
             resolve();
           } else if (result.reason === sdk.ResultReason.Canceled) {
             const error = `Speech synthesis canceled: ${result.errorDetails || 'Unknown error'}`;
@@ -240,9 +262,20 @@ export class AzureTTSProvider implements TTSProvider {
             console.error('[Azure TTS]', error);
             reject(new Error(error));
           }
+        },
+        (error: any) => {
+          console.error('[Azure TTS] Error during synthesis:', error);
+          reject(error);
         }
       );
     });
+  }
+
+  /**
+   * Get the last generated audio data
+   */
+  getLastAudioData(): Buffer | null {
+    return this.lastAudioData;
   }
 
   /**

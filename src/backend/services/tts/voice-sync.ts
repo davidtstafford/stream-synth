@@ -43,7 +43,8 @@ export class VoiceSyncService {
         is_available: 1,
         display_order: null,
         metadata: JSON.stringify({ 
-          styles: voice.styles || []
+          styles: voice.styles || [],
+          shortName: voice.shortName  // Store full Azure voice name (e.g., "en-US-AriaNeural")
         })
       });
       voiceIds.push(voice.id);
