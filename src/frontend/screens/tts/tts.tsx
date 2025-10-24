@@ -150,8 +150,10 @@ export const TTS: React.FC = () => {
 
   const handleSettingChange = async (key: keyof ttsService.TTSSettings, value: any) => {
     try {
+      console.log(`[TTS] Saving ${key}:`, value);
       await ttsService.saveSettings({ [key]: value });
       setSettings(prev => prev ? { ...prev, [key]: value } : null);
+      console.log('[TTS] Settings updated:', { ...settings, [key]: value });
     } catch (err: any) {
       setError(err.message);
     }
@@ -167,7 +169,15 @@ export const TTS: React.FC = () => {
       setIsSpeaking(true);
       setError(null);
       
+      console.log('[TTS Test] Speaking with voiceId:', settings.voiceId, 'options:', {
+        voiceId: settings.voiceId,
+        volume: settings.volume,
+        rate: settings.rate,
+        pitch: settings.pitch
+      });
+      
       await ttsService.speak(testMessage, {
+        voiceId: settings.voiceId,
         volume: settings.volume,
         rate: settings.rate,
         pitch: settings.pitch

@@ -1,6 +1,7 @@
 import { TTSProvider, TTSVoice, TTSSettings, TTSOptions } from './base';
 import { TTSRepository } from '../../database/repositories/tts';
 import { ViewerRulesRepository } from '../../database/viewer-rules-repository';
+import { VoicesRepository } from '../../database/repositories/voices';
 import Database from 'better-sqlite3';
 
 interface TTSQueueItem {
@@ -26,6 +27,7 @@ export class TTSManager {
   private currentProvider: TTSProvider | null = null;
   private repository: TTSRepository;
   private viewerRulesRepo: ViewerRulesRepository;
+  private voicesRepo: VoicesRepository;
   private settings: TTSSettings | null = null;
   private messageQueue: TTSQueueItem[] = [];
   private isProcessing: boolean = false;
@@ -44,6 +46,7 @@ export class TTSManager {
   constructor(db: Database.Database) {
     this.repository = new TTSRepository(db);
     this.viewerRulesRepo = new ViewerRulesRepository(db);
+    this.voicesRepo = new VoicesRepository();
     this.providers = new Map();
     
     // Note: Web Speech API runs in renderer process
@@ -171,13 +174,14 @@ export class TTSManager {
       return;
     }
 
+    const voiceId = options?.voiceId ?? this.settings.voiceId;
     const ttsOptions: TTSOptions = {
       volume: options?.volume ?? this.settings.volume,
       rate: options?.rate ?? this.settings.rate,
       pitch: options?.pitch ?? this.settings.pitch
     };
 
-    await this.currentProvider.speak(text, this.settings.voiceId, ttsOptions);
+    await this.currentProvider.speak(text, voiceId, ttsOptions);
   }
 
   /**
@@ -422,7 +426,14 @@ export class TTSManager {
     
     if (viewerRule) {
       if (viewerRule.customVoiceId !== null) {
-        voiceId = String(viewerRule.customVoiceId);
+        // Look up the actual voice_id string from the numeric ID
+        const voice = this.voicesRepo.getVoiceByNumericId(viewerRule.customVoiceId);
+        if (voice) {
+          voiceId = voice.voice_id;
+          console.log(`[TTS] Using custom voice for ${username}: ${voice.name} (${voice.voice_id})`);
+        } else {
+          console.warn(`[TTS] Custom voice ID ${viewerRule.customVoiceId} not found for ${username}, using global`);
+        }
       }
       if (viewerRule.pitchOverride !== null) {
         pitch = viewerRule.pitchOverride;
@@ -764,6 +775,7 @@ export class TTSManager {
         } else {
           // Use backend provider (Azure/Google)
           await this.speak(textToSpeak, { 
+            voiceId: item.voiceId || this.settings?.voiceId,
             volume: this.settings?.volume,
             rate: item.rate ?? this.settings?.rate,
             pitch: item.pitch ?? this.settings?.pitch

@@ -38,9 +38,12 @@ const App: React.FC = () => {
       // Use Web Speech API
       const utterance = new SpeechSynthesisUtterance(text);
       
+      // Strip provider prefix if present (e.g., "webspeech_com.apple.voice.compact.en-US.Samantha")
+      const cleanVoiceId = voiceId?.replace(/^webspeech_/, '') || voiceId;
+      
       // Find the voice
       const voices = window.speechSynthesis.getVoices();
-      const voice = voices.find(v => v.voiceURI === voiceId || v.name === voiceId);
+      const voice = voices.find(v => v.voiceURI === cleanVoiceId || v.name === cleanVoiceId);
       
       if (voice) {
         utterance.voice = voice;
@@ -50,7 +53,7 @@ const App: React.FC = () => {
       utterance.rate = rate;
       utterance.pitch = pitch;
       
-      console.log('[TTS Renderer] Speaking:', text, 'with voice:', voice?.name || 'default');
+      console.log('[TTS Renderer] Speaking:', text, 'with voice:', voice?.name || 'default', '(voiceId:', voiceId, '-> cleanVoiceId:', cleanVoiceId, ')');
       window.speechSynthesis.speak(utterance);
     };
 

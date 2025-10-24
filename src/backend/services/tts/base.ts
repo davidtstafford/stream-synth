@@ -16,6 +16,7 @@ export interface TTSVoice {
 }
 
 export interface TTSOptions {
+  voiceId?: string;    // Voice identifier to use
   volume?: number;     // 0-100
   rate?: number;       // 0.5-2.0 (speech speed)
   pitch?: number;      // 0.5-2.0 (voice pitch)

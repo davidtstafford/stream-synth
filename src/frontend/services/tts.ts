@@ -49,6 +49,7 @@ export interface TTSSettings {
 }
 
 export interface TTSOptions {
+  voiceId?: string;
   volume?: number;
   rate?: number;
   pitch?: number;
@@ -159,8 +160,14 @@ function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): voi
   
   const utterance = new SpeechSynthesisUtterance(text);
   
+  // Strip provider prefix if present (e.g., "webspeech_com.apple.voice.compact.en-US.Samantha")
+  const cleanVoiceId = voiceId.replace(/^webspeech_/, '');
+  
   // Find the voice
-  const voice = webSpeechVoices.find(v => v.voiceURI === voiceId || v.name === voiceId);
+  console.log('[TTS] webSpeechSpeak() - Looking for voiceId:', cleanVoiceId, '(original:', voiceId, ') in', webSpeechVoices.length, 'voices');
+  const voice = webSpeechVoices.find(v => v.voiceURI === cleanVoiceId || v.name === cleanVoiceId);
+  console.log('[TTS] webSpeechSpeak() - Found voice:', voice?.name, voice?.voiceURI);
+  
   if (voice) {
     utterance.voice = voice;
   }
@@ -170,6 +177,7 @@ function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): voi
   utterance.rate = options.rate ?? 1.0;
   utterance.pitch = options.pitch ?? 1.0;
   
+  console.log('[TTS] webSpeechSpeak() - Speaking with voice:', utterance.voice?.name, 'volume:', utterance.volume, 'rate:', utterance.rate, 'pitch:', utterance.pitch);
   webSpeechSynth.speak(utterance);
 }
 
@@ -219,11 +227,14 @@ export async function speak(text: string, options?: TTSOptions): Promise<void> {
   const settings = await getSettings();
   
   if (settings.provider === 'webspeech') {
-    webSpeechSpeak(text, settings.voiceId, options || {});
+    const voiceId = options?.voiceId || settings.voiceId;
+    console.log('[TTS Service] speak() - provider:', settings.provider, 'voiceId:', voiceId, 'options:', options);
+    webSpeechSpeak(text, voiceId, options || {});
     return;
   }
   
   // For Azure/Google, call backend
+  console.log('[TTS Service] speak() - provider:', settings.provider, 'calling backend with options:', options);
   const result = await ipcRenderer.invoke('tts:speak', text, options);
   if (!result.success) {
     throw new Error(result.error);
