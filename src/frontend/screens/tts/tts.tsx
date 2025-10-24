@@ -483,13 +483,26 @@ export const TTS: React.FC = () => {
 
   // Get filtered voice groups for viewer voice picker
   const getViewerFilteredGroups = () => {
-    if (!voiceGroups.length) return [];
+    if (!voiceGroups.length || !settings) return [];
 
     return voiceGroups
       .map(group => ({
         ...group,
         voices: group.voices.filter(voice => {
-          // Only show available voices (database handles availability)
+          // Only show available voices from ENABLED providers
+          const voiceId = voice.voice_id || '';
+          let providerEnabled = false;
+          
+          if (voiceId.startsWith('azure_')) {
+            providerEnabled = settings.azureEnabled ?? false;
+          } else if (voiceId.startsWith('google_')) {
+            providerEnabled = settings.googleEnabled ?? false;
+          } else if (voiceId.startsWith('webspeech_')) {
+            providerEnabled = settings.webspeechEnabled ?? false;
+          }
+          
+          // Skip if provider is disabled
+          if (!providerEnabled) return false;
           
           const matchesSearch = !viewerVoiceSearch ||
             voice.name.toLowerCase().includes(viewerVoiceSearch.toLowerCase()) ||
@@ -1312,33 +1325,79 @@ export const TTS: React.FC = () => {
   function renderViewerRuleEditor() {
     if (!viewerRule || !settings) return null;
 
-    // Get the voice name for display
-    const getVoiceName = (voiceId: number | null) => {
-      if (voiceId === null) return null;
+    // Get the voice info by numeric ID (for viewer custom voices)
+    const getVoiceInfoById = (voiceId: number | null) => {
+      if (voiceId === null) return { name: null, voice: null, available: true };
       // Find the voice in voice groups
       for (const group of voiceGroups) {
         const voice = group.voices.find(v => v.id === voiceId);
-        if (voice) return voice.name;
+        if (voice) {
+          // Check if the voice's provider is enabled
+          const voiceIdStr = voice.voice_id || '';
+          let providerEnabled = false;
+          
+          if (voiceIdStr.startsWith('azure_')) {
+            providerEnabled = settings.azureEnabled ?? false;
+          } else if (voiceIdStr.startsWith('google_')) {
+            providerEnabled = settings.googleEnabled ?? false;
+          } else if (voiceIdStr.startsWith('webspeech_')) {
+            providerEnabled = settings.webspeechEnabled ?? false;
+          }
+          
+          return { name: voice.name, voice, available: providerEnabled };
+        }
       }
-      return `Voice #${voiceId}`;
+      return { name: `Voice #${voiceId}`, voice: null, available: false };
     };
 
-    const customVoiceName = getVoiceName(viewerRule.customVoiceId);
-    const globalVoiceName = getVoiceName(parseInt(settings.voiceId));
+    // Get the voice info by voice_id string (for global voice setting)
+    const getVoiceInfoByVoiceId = (voiceIdStr: string) => {
+      if (!voiceIdStr) return { name: null, voice: null, available: true };
+      // Find the voice in voice groups
+      for (const group of voiceGroups) {
+        const voice = group.voices.find(v => v.voice_id === voiceIdStr);
+        if (voice) {
+          // Check if the voice's provider is enabled
+          let providerEnabled = false;
+          
+          if (voiceIdStr.startsWith('azure_')) {
+            providerEnabled = settings.azureEnabled ?? false;
+          } else if (voiceIdStr.startsWith('google_')) {
+            providerEnabled = settings.googleEnabled ?? false;
+          } else if (voiceIdStr.startsWith('webspeech_')) {
+            providerEnabled = settings.webspeechEnabled ?? false;
+          }
+          
+          return { name: voice.name, voice, available: providerEnabled };
+        }
+      }
+      return { name: voiceIdStr, voice: null, available: false };
+    };
+
+    const customVoiceInfo = getVoiceInfoById(viewerRule.customVoiceId);
+    const globalVoiceInfo = getVoiceInfoByVoiceId(settings.voiceId);
     
     const viewerFilteredGroups = getViewerFilteredGroups();
     const viewerVisibleCount = getViewerVisibleVoiceCount();
+    
+    // Get list of enabled providers for display
+    const enabledProviders: string[] = [];
+    if (settings.webspeechEnabled) enabledProviders.push('Web Speech');
+    if (settings.azureEnabled) enabledProviders.push('Azure');
+    if (settings.googleEnabled) enabledProviders.push('Google');
+    const providersText = enabledProviders.length > 0 ? enabledProviders.join(', ') : 'None';
 
     return (
       <div className="viewer-rule-editor">
-        {/* TTS Provider (read-only display) */}
+        {/* TTS Provider (display enabled providers) */}
         <div className="rule-setting-group">
-          <label className="rule-label">TTS Provider</label>
+          <label className="rule-label">Enabled TTS Providers</label>
           <div className="provider-display">
-            {settings.provider === 'webspeech' && 'Web Speech API (Free)'}
-            {settings.provider === 'azure' && 'Azure TTS (5M/month)'}
-            {settings.provider === 'google' && 'Google Cloud TTS (1M/month)'}
+            {providersText}
           </div>
+          <p className="setting-hint" style={{ fontSize: '12px', marginTop: '5px', color: '#888' }}>
+            Only voices from enabled providers are shown. Toggle providers in the Settings tab.
+          </p>
         </div>
 
         {/* Voice Search and Filters */}
@@ -1379,12 +1438,56 @@ export const TTS: React.FC = () => {
           <label className="rule-label">
             Voice ({viewerVisibleCount} of {voiceStats.available} available)
           </label>
+          
+          {/* Warning if custom voice is unavailable */}
+          {viewerRule.customVoiceId !== null && !customVoiceInfo.available && (
+            <div style={{ 
+              padding: '10px', 
+              marginBottom: '10px', 
+              backgroundColor: '#ff6b6b', 
+              color: 'white', 
+              borderRadius: '4px',
+              fontSize: '14px'
+            }}>
+              ⚠️ Voice "{customVoiceInfo.name}" is unavailable (provider disabled).
+              <button 
+                onClick={() => handleUpdateRule({ customVoiceId: null })}
+                style={{
+                  marginLeft: '10px',
+                  padding: '5px 10px',
+                  backgroundColor: 'white',
+                  color: '#ff6b6b',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Use Global Voice
+              </button>
+            </div>
+          )}
+          
+          {/* Warning if global voice is unavailable */}
+          {viewerRule.customVoiceId === null && !globalVoiceInfo.available && (
+            <div style={{ 
+              padding: '10px', 
+              marginBottom: '10px', 
+              backgroundColor: '#ffa500', 
+              color: 'white', 
+              borderRadius: '4px',
+              fontSize: '14px'
+            }}>
+              ⚠️ Global voice "{globalVoiceInfo.name}" is unavailable (provider disabled). Please select a custom voice or enable the provider in Settings tab.
+            </div>
+          )}
+          
           <select
             value={viewerRule.customVoiceId?.toString() || ''}
             onChange={(e) => handleUpdateRule({ customVoiceId: e.target.value ? parseInt(e.target.value) : null })}
             className="voice-select"
           >
-            <option value="">Use Global Voice ({globalVoiceName})</option>
+            <option value="">Use Global Voice ({globalVoiceInfo.name || 'None'})</option>
             {viewerFilteredGroups.map(group => (
               <optgroup key={group.category} label={group.category}>
                 {group.voices.map(voice => (
