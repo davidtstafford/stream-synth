@@ -182,5 +182,46 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tts_voice_ids_lookup ON tts_voice_ids(voice_id)
   `);
 
+  // Create viewer_tts_rules table for per-viewer TTS overrides
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_tts_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      custom_voice_id INTEGER,
+      pitch_override REAL,
+      rate_override REAL,
+      is_muted INTEGER DEFAULT 0,
+      muted_until TEXT,
+      cooldown_enabled INTEGER DEFAULT 0,
+      cooldown_seconds INTEGER,
+      cooldown_until TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (custom_voice_id) REFERENCES tts_voice_ids(numeric_id)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_tts_rules_username ON viewer_tts_rules(username)
+  `);
+
+  // Migration: Add cooldown_enabled and cooldown_until columns if they don't exist
+  try {
+    // Get table info to check if columns exist
+    const tableInfo = db.prepare("PRAGMA table_info(viewer_tts_rules)").all() as any[];
+    const hasColumns = tableInfo.some(col => col.name === 'cooldown_enabled');
+    
+    if (!hasColumns) {
+      console.log('Adding cooldown_enabled and cooldown_until columns to viewer_tts_rules');
+      db.exec(`ALTER TABLE viewer_tts_rules ADD COLUMN cooldown_enabled INTEGER DEFAULT 0`);
+      db.exec(`ALTER TABLE viewer_tts_rules ADD COLUMN cooldown_until TEXT`);
+      console.log('Cooldown columns added successfully');
+    } else {
+      console.log('Cooldown columns already exist');
+    }
+  } catch (err) {
+    console.log('Error checking/adding cooldown columns:', err);
+  }
+
   console.log('Database migrations completed');
 }

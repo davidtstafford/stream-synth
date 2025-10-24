@@ -14,7 +14,7 @@ interface VoiceGroup {
   }>;
 }
 
-type TabType = 'settings' | 'rules';
+type TabType = 'settings' | 'rules' | 'viewers';
 
 export const TTS: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('settings');
@@ -31,6 +31,18 @@ export const TTS: React.FC = () => {
   const [languageFilter, setLanguageFilter] = useState('all');
   const [genderFilter, setGenderFilter] = useState('all');
   const [voiceStats, setVoiceStats] = useState({ total: 0, available: 0, unavailable: 0 });
+
+  // Viewer tab state
+  const [viewerSearchTerm, setViewerSearchTerm] = useState('');
+  const [viewerSearchResults, setViewerSearchResults] = useState<Array<{ id: string; username: string; display_name?: string }>>([]);
+  const [selectedViewer, setSelectedViewer] = useState<string | null>(null);
+  const [viewerRule, setViewerRule] = useState<ttsService.ViewerTTSRule | null>(null);
+  const [loadingViewerRule, setLoadingViewerRule] = useState(false);
+  
+  // Viewer voice filters
+  const [viewerVoiceSearch, setViewerVoiceSearch] = useState('');
+  const [viewerLanguageFilter, setViewerLanguageFilter] = useState('all');
+  const [viewerGenderFilter, setViewerGenderFilter] = useState('all');
 
   // Load initial data
   useEffect(() => {
@@ -226,6 +238,233 @@ export const TTS: React.FC = () => {
     return getFilteredGroups().reduce((sum, group) => sum + group.voices.length, 0);
   };
 
+  // Viewer tab handlers
+  const handleViewerSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setViewerSearchTerm(query);
+
+    if (query.length < 2) {
+      setViewerSearchResults([]);
+      return;
+    }
+
+    try {
+      const { ipcRenderer } = window.require('electron');
+      const result = await ipcRenderer.invoke('db:search-viewers', query, 10);
+      if (result.success) {
+        setViewerSearchResults(result.viewers);
+      }
+    } catch (err: any) {
+      console.error('[Viewers] Error searching viewers:', err);
+    }
+  };
+
+  const handleSelectViewer = async (username: string) => {
+    setSelectedViewer(username);
+    setViewerSearchTerm('');
+    setViewerSearchResults([]);
+    setLoadingViewerRule(true);
+
+    try {
+      const rule = await ttsService.getViewerRule(username);
+      setViewerRule(rule);
+    } catch (err: any) {
+      console.error('[Viewers] Error loading viewer rule:', err);
+      setError(err.message);
+    } finally {
+      setLoadingViewerRule(false);
+    }
+  };
+
+  const handleCreateRule = async () => {
+    if (!selectedViewer) return;
+
+    try {
+      const rule = await ttsService.createViewerRule({
+        username: selectedViewer,
+        customVoiceId: null,
+        pitchOverride: null,
+        rateOverride: null,
+        isMuted: false,
+        mutedUntil: null,
+        cooldownEnabled: false,
+        cooldownSeconds: null,
+        cooldownUntil: null
+      });
+      setViewerRule(rule);
+    } catch (err: any) {
+      console.error('[Viewers] Error creating rule:', err);
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteRule = async () => {
+    if (!selectedViewer) return;
+
+    if (!viewerRule) {
+      // Just close the viewer section
+      setSelectedViewer(null);
+      return;
+    }
+
+    if (!confirm(`Delete all custom rules for ${selectedViewer}?`)) {
+      return;
+    }
+
+    try {
+      await ttsService.deleteViewerRule(selectedViewer);
+      setViewerRule(null);
+      setSelectedViewer(null);
+    } catch (err: any) {
+      console.error('[Viewers] Error deleting rule:', err);
+      setError(err.message);
+    }
+  };
+
+  const handleUpdateRule = async (updates: Partial<ttsService.ViewerTTSRuleInput>) => {
+    if (!selectedViewer || !viewerRule) return;
+
+    try {
+      const updated = await ttsService.updateViewerRule(selectedViewer, updates);
+      if (updated) {
+        setViewerRule(updated);
+      }
+    } catch (err: any) {
+      console.error('[Viewers] Error updating rule:', err);
+      setError(err.message);
+    }
+  };
+
+  const handleMuteChange = async (muted: boolean) => {
+    if (!selectedViewer || !viewerRule) return;
+
+    try {
+      const updates: Partial<ttsService.ViewerTTSRuleInput> = {
+        isMuted: muted,
+        mutedUntil: muted ? null : null // null means permanent when muted
+      };
+      const updated = await ttsService.updateViewerRule(selectedViewer, updates);
+      if (updated) {
+        setViewerRule(updated);
+      }
+    } catch (err: any) {
+      console.error('[Viewers] Error updating mute:', err);
+      setError(err.message);
+    }
+  };
+
+  const handleMuteDurationChange = async (minutes: number) => {
+    if (!selectedViewer || !viewerRule) return;
+
+    try {
+      let mutedUntil: string | null = null;
+      if (minutes > 0) {
+        const until = new Date();
+        until.setMinutes(until.getMinutes() + minutes);
+        mutedUntil = until.toISOString();
+      }
+
+      const updated = await ttsService.updateViewerRule(selectedViewer, { mutedUntil });
+      if (updated) {
+        setViewerRule(updated);
+      }
+    } catch (err: any) {
+      console.error('[Viewers] Error updating mute duration:', err);
+      setError(err.message);
+    }
+  };
+
+  const getMuteDurationMinutes = (): number => {
+    if (!viewerRule || !viewerRule.mutedUntil) return 0;
+
+    const until = new Date(viewerRule.mutedUntil).getTime();
+    const now = Date.now();
+    const diffMs = until - now;
+    const diffMinutes = Math.ceil(diffMs / (1000 * 60));
+
+    return Math.max(0, diffMinutes);
+  };
+
+  const handleCooldownChange = async (enabled: boolean) => {
+    if (!selectedViewer || !viewerRule) return;
+
+    try {
+      const updates: Partial<ttsService.ViewerTTSRuleInput> = {
+        cooldownEnabled: enabled,
+        cooldownUntil: enabled ? null : null // null means permanent when enabled
+      };
+      const updated = await ttsService.updateViewerRule(selectedViewer, updates);
+      if (updated) {
+        setViewerRule(updated);
+      }
+    } catch (err: any) {
+      console.error('[Viewers] Error updating cooldown:', err);
+      setError(err.message);
+    }
+  };
+
+  const handleCooldownDurationChange = async (minutes: number) => {
+    if (!selectedViewer || !viewerRule) return;
+
+    try {
+      let cooldownUntil: string | null = null;
+      if (minutes > 0) {
+        const until = new Date();
+        until.setMinutes(until.getMinutes() + minutes);
+        cooldownUntil = until.toISOString();
+      }
+
+      const updated = await ttsService.updateViewerRule(selectedViewer, { cooldownUntil });
+      if (updated) {
+        setViewerRule(updated);
+      }
+    } catch (err: any) {
+      console.error('[Viewers] Error updating cooldown duration:', err);
+      setError(err.message);
+    }
+  };
+
+  const getCooldownDurationMinutes = (): number => {
+    if (!viewerRule || !viewerRule.cooldownUntil) return 0;
+
+    const until = new Date(viewerRule.cooldownUntil).getTime();
+    const now = Date.now();
+    const diffMs = until - now;
+    const diffMinutes = Math.ceil(diffMs / (1000 * 60));
+
+    return Math.max(0, diffMinutes);
+  };
+
+  const handleResetVoice = async () => {
+    if (!selectedViewer) return;
+    await handleUpdateRule({ customVoiceId: null });
+  };
+
+  // Get filtered voice groups for viewer voice picker
+  const getViewerFilteredGroups = () => {
+    if (!voiceGroups.length) return [];
+
+    return voiceGroups
+      .map(group => ({
+        ...group,
+        voices: group.voices.filter(voice => {
+          const matchesSearch = !viewerVoiceSearch ||
+            voice.name.toLowerCase().includes(viewerVoiceSearch.toLowerCase()) ||
+            voice.voice_id.toString().includes(viewerVoiceSearch);
+
+          const matchesLanguage = viewerLanguageFilter === 'all' || voice.language_name === viewerLanguageFilter;
+          const matchesGender = viewerGenderFilter === 'all' || voice.gender === viewerGenderFilter;
+
+          return matchesSearch && matchesLanguage && matchesGender;
+        })
+      }))
+      .filter(group => group.voices.length > 0);
+  };
+
+  const getViewerVisibleVoiceCount = () => {
+    return getViewerFilteredGroups().reduce((sum, group) => sum + group.voices.length, 0);
+  };
+
   if (loading && !settings) {
     return (
       <div style={{ padding: '20px' }}>
@@ -271,6 +510,12 @@ export const TTS: React.FC = () => {
         >
           📋 TTS Rules
         </button>
+        <button
+          className={`tab-button ${activeTab === 'viewers' ? 'active' : ''}`}
+          onClick={() => setActiveTab('viewers')}
+        >
+          👤 Viewers
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -283,6 +528,12 @@ export const TTS: React.FC = () => {
       {activeTab === 'rules' && (
         <div className="tab-content">
           {renderTTSRulesTab()}
+        </div>
+      )}
+
+      {activeTab === 'viewers' && (
+        <div className="tab-content">
+          {renderViewersTab()}
         </div>
       )}
     </div>
@@ -868,6 +1119,276 @@ export const TTS: React.FC = () => {
             <li>Priority queue for specific users</li>
             <li>Custom copypasta blocklist</li>
           </ul>
+        </div>
+      </div>
+    );
+  }
+
+  // Viewers Tab Content
+  function renderViewersTab() {
+    return (
+      <div className="viewers-tab">
+        <div className="viewer-search-section">
+          <h3>Find Viewer</h3>
+          <div className="viewer-search-container">
+            <input
+              type="text"
+              className="viewer-search-input"
+              placeholder="Search for a viewer..."
+              value={viewerSearchTerm}
+              onChange={handleViewerSearch}
+            />
+            {viewerSearchResults.length > 0 && (
+              <div className="viewer-search-results">
+                {viewerSearchResults.map((viewer) => (
+                  <div
+                    key={viewer.id}
+                    className="viewer-search-result"
+                    onClick={() => handleSelectViewer(viewer.username)}
+                  >
+                    {viewer.display_name || viewer.username}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {selectedViewer && (
+          <div className="viewer-rule-section">
+            <div className="viewer-header">
+              <h3>{selectedViewer}</h3>
+              <button
+                className="delete-rule-button"
+                onClick={handleDeleteRule}
+              >
+                {viewerRule ? 'Delete Rules' : 'Cancel'}
+              </button>
+            </div>
+
+            {!viewerRule && (
+              <div className="no-rules-message">
+                <p>No custom rules for this viewer</p>
+                <button className="create-rule-button" onClick={handleCreateRule}>
+                  Create Rules
+                </button>
+              </div>
+            )}
+
+            {viewerRule && renderViewerRuleEditor()}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderViewerRuleEditor() {
+    if (!viewerRule || !settings) return null;
+
+    // Get the voice name for display
+    const getVoiceName = (voiceId: number | null) => {
+      if (voiceId === null) return null;
+      // Find the voice in voice groups
+      for (const group of voiceGroups) {
+        const voice = group.voices.find(v => v.id === voiceId);
+        if (voice) return voice.name;
+      }
+      return `Voice #${voiceId}`;
+    };
+
+    const customVoiceName = getVoiceName(viewerRule.customVoiceId);
+    const globalVoiceName = getVoiceName(parseInt(settings.voiceId));
+    
+    const viewerFilteredGroups = getViewerFilteredGroups();
+    const viewerVisibleCount = getViewerVisibleVoiceCount();
+
+    return (
+      <div className="viewer-rule-editor">
+        {/* TTS Provider (read-only display) */}
+        <div className="rule-setting-group">
+          <label className="rule-label">TTS Provider</label>
+          <div className="provider-display">
+            {settings.provider === 'webspeech' && 'Web Speech API (Free)'}
+            {settings.provider === 'azure' && 'Azure TTS (5M/month)'}
+            {settings.provider === 'google' && 'Google Cloud TTS (1M/month)'}
+          </div>
+        </div>
+
+        {/* Voice Search and Filters */}
+        <div className="voice-filters">
+          <input
+            type="text"
+            placeholder="🔍 Search voices by name, language, or ID..."
+            value={viewerVoiceSearch}
+            onChange={(e) => setViewerVoiceSearch(e.target.value)}
+            className="search-input"
+          />
+          
+          <select
+            value={viewerLanguageFilter}
+            onChange={(e) => setViewerLanguageFilter(e.target.value)}
+            className="filter-select"
+          >
+            <option value="all">All Languages</option>
+            {getUniqueLanguages().map(lang => (
+              <option key={lang} value={lang}>{lang}</option>
+            ))}
+          </select>
+
+          <select
+            value={viewerGenderFilter}
+            onChange={(e) => setViewerGenderFilter(e.target.value)}
+            className="filter-select"
+          >
+            <option value="all">All Genders</option>
+            <option value="male">♂️ Male</option>
+            <option value="female">♀️ Female</option>
+            <option value="neutral">⚧ Neutral</option>
+          </select>
+        </div>
+
+        {/* Voice Selection */}
+        <div className="rule-setting-group">
+          <label className="rule-label">
+            Voice ({viewerVisibleCount} of {voiceStats.available} available)
+          </label>
+          <select
+            value={viewerRule.customVoiceId?.toString() || ''}
+            onChange={(e) => handleUpdateRule({ customVoiceId: e.target.value ? parseInt(e.target.value) : null })}
+            className="voice-select"
+          >
+            <option value="">Use Global Voice ({globalVoiceName})</option>
+            {viewerFilteredGroups.map(group => (
+              <optgroup key={group.category} label={group.category}>
+                {group.voices.map(voice => (
+                  <option key={voice.voice_id} value={voice.id}>
+                    {formatVoiceOption(voice)}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {viewerRule.customVoiceId !== null && (
+            <button className="reset-voice-button" onClick={() => handleResetVoice()}>
+              Reset to Global Voice
+            </button>
+          )}
+        </div>
+
+        {/* Pitch Override */}
+        <div className="rule-setting-group">
+          <label className="rule-label">
+            Pitch: {viewerRule.pitchOverride ?? settings.pitch}
+            {viewerRule.pitchOverride === null && <span className="global-indicator"> (global)</span>}
+          </label>
+          <input
+            type="range"
+            min="0.5"
+            max="2.0"
+            step="0.1"
+            value={viewerRule.pitchOverride ?? settings.pitch}
+            onChange={(e) => handleUpdateRule({ pitchOverride: parseFloat(e.target.value) })}
+            className="slider"
+          />
+        </div>
+
+        {/* Rate Override */}
+        <div className="rule-setting-group">
+          <label className="rule-label">
+            Speed: {viewerRule.rateOverride ?? settings.rate}
+            {viewerRule.rateOverride === null && <span className="global-indicator"> (global)</span>}
+          </label>
+          <input
+            type="range"
+            min="0.5"
+            max="3.0"
+            step="0.1"
+            value={viewerRule.rateOverride ?? settings.rate}
+            onChange={(e) => handleUpdateRule({ rateOverride: parseFloat(e.target.value) })}
+            className="slider"
+          />
+        </div>
+
+        {/* Mute */}
+        <div className="rule-setting-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={viewerRule.isMuted}
+              onChange={(e) => handleMuteChange(e.target.checked)}
+            />
+            <span className="checkbox-text">Mute this viewer</span>
+          </label>
+          {viewerRule.isMuted && (
+            <div className="mute-duration">
+              <label className="rule-label">
+                Mute Duration: {getMuteDurationMinutes() === 0 ? 'Permanent' : `${getMuteDurationMinutes()} minutes`}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1440"
+                step="5"
+                value={getMuteDurationMinutes()}
+                onChange={(e) => handleMuteDurationChange(parseInt(e.target.value))}
+                className="slider"
+              />
+              <p className="setting-hint">
+                0 = permanent, or set minutes (max 1440 = 24 hours)
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Cooldown */}
+        <div className="rule-setting-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={viewerRule.cooldownEnabled}
+              onChange={(e) => handleCooldownChange(e.target.checked)}
+            />
+            <span className="checkbox-text">Custom cooldown for this viewer</span>
+          </label>
+          {viewerRule.cooldownEnabled && (
+            <div className="cooldown-settings">
+              <div className="cooldown-duration-section">
+                <label className="rule-label">
+                  Cooldown Window: {viewerRule.cooldownSeconds ?? (settings.userCooldownSeconds || 30)}s
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="300"
+                  step="5"
+                  value={viewerRule.cooldownSeconds ?? (settings.userCooldownSeconds || 30)}
+                  onChange={(e) => handleUpdateRule({ cooldownSeconds: parseInt(e.target.value) })}
+                  className="slider"
+                />
+                <p className="setting-hint">
+                  Time between messages. Effective: {Math.max(settings.userCooldownSeconds || 30, viewerRule.cooldownSeconds ?? 0)}s (never less than global {settings.userCooldownSeconds || 30}s)
+                </p>
+              </div>
+
+              <div className="cooldown-duration-section">
+                <label className="rule-label">
+                  Cooldown Duration: {getCooldownDurationMinutes() === 0 ? 'Permanent' : `${getCooldownDurationMinutes()} minutes`}
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1440"
+                  step="5"
+                  value={getCooldownDurationMinutes()}
+                  onChange={(e) => handleCooldownDurationChange(parseInt(e.target.value))}
+                  className="slider"
+                />
+                <p className="setting-hint">
+                  0 = permanent custom cooldown, or set minutes (max 1440 = 24 hours)
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

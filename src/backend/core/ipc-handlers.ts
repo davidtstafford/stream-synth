@@ -6,6 +6,7 @@ import { EventsRepository } from '../database/repositories/events';
 import { TokensRepository } from '../database/repositories/tokens';
 import { ViewersRepository } from '../database/repositories/viewers';
 import { VoicesRepository } from '../database/repositories/voices';
+import { ViewerRulesRepository } from '../database/viewer-rules-repository';
 import { exportSettings, importSettings, getExportPreview } from '../services/export-import';
 import { twitchIRCService } from '../services/twitch-irc';
 import { TTSManager } from '../services/tts/manager';
@@ -21,6 +22,16 @@ const eventsRepo = new EventsRepository();
 const tokensRepo = new TokensRepository();
 const viewersRepo = new ViewersRepository();
 const voicesRepo = new VoicesRepository();
+
+// Initialize viewer rules repository
+let viewerRulesRepo: ViewerRulesRepository | null = null;
+function getViewerRulesRepo(): ViewerRulesRepository {
+  if (!viewerRulesRepo) {
+    const db = getDatabase();
+    viewerRulesRepo = new ViewerRulesRepository(db);
+  }
+  return viewerRulesRepo;
+}
 
 // Initialize TTS Manager
 let ttsManager: TTSManager | null = null;
@@ -757,6 +768,65 @@ export function setupIpcHandlers(): void {
     } catch (error: any) {
       console.error('[TTS] Error getting voice by ID:', error);
       return { success: false, error: error.message, voice: null };
+    }
+  });
+
+  // Viewer TTS Rules Handlers
+  ipcMain.handle('viewer-rules:get', async (event, username: string) => {
+    try {
+      const repo = getViewerRulesRepo();
+      const rule = repo.getByUsername(username);
+      return { success: true, rule };
+    } catch (error: any) {
+      console.error('[ViewerRules] Error getting rule:', error);
+      return { success: false, error: error.message, rule: null };
+    }
+  });
+
+  ipcMain.handle('viewer-rules:create', async (event, input: any) => {
+    try {
+      const repo = getViewerRulesRepo();
+      const rule = repo.create(input);
+      return { success: true, rule };
+    } catch (error: any) {
+      console.error('[ViewerRules] Error creating rule:', error);
+      return { success: false, error: error.message, rule: null };
+    }
+  });
+
+  ipcMain.handle('viewer-rules:update', async (event, username: string, updates: any) => {
+    try {
+      const repo = getViewerRulesRepo();
+      const rule = repo.update(username, updates);
+      if (!rule) {
+        return { success: false, error: 'Rule not found', rule: null };
+      }
+      return { success: true, rule };
+    } catch (error: any) {
+      console.error('[ViewerRules] Error updating rule:', error);
+      return { success: false, error: error.message, rule: null };
+    }
+  });
+
+  ipcMain.handle('viewer-rules:delete', async (event, username: string) => {
+    try {
+      const repo = getViewerRulesRepo();
+      const deleted = repo.delete(username);
+      return { success: deleted };
+    } catch (error: any) {
+      console.error('[ViewerRules] Error deleting rule:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('viewer-rules:get-all', async () => {
+    try {
+      const repo = getViewerRulesRepo();
+      const rules = repo.getAll();
+      return { success: true, rules };
+    } catch (error: any) {
+      console.error('[ViewerRules] Error getting all rules:', error);
+      return { success: false, error: error.message, rules: [] };
     }
   });
 
