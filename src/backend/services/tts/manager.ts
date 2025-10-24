@@ -33,6 +33,7 @@ export class TTSManager {
   private messageQueue: TTSQueueItem[] = [];
   private isProcessing: boolean = false;
   private mainWindow: Electron.BrowserWindow | null = null;
+  private audioFinishedResolver: (() => void) | null = null;
   
   // Spam prevention tracking
   private messageHistory: MessageHistory[] = [];
@@ -920,6 +921,10 @@ export class TTSManager {
                 rate: item.rate ?? this.settings?.rate,
                 pitch: item.pitch ?? this.settings?.pitch
               });
+              
+              // Wait for frontend to confirm audio playback is complete
+              console.log('[TTS] Waiting for Azure audio playback to finish...');
+              await this.waitForAudioFinished();
             }
           } else {
             console.error('[TTS] Azure provider not available for voice:', voiceId);
@@ -966,5 +971,25 @@ export class TTSManager {
       length: this.messageQueue.length,
       isProcessing: this.isProcessing
     };
+  }
+
+  /**
+   * Called when frontend notifies that audio playback has finished
+   */
+  onAudioFinished(): void {
+    console.log('[TTS] Audio playback finished (confirmed by frontend)');
+    if (this.audioFinishedResolver) {
+      this.audioFinishedResolver();
+      this.audioFinishedResolver = null;
+    }
+  }
+
+  /**
+   * Wait for frontend to confirm audio playback is complete
+   */
+  private waitForAudioFinished(): Promise<void> {
+    return new Promise((resolve) => {
+      this.audioFinishedResolver = resolve;
+    });
   }
 }

@@ -404,41 +404,50 @@ function getAudioContext(): AudioContext {
 }
 
 async function playAudioBuffer(audioData: string, volume: number, rate: number, pitch: number): Promise<void> {
-  try {
-    const ctx = getAudioContext();
-    
-    // Convert base64 to ArrayBuffer
-    const binaryString = atob(audioData);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+  return new Promise(async (resolve, reject) => {
+    try {
+      const ctx = getAudioContext();
+      
+      // Convert base64 to ArrayBuffer
+      const binaryString = atob(audioData);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // Decode audio data
+      const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+      
+      // Create source node
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      
+      // Apply rate (playback speed)
+      source.playbackRate.value = rate;
+      
+      // Create gain node for volume
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = volume / 100; // Convert 0-100 to 0-1
+      
+      // Connect: source -> gain -> destination
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      // Resolve when audio finishes playing
+      source.onended = () => {
+        console.log('[TTS] Azure audio playback completed');
+        resolve();
+      };
+      
+      // Start playback
+      source.start(0);
+      
+      console.log('[TTS] Playing Azure audio via Web Audio API (OBS-compatible)');
+    } catch (error) {
+      console.error('[TTS] Error playing audio:', error);
+      reject(error);
     }
-    
-    // Decode audio data
-    const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
-    
-    // Create source node
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-    
-    // Apply rate (playback speed)
-    source.playbackRate.value = rate;
-    
-    // Create gain node for volume
-    const gainNode = ctx.createGain();
-    gainNode.gain.value = volume / 100; // Convert 0-100 to 0-1
-    
-    // Connect: source -> gain -> destination
-    source.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    
-    // Start playback
-    source.start(0);
-    
-    console.log('[TTS] Playing Azure audio via Web Audio API (OBS-compatible)');
-  } catch (error) {
-    console.error('[TTS] Error playing audio:', error);
-  }
+  });
 }
 
 // Listen for audio playback requests from backend
@@ -447,11 +456,20 @@ let playAudioCallCount = 0;
 let speakCallCount = 0;
 
 ipcRenderer.removeAllListeners('tts:play-audio');
-ipcRenderer.on('tts:play-audio', (_event: any, data: any) => {
+ipcRenderer.on('tts:play-audio', async (_event: any, data: any) => {
   playAudioCallCount++;
   const { audioData, volume, rate, pitch } = data;
   console.log('[TTS] Received tts:play-audio event #' + playAudioCallCount);
-  playAudioBuffer(audioData, volume, rate, pitch);
+  
+  // Wait for audio to finish playing, then notify backend
+  await playAudioBuffer(audioData, volume, rate, pitch);
+  
+  // Notify backend that playback is complete
+  try {
+    await ipcRenderer.invoke('tts:audio-finished');
+  } catch (error) {
+    console.error('[TTS] Error notifying audio finished:', error);
+  }
 });
 
 // Listen for Web Speech playback requests from backend

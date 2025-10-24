@@ -689,6 +689,18 @@ export function setupIpcHandlers(): void {
     }
   });
 
+  // Handler for when frontend confirms audio playback is finished
+  ipcMain.handle('tts:audio-finished', async () => {
+    try {
+      const manager = await initializeTTS();
+      manager.onAudioFinished();
+      return { success: true };
+    } catch (error: any) {
+      console.error('[TTS] Error handling audio-finished:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   ipcMain.handle('tts:speak', async (event, text: string, options?: any) => {
     try {
       const manager = await initializeTTS();
