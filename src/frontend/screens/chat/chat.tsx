@@ -109,6 +109,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ channelId }) => {
       };
 
       setMessages(prev => {
+        // Check if message already exists (deduplicate by id)
+        if (prev.some(msg => msg.id === newMessage.id)) {
+          console.log('[Chat Screen] Duplicate message detected, skipping:', newMessage.id);
+          return prev;
+        }
+        
         const updated = [...prev, newMessage];
         // Limit to max messages
         if (updated.length > maxMessages) {

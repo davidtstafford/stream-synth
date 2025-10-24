@@ -114,6 +114,12 @@ export const EventsScreen: React.FC<EventsScreenProps> = ({ channelId }) => {
         };
         
         setEvents(prev => {
+          // Check if event already exists (deduplicate by id)
+          if (prev.some(evt => evt.id === newEvent.id)) {
+            console.log('[Events Screen] Duplicate event detected, skipping:', newEvent.id);
+            return prev;
+          }
+          
           const updated = [newEvent, ...prev];
           // Limit to our page size
           if (updated.length > limit) {
@@ -184,7 +190,15 @@ export const EventsScreen: React.FC<EventsScreenProps> = ({ channelId }) => {
 
   const renderEventPreview = (event: db.StoredEvent) => {
     const data = parseEventData(event.event_data);
-    const displayName = event.viewer_display_name || event.viewer_username || 'Unknown';
+    
+    // For IRC events, get username from event_data if not in viewer fields
+    let displayName = event.viewer_display_name || event.viewer_username;
+    if (!displayName && (event.event_type === 'irc.chat.join' || event.event_type === 'irc.chat.part')) {
+      displayName = data.username;
+    }
+    if (!displayName) {
+      displayName = 'Unknown';
+    }
 
     switch (event.event_type) {
       case 'channel.chat.message':
@@ -382,7 +396,17 @@ export const EventsScreen: React.FC<EventsScreenProps> = ({ channelId }) => {
                   </td>
                   <td style={{ padding: '10px' }}>{renderEventPreview(event)}</td>
                   <td style={{ padding: '10px' }}>
-                    {event.viewer_display_name || event.viewer_username || '-'}
+                    {(() => {
+                      // For IRC events, get username from event_data if not in viewer fields
+                      const displayName = event.viewer_display_name || event.viewer_username;
+                      if (displayName) return displayName;
+                      
+                      const data = parseEventData(event.event_data);
+                      if ((event.event_type === 'irc.chat.join' || event.event_type === 'irc.chat.part') && data.username) {
+                        return data.username;
+                      }
+                      return '-';
+                    })()}
                   </td>
                   <td style={{ padding: '10px' }}>
                     <button
@@ -499,12 +523,24 @@ export const EventsScreen: React.FC<EventsScreenProps> = ({ channelId }) => {
               <strong>Time:</strong> {formatDate(selectedEvent.created_at)}
             </div>
 
-            {(selectedEvent.viewer_username || selectedEvent.viewer_display_name) && (
-              <div style={{ marginBottom: '15px' }}>
-                <strong>User:</strong> {selectedEvent.viewer_display_name || selectedEvent.viewer_username}
-                {selectedEvent.viewer_id && ` (ID: ${selectedEvent.viewer_id})`}
-              </div>
-            )}
+            {(() => {
+              // Get username from viewer fields or event_data for IRC events
+              const displayName = selectedEvent.viewer_display_name || selectedEvent.viewer_username;
+              const data = parseEventData(selectedEvent.event_data);
+              const ircUsername = (selectedEvent.event_type === 'irc.chat.join' || selectedEvent.event_type === 'irc.chat.part') 
+                ? data.username 
+                : null;
+              
+              if (displayName || ircUsername) {
+                return (
+                  <div style={{ marginBottom: '15px' }}>
+                    <strong>User:</strong> {displayName || ircUsername}
+                    {selectedEvent.viewer_id && ` (ID: ${selectedEvent.viewer_id})`}
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             <div style={{ marginBottom: '15px' }}>
               <strong>Channel ID:</strong> {selectedEvent.channel_id}
