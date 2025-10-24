@@ -16,17 +16,62 @@ export class VoiceSyncService {
       voiceIds.push(parsed.voice_id);
     });
 
-    // Mark voices not in current list as unavailable
-    this.voicesRepo.markUnavailable(voiceIds);
+    // Mark only Web Speech voices not in current list as unavailable (don't touch other providers)
+    this.voicesRepo.markUnavailableExcept('webspeech', voiceIds);
 
     console.log(`[Voice Sync] Synced ${voiceIds.length} voices`);
     return voiceIds.length;
   }
 
-  // Future: Sync Azure voices
+  // Sync Azure voices
   async syncAzureVoices(voices: any[]): Promise<number> {
-    // TODO: Implement when adding Azure
-    return 0;
+    console.log(`[Voice Sync] Syncing ${voices.length} Azure voices`);
+    
+    const voiceIds: string[] = [];
+    
+    voices.forEach(voice => {
+      // TTSVoice uses 'id' property, already has azure_ prefix from provider
+      this.voicesRepo.upsertVoice({
+        voice_id: voice.id,
+        provider: 'azure',
+        source: 'Azure Neural',
+        name: voice.name,
+        language_code: voice.language,
+        language_name: voice.languageName,
+        region: voice.language, // Using language code as region
+        gender: voice.gender,
+        is_available: 1,
+        display_order: null,
+        metadata: JSON.stringify({ 
+          styles: voice.styles || []
+        })
+      });
+      voiceIds.push(voice.id);
+    });
+
+    console.log(`[Voice Sync] Synced ${voiceIds.length} Azure voices`);
+    return voiceIds.length;
+  }
+
+  // Generic sync method that routes to appropriate provider
+  async syncVoices(voices: any[]): Promise<number> {
+    if (!voices || voices.length === 0) {
+      console.log('[Voice Sync] No voices to sync');
+      return 0;
+    }
+    
+    // Determine provider from first voice's id (TTSVoice uses 'id' not 'voiceId')
+    const firstVoiceId = voices[0].id || '';
+    
+    console.log(`[Voice Sync] First voice ID: ${firstVoiceId}`);
+    
+    if (firstVoiceId.startsWith('azure_')) {
+      return this.syncAzureVoices(voices);
+    } else if (firstVoiceId.startsWith('google_')) {
+      return this.syncGoogleVoices(voices);
+    } else {
+      return this.syncWebSpeechVoices(voices);
+    }
   }
 
   // Future: Sync Google voices

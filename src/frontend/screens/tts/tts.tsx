@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as ttsService from '../../services/tts';
+import { AzureSetupWizard } from '../../components/AzureSetupWizard';
 import './tts.css';
 
 interface VoiceGroup {
@@ -25,6 +26,9 @@ export const TTS: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState('Hello! This is a test of the text to speech system.');
   const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Azure Setup Wizard state
+  const [showAzureWizard, setShowAzureWizard] = useState(false);
 
   // Voice filtering state
   const [searchTerm, setSearchTerm] = useState('');
@@ -77,38 +81,9 @@ export const TTS: React.FC = () => {
 
   const syncAndLoadVoices = async (currentSettings?: ttsService.TTSSettings) => {
     try {
-      const settingsToUse = currentSettings || settings;
-      if (!settingsToUse) {
-        console.log('[TTS Screen] No settings available, skipping voice sync');
-        return;
-      }
+      console.log('[TTS Screen] Loading voices from database...');
       
-      console.log('[TTS Screen] Starting voice sync...');
-      
-      // Get raw voices from browser
-      const rawVoices = await ttsService.getVoices();
-      console.log(`[TTS Screen] Got ${rawVoices.length} raw voices from browser`);
-      console.log('[TTS Screen] Sample raw voice:', rawVoices[0]);
-      
-      // Convert to plain objects for IPC
-      // Note: rawVoices are TTSVoice objects with 'language' property, not 'lang'
-      const plainVoices = rawVoices.map((v: any) => ({
-        voiceURI: v.id, // TTSVoice uses 'id' not 'voiceURI'
-        name: v.name,
-        lang: v.language, // TTSVoice uses 'language' property
-        localService: true,
-        default: false,
-      }));
-      
-      console.log('[TTS Screen] Sample plain voice:', plainVoices[0]);
-      
-      console.log('[TTS Screen] Syncing voices to database...');
-      // Sync to database
-      const syncResult = await ttsService.syncVoices(settingsToUse.provider, plainVoices);
-      console.log('[TTS Screen] Sync result:', syncResult);
-      
-      // Load grouped voices from database
-      console.log('[TTS Screen] Loading grouped voices from database...');
+      // Load grouped voices from database (no syncing - that happens via provider toggles)
       const grouped = await ttsService.getGroupedVoices();
       console.log('[TTS Screen] Got grouped voices:', grouped);
       
@@ -123,7 +98,7 @@ export const TTS: React.FC = () => {
       setVoiceGroups(groupArray);
     } catch (err: any) {
       setError(err.message);
-      console.error('[TTS Screen] Error syncing/loading voices:', err);
+      console.error('[TTS Screen] Error loading voices:', err);
     }
   };
 
@@ -136,15 +111,47 @@ export const TTS: React.FC = () => {
     }
   };
 
-  const handleProviderChange = async (provider: string) => {
+  // Handle provider toggle (enable/disable provider voices in database)
+  const handleProviderToggle = async (provider: 'webspeech' | 'azure' | 'google', enabled: boolean) => {
     try {
-      setLoading(true);
-      await ttsService.saveSettings({ provider: provider as any });
-      await loadData();
+      console.log(`[TTS] Toggling ${provider} provider:`, enabled);
+      
+      // Save the enable setting
+      await ttsService.saveSettings({ [`${provider}Enabled`]: enabled } as any);
+      setSettings(prev => prev ? { ...prev, [`${provider}Enabled`]: enabled } : null);
+      
+      // If enabling Azure, sync voices from API
+      if (provider === 'azure' && enabled) {
+        const azureSettings = settings;
+        if (!azureSettings?.azureApiKey || !azureSettings?.azureRegion) {
+          console.warn('[TTS] Azure enabled but credentials not configured');
+          return;
+        }
+        
+        console.log('[TTS] Syncing Azure voices from API...');
+        const { ipcRenderer } = window.require('electron');
+        const result = await ipcRenderer.invoke('azure:sync-voices', {
+          apiKey: azureSettings.azureApiKey,
+          region: azureSettings.azureRegion
+        });
+        console.log('[TTS] Azure voices synced:', result);
+        
+        // Reload voices
+        await syncAndLoadVoices();
+        await loadVoiceStats();
+      } else {
+        // For disabling or other providers, just toggle availability
+        const { ipcRenderer } = window.require('electron');
+        await ipcRenderer.invoke('provider:toggle', { provider, enabled });
+        console.log(`[TTS] Provider ${provider} ${enabled ? 'enabled' : 'disabled'}`);
+        
+        // Reload voices
+        await syncAndLoadVoices();
+        await loadVoiceStats();
+      }
     } catch (err: any) {
       setError(err.message);
-    } finally {
-      setLoading(false);
+      console.error(`[TTS] Error toggling ${provider} provider:`, err);
     }
   };
 
@@ -215,6 +222,9 @@ export const TTS: React.FC = () => {
     return voiceGroups.map(group => ({
       ...group,
       voices: group.voices.filter(voice => {
+        // Only show available voices (no prefix checking needed)
+        // The database handles availability based on provider enable state
+        
         // Search filter
         const searchLower = searchTerm.toLowerCase();
         const matchesSearch = !searchTerm || 
@@ -247,6 +257,29 @@ export const TTS: React.FC = () => {
   const getVisibleVoiceCount = (): number => {
     return getFilteredGroups().reduce((sum, group) => sum + group.voices.length, 0);
   };
+
+  // Get voice counts by provider
+  const getProviderVoiceCounts = () => {
+    const counts = { webspeech: 0, azure: 0, google: 0 };
+    
+    voiceGroups.forEach(group => {
+      group.voices.forEach(voice => {
+        const voiceId = voice.voice_id || '';
+        if (voiceId.startsWith('azure_')) {
+          counts.azure++;
+        } else if (voiceId.startsWith('google_')) {
+          counts.google++;
+        } else {
+          // Anything without azure_ or google_ prefix is Web Speech
+          counts.webspeech++;
+        }
+      });
+    });
+    
+    return counts;
+  };
+  
+  const providerCounts = getProviderVoiceCounts();
 
   // Viewer tab handlers
   const handleViewerSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -458,6 +491,8 @@ export const TTS: React.FC = () => {
       .map(group => ({
         ...group,
         voices: group.voices.filter(voice => {
+          // Only show available voices (database handles availability)
+          
           const matchesSearch = !viewerVoiceSearch ||
             voice.name.toLowerCase().includes(viewerVoiceSearch.toLowerCase()) ||
             voice.voice_id.toString().includes(viewerVoiceSearch);
@@ -504,6 +539,25 @@ export const TTS: React.FC = () => {
         <div className="error-message">
           {error}
         </div>
+      )}
+
+      {/* Azure Setup Wizard Modal */}
+      {showAzureWizard && (
+        <AzureSetupWizard 
+          onClose={() => setShowAzureWizard(false)}
+          onComplete={async (apiKey: string, region: string) => {
+            console.log('[TTS] Azure setup completed - API Key:', apiKey.substring(0, 10) + '...', 'Region:', region);
+            
+            // Save Azure credentials
+            await handleSettingChange('azureApiKey', apiKey);
+            await handleSettingChange('azureRegion', region);
+            
+            setShowAzureWizard(false);
+            
+            // Reload settings and voices after Azure setup
+            await loadData();
+          }}
+        />
       )}
 
       {/* Tab Navigation */}
@@ -585,29 +639,94 @@ export const TTS: React.FC = () => {
         </label>
       </div>
 
-      {/* Provider Selection */}
+      {/* Provider Enable Toggles */}
       <div className="setting-group">
         <label className="setting-label">
-          TTS Provider
+          TTS Providers
+          <span className="setting-hint" style={{ display: 'block', fontWeight: 'normal', fontSize: '0.9em', marginTop: '5px' }}>
+            Enable multiple providers to use different voices for different viewers
+          </span>
         </label>
-        <select
-          value={settings.provider}
-          onChange={(e) => handleProviderChange(e.target.value)}
-          className="setting-select"
-        >
-          {providers.map(provider => (
-            <option key={provider} value={provider}>
-              {provider === 'webspeech' && 'Web Speech API (Free)'}
-              {provider === 'azure' && 'Azure TTS (5M/month)'}
-              {provider === 'google' && 'Google Cloud TTS (1M/month)'}
-            </option>
-          ))}
-        </select>
-        <p className="setting-hint">
-          {settings.provider === 'webspeech' && '✅ Uses your system\'s built-in voices. No API key needed.'}
-          {settings.provider === 'azure' && '🔑 Requires Azure API key. 5 million characters per month free forever.'}
-          {settings.provider === 'google' && '🔑 Requires Google Cloud API key. 1 million characters per month free forever.'}
-        </p>
+
+        {/* Web Speech Provider */}
+        <div className="provider-toggle-section" style={{ marginBottom: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
+          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+            <input
+              type="checkbox"
+              checked={settings.webspeechEnabled ?? true}
+              onChange={(e) => handleProviderToggle('webspeech', e.target.checked)}
+            />
+            <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
+              🌐 Web Speech API (Free)
+            </span>
+          </label>
+          <div style={{ marginLeft: '28px', color: '#888' }}>
+            <div>✓ {providerCounts.webspeech} system voices available</div>
+            <div>✓ No API key required</div>
+            <div>✓ Works offline</div>
+          </div>
+        </div>
+
+        {/* Azure Provider */}
+        <div className="provider-toggle-section" style={{ marginBottom: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
+          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+            <input
+              type="checkbox"
+              checked={settings.azureEnabled ?? false}
+              onChange={(e) => handleProviderToggle('azure', e.target.checked)}
+            />
+            <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
+              ☁️ Azure TTS (5M chars/month free)
+            </span>
+          </label>
+          <div style={{ marginLeft: '28px', color: '#888' }}>
+            <div>✓ {providerCounts.azure > 0 ? `${providerCounts.azure} neural voices` : '400+ neural voices'}</div>
+            <div>✓ 53 languages</div>
+            <div>✓ Speaking styles support</div>
+            {settings.azureEnabled && settings.azureApiKey && settings.azureRegion && (
+              <div style={{ color: '#4CAF50', marginTop: '8px' }}>
+                ✓ Configured ({settings.azureRegion})
+              </div>
+            )}
+            {settings.azureEnabled && !settings.azureApiKey && (
+              <div style={{ color: '#ff9800', marginTop: '8px' }}>
+                ⚠️ API key not configured
+              </div>
+            )}
+          </div>
+          {settings.azureEnabled && (
+            <button
+              onClick={() => setShowAzureWizard(true)}
+              className="btn btn-secondary"
+              style={{ marginTop: '10px', marginLeft: '28px' }}
+            >
+              🔧 {settings.azureApiKey ? 'Update' : 'Setup'} Azure Credentials
+            </button>
+          )}
+        </div>
+
+        {/* Google Provider */}
+        <div className="provider-toggle-section" style={{ marginBottom: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
+          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+            <input
+              type="checkbox"
+              checked={settings.googleEnabled ?? false}
+              onChange={(e) => handleProviderToggle('google', e.target.checked)}
+              disabled={true}
+            />
+            <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold', opacity: 0.5 }}>
+              🔊 Google Cloud TTS (1M chars/month free)
+            </span>
+          </label>
+          <div style={{ marginLeft: '28px', color: '#888' }}>
+            <div>✓ 380+ WaveNet voices</div>
+            <div>✓ 40+ languages</div>
+            <div>✓ Premium quality</div>
+            <div style={{ color: '#666', marginTop: '8px', fontStyle: 'italic' }}>
+              Coming in Phase 2 (after Azure)
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Voice Search and Filters */}

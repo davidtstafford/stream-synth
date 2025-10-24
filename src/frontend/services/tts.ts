@@ -13,11 +13,16 @@ export interface TTSVoice {
 
 export interface TTSSettings {
   enabled: boolean;
-  provider: 'webspeech' | 'azure' | 'google';
+  provider: 'webspeech' | 'azure' | 'google'; // Deprecated - kept for backwards compatibility
   voiceId: string;
   volume: number;
   rate: number;
   pitch: number;
+  // Provider Enable Flags (multiple can be true)
+  webspeechEnabled?: boolean;
+  azureEnabled?: boolean;
+  googleEnabled?: boolean;
+  // Provider Credentials
   azureApiKey?: string;
   azureRegion?: string;
   googleApiKey?: string;

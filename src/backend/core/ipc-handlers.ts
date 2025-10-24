@@ -822,6 +822,161 @@ export function setupIpcHandlers(): void {
     }
   });
 
+  // Azure TTS Handlers
+  ipcMain.handle('azure:test-connection', async (event, credentials: { apiKey: string; region: string }) => {
+    try {
+      console.log('[Azure] Testing connection to region:', credentials.region);
+      
+      const { apiKey, region } = credentials;
+      
+      // Basic validation
+      if (!apiKey || apiKey.trim().length < 32) {
+        return {
+          success: false,
+          error: 'Invalid API key. Key should be at least 32 characters.'
+        };
+      }
+      
+      if (!region || region.trim().length === 0) {
+        return {
+          success: false,
+          error: 'Region is required.'
+        };
+      }
+      
+      // Validate region against known Azure regions
+      const validRegions = [
+        'eastus', 'eastus2', 'westus', 'westus2', 'westus3',
+        'centralus', 'northcentralus', 'southcentralus',
+        'canadacentral', 'canadaeast', 'brazilsouth',
+        'northeurope', 'westeurope', 'uksouth', 'ukwest',
+        'francecentral', 'germanywestcentral', 'norwayeast',
+        'switzerlandnorth', 'swedencentral', 'southeastasia',
+        'eastasia', 'australiaeast', 'australiasoutheast',
+        'japaneast', 'japanwest', 'koreacentral', 'koreasouth',
+        'southafricanorth', 'southindia', 'centralindia',
+        'westindia', 'uaenorth'
+      ];
+      
+      if (!validRegions.includes(region.toLowerCase())) {
+        return {
+          success: false,
+          error: `Invalid region: ${region}. Please select a valid Azure region.`
+        };
+      }
+      
+      // Initialize Azure provider and test connection
+      const manager = await initializeTTS();
+      const azureProvider = manager['providers'].get('azure');
+      
+      if (!azureProvider) {
+        return {
+          success: false,
+          error: 'Azure provider not available'
+        };
+      }
+      
+      // Initialize provider with credentials
+      await azureProvider.initialize({ apiKey, region });
+      
+      // Get voices to verify connection
+      const voices = await azureProvider.getVoices();
+      
+      // Get preview voices (first 10)
+      const previewVoices = voices.slice(0, 10).map((v: any) => ({
+        name: v.name,
+        language: v.languageName,
+        gender: v.gender
+      }));
+      
+      console.log('[Azure] Connection test successful, found', voices.length, 'voices');
+      
+      return {
+        success: true,
+        voiceCount: voices.length,
+        previewVoices
+      };
+    } catch (error: any) {
+      console.error('[Azure] Error testing connection:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to connect to Azure Speech Services'
+      };
+    }
+  });
+
+  // Azure Voice Sync Handler
+  ipcMain.handle('azure:sync-voices', async (event, credentials: { apiKey: string; region: string }) => {
+    try {
+      console.log('[Azure] Syncing voices to database...');
+      
+      const { apiKey, region } = credentials;
+      
+      // Initialize Azure provider and fetch voices
+      const manager = await initializeTTS();
+      const azureProvider = manager['providers'].get('azure');
+      
+      if (!azureProvider) {
+        return {
+          success: false,
+          error: 'Azure provider not available'
+        };
+      }
+      
+      // Initialize provider with credentials
+      await azureProvider.initialize({ apiKey, region });
+      
+      // Get voices from Azure
+      const voices = await azureProvider.getVoices();
+      
+      console.log(`[Azure] Fetched ${voices.length} voices from Azure`);
+      
+      // Sync to database
+      if (voiceSyncService) {
+        await voiceSyncService.syncVoices(voices);
+      }
+      
+      console.log('[Azure] Voice sync complete');
+      
+      return {
+        success: true,
+        voiceCount: voices.length
+      };
+    } catch (error: any) {
+      console.error('[Azure] Error syncing voices:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to sync Azure voices'
+      };
+    }
+  });
+
+  // Provider Enable/Disable Handler
+  ipcMain.handle('provider:toggle', async (event, payload: { provider: string; enabled: boolean }) => {
+    try {
+      const { provider, enabled } = payload;
+      console.log(`[Provider] ${enabled ? 'Enabling' : 'Disabling'} ${provider}`);
+      
+      if (enabled) {
+        // Mark provider voices as available
+        voicesRepo.markProviderAvailable(provider);
+      } else {
+        // Mark provider voices as unavailable
+        voicesRepo.markProviderUnavailable(provider);
+      }
+      
+      return {
+        success: true
+      };
+    } catch (error: any) {
+      console.error('[Provider] Error toggling provider:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
   // Viewer TTS Rules Handlers
   ipcMain.handle('viewer-rules:get', async (event, username: string) => {
     try {

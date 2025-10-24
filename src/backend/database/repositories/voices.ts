@@ -84,7 +84,29 @@ export class VoicesRepository {
     }
   }
 
-  // Mark voices as unavailable if not in current list
+  // Mark voices as unavailable if not in current list (provider-specific)
+  markUnavailableExcept(provider: string, currentVoiceIds: string[]): void {
+    const db = getDatabase();
+    
+    if (currentVoiceIds.length === 0) {
+      // Mark all voices from this provider as unavailable
+      db.prepare(`
+        UPDATE tts_voices 
+        SET is_available = 0 
+        WHERE voice_id LIKE ?
+      `).run(`${provider}_%`);
+      return;
+    }
+    
+    const placeholders = currentVoiceIds.map(() => '?').join(',');
+    db.prepare(`
+      UPDATE tts_voices 
+      SET is_available = 0 
+      WHERE voice_id LIKE ? AND voice_id NOT IN (${placeholders})
+    `).run(`${provider}_%`, ...currentVoiceIds);
+  }
+
+  // Mark voices as unavailable if not in current list (deprecated - use markUnavailableExcept)
   markUnavailable(currentVoiceIds: string[]): void {
     const db = getDatabase();
     
@@ -100,6 +122,28 @@ export class VoicesRepository {
       SET is_available = 0 
       WHERE voice_id NOT IN (${placeholders})
     `).run(...currentVoiceIds);
+  }
+
+  // Mark all voices from a specific provider as unavailable
+  markProviderUnavailable(provider: string): void {
+    const db = getDatabase();
+    db.prepare(`
+      UPDATE tts_voices 
+      SET is_available = 0 
+      WHERE voice_id LIKE ?
+    `).run(`${provider}_%`);
+    console.log(`[Voices] Marked all ${provider} voices as unavailable`);
+  }
+
+  // Mark all voices from a specific provider as available
+  markProviderAvailable(provider: string): void {
+    const db = getDatabase();
+    const result = db.prepare(`
+      UPDATE tts_voices 
+      SET is_available = 1 
+      WHERE voice_id LIKE ?
+    `).run(`${provider}_%`);
+    console.log(`[Voices] Marked ${result.changes} ${provider} voices as available`);
   }
 
   // Get all available voices with numeric IDs

@@ -1,4 +1,5 @@
 import { TTSProvider, TTSVoice, TTSSettings, TTSOptions } from './base';
+import { AzureTTSProvider } from './azure-provider';
 import { TTSRepository } from '../../database/repositories/tts';
 import { ViewerRulesRepository } from '../../database/viewer-rules-repository';
 import { VoicesRepository } from '../../database/repositories/voices';
@@ -49,9 +50,11 @@ export class TTSManager {
     this.voicesRepo = new VoicesRepository();
     this.providers = new Map();
     
-    // Note: Web Speech API runs in renderer process
-    // Azure and Google providers will be initialized here
-    // TODO: Initialize Azure and Google providers when implemented
+    // Register Azure provider
+    this.providers.set('azure', new AzureTTSProvider());
+    
+    // TODO Phase 2: Register Google provider
+    // this.providers.set('google', new GoogleTTSProvider());
   }
 
   /**
@@ -86,6 +89,11 @@ export class TTSManager {
       volume: dbSettings.tts_volume as number,
       rate: dbSettings.tts_rate as number,
       pitch: dbSettings.tts_pitch as number,
+      // Provider enable flags (default: webspeech on, others off)
+      webspeechEnabled: dbSettings.webspeech_enabled !== undefined ? dbSettings.webspeech_enabled as boolean : true,
+      azureEnabled: dbSettings.azure_enabled !== undefined ? dbSettings.azure_enabled as boolean : false,
+      googleEnabled: dbSettings.google_enabled !== undefined ? dbSettings.google_enabled as boolean : false,
+      // Provider credentials
       azureApiKey: dbSettings.azure_api_key as string || '',
       azureRegion: dbSettings.azure_region as string || '',
       googleApiKey: dbSettings.google_api_key as string || '',
@@ -121,9 +129,19 @@ export class TTSManager {
    * Set the active provider
    */
   async setProvider(providerName: string): Promise<void> {
+    // Web Speech is handled in renderer, no backend provider needed
+    if (providerName === 'webspeech') {
+      this.currentProvider = null;
+      return;
+    }
+
     const provider = this.providers.get(providerName);
     if (!provider) {
-      throw new Error(`Provider ${providerName} not found`);
+      // Provider not implemented yet (e.g., Azure, Google in Phase 0)
+      console.warn(`[TTS] Provider ${providerName} not yet implemented, falling back to webspeech`);
+      this.currentProvider = null;
+      // Don't throw error, just log warning and continue with webspeech
+      return;
     }
 
     this.currentProvider = provider;
@@ -232,6 +250,11 @@ export class TTSManager {
     if (settings.volume !== undefined) dbSettings.tts_volume = settings.volume;
     if (settings.rate !== undefined) dbSettings.tts_rate = settings.rate;
     if (settings.pitch !== undefined) dbSettings.tts_pitch = settings.pitch;
+    // Provider enable flags
+    if (settings.webspeechEnabled !== undefined) dbSettings.webspeech_enabled = settings.webspeechEnabled;
+    if (settings.azureEnabled !== undefined) dbSettings.azure_enabled = settings.azureEnabled;
+    if (settings.googleEnabled !== undefined) dbSettings.google_enabled = settings.googleEnabled;
+    // Provider credentials
     if (settings.azureApiKey !== undefined) dbSettings.azure_api_key = settings.azureApiKey;
     if (settings.azureRegion !== undefined) dbSettings.azure_region = settings.azureRegion;
     if (settings.googleApiKey !== undefined) dbSettings.google_api_key = settings.googleApiKey;
@@ -285,8 +308,10 @@ export class TTSManager {
    */
   getProviderNames(): string[] {
     // Always include webspeech since it's handled in renderer
+    // Include azure and google as planned providers (Phase 1+)
     const backendProviders = Array.from(this.providers.keys());
-    return ['webspeech', ...backendProviders];
+    const plannedProviders = ['azure', 'google'].filter(p => !backendProviders.includes(p));
+    return ['webspeech', ...backendProviders, ...plannedProviders];
   }
 
   /**
@@ -754,32 +779,53 @@ export class TTSManager {
       try {
         console.log('[TTS] Speaking:', textToSpeak);
 
-        if (this.settings?.provider === 'webspeech') {
+        // Determine provider from voice_id prefix (hybrid routing)
+        const voiceId = item.voiceId || this.settings?.voiceId || '';
+        
+        if (voiceId.startsWith('webspeech_')) {
           // Send to renderer process for Web Speech API
           if (this.mainWindow) {
             this.mainWindow.webContents.send('tts:speak', {
               text: textToSpeak,
-              voiceId: item.voiceId || this.settings.voiceId,
-              volume: this.settings.volume,
-              rate: item.rate ?? this.settings.rate,
-              pitch: item.pitch ?? this.settings.pitch
+              voiceId: voiceId,
+              volume: this.settings?.volume,
+              rate: item.rate ?? this.settings?.rate,
+              pitch: item.pitch ?? this.settings?.pitch
             });
           }
           
           // Wait a bit before next message (estimate speaking time)
-          const effectiveRate = item.rate ?? this.settings.rate ?? 1.0;
+          const effectiveRate = item.rate ?? this.settings?.rate ?? 1.0;
           const wordsPerMinute = 150 * effectiveRate;
           const words = textToSpeak.split(' ').length;
           const estimatedMs = (words / wordsPerMinute) * 60 * 1000;
           await new Promise(resolve => setTimeout(resolve, Math.max(estimatedMs, 1000)));
+        } else if (voiceId.startsWith('azure_')) {
+          // Use Azure provider
+          const azureProvider = this.providers.get('azure');
+          if (azureProvider) {
+            await azureProvider.speak(textToSpeak, voiceId, {
+              volume: this.settings?.volume,
+              rate: item.rate ?? this.settings?.rate,
+              pitch: item.pitch ?? this.settings?.pitch
+            });
+          } else {
+            console.error('[TTS] Azure provider not available for voice:', voiceId);
+          }
+        } else if (voiceId.startsWith('google_')) {
+          // Use Google provider
+          const googleProvider = this.providers.get('google');
+          if (googleProvider) {
+            await googleProvider.speak(textToSpeak, voiceId, {
+              volume: this.settings?.volume,
+              rate: item.rate ?? this.settings?.rate,
+              pitch: item.pitch ?? this.settings?.pitch
+            });
+          } else {
+            console.error('[TTS] Google provider not available for voice:', voiceId);
+          }
         } else {
-          // Use backend provider (Azure/Google)
-          await this.speak(textToSpeak, { 
-            voiceId: item.voiceId || this.settings?.voiceId,
-            volume: this.settings?.volume,
-            rate: item.rate ?? this.settings?.rate,
-            pitch: item.pitch ?? this.settings?.pitch
-          });
+          console.error('[TTS] Unknown voice provider for voice_id:', voiceId);
         }
       } catch (error) {
         console.error('[TTS] Error speaking message:', error);
