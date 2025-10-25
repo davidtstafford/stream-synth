@@ -43,38 +43,68 @@ export async function subscribeToEvent(
     let version = '1';
     // Beta versions are deprecated for most events
 
-    const subscriptionResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Client-Id': clientId,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        type: eventType,
-        version: version,
-        condition: condition,
-        transport: {
-          method: 'websocket',
-          session_id: sessionId
-        }
-      })
-    });
-
-    const result = await subscriptionResponse.json();
-    
-    if (subscriptionResponse.ok) {
-      console.log(`✅ Subscribed to ${eventType}`, result);
-    } else {
-      console.error(`❌ Failed to subscribe to ${eventType}:`, result);
-      console.error('Request details:', {
-        type: eventType,
-        version: version,
-        condition,
-        sessionId: sessionId,
-        status: subscriptionResponse.status,
-        statusText: subscriptionResponse.statusText
+    // First, fetch existing subscriptions and avoid creating duplicates
+    try {
+      const listResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId }
       });
+
+      let listData: any = { data: [] };
+      if (listResponse.ok) {
+        listData = await listResponse.json();
+        console.log('[EventSub] fetched subscriptions count=', (listData.data || []).length);
+      } else {
+        console.warn('[EventSub] failed to list subscriptions, status=', listResponse.status);
+      }
+
+      const existing = (listData.data || []).find((s: any) => {
+        try { return s.type === eventType && JSON.stringify(s.condition) === JSON.stringify(condition); } catch (_) { return false; }
+      });
+
+      if (existing) {
+        if (existing.transport && existing.transport.session_id === sessionId) {
+          console.log(`⏭️ Subscription for ${eventType} already exists for this session, skipping creation`, existing);
+          return;
+        }
+
+        console.log('[EventSub] Found stale subscription(s); attempting cleanup', existing.id);
+        const toRemove = (listData.data || []).filter((s: any) => s.type === eventType && JSON.stringify(s.condition) === JSON.stringify(condition));
+
+        for (const s of toRemove) {
+          try {
+            console.log('[EventSub] Deleting subscription', s.id, 'session', s.transport?.session_id);
+            const delRes = await fetch(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${s.id}`, {
+              method: 'DELETE', headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId }
+            });
+            if (delRes.ok) console.log('[EventSub] Deleted', s.id); else console.warn('[EventSub] Failed to delete', s.id, 'status=', delRes.status);
+          } catch (err) {
+            console.warn('[EventSub] Error deleting subscription', s.id, err);
+          }
+        }
+      }
+
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          console.log(`[EventSub] Creating subscription attempt ${attempt}/${maxAttempts} for ${eventType}`);
+          const subscriptionResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
+            method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: eventType, version, condition, transport: { method: 'websocket', session_id: sessionId } })
+          });
+
+          const result = await subscriptionResponse.json().catch(() => ({}));
+          if (subscriptionResponse.ok) { console.log('[EventSub] Subscription created:', result); return; }
+          console.warn('[EventSub] Create failed status=', subscriptionResponse.status, 'body=', result);
+          if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 1000 * attempt));
+        } catch (err) {
+          console.warn('[EventSub] Create attempt error', err);
+          if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 1000 * attempt));
+        }
+      }
+
+      console.error('[EventSub] All attempts to create subscription failed for', eventType);
+    } catch (err) {
+      console.error('Error while checking/creating subscription:', err);
     }
   } catch (error) {
     console.error(`Error subscribing to ${eventType}:`, error);
