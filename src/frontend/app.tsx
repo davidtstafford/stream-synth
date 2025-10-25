@@ -30,40 +30,7 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Listen for TTS speak commands from backend
-  useEffect(() => {
-    const handleTTSSpeak = (event: any, data: any) => {
-      const { text, voiceId, volume, rate, pitch } = data;
-      
-      // Use Web Speech API
-      const utterance = new SpeechSynthesisUtterance(text);
-      
-      // Strip provider prefix if present (e.g., "webspeech_com.apple.voice.compact.en-US.Samantha")
-      const cleanVoiceId = voiceId?.replace(/^webspeech_/, '') || voiceId;
-      
-      // Find the voice
-      const voices = window.speechSynthesis.getVoices();
-      const voice = voices.find(v => v.voiceURI === cleanVoiceId || v.name === cleanVoiceId);
-      
-      if (voice) {
-        utterance.voice = voice;
-      }
-      
-      utterance.volume = volume / 100; // Convert 0-100 to 0-1
-      utterance.rate = rate;
-      utterance.pitch = pitch;
-      
-      console.log('[TTS Renderer] Speaking:', text, 'with voice:', voice?.name || 'default', '(voiceId:', voiceId, '-> cleanVoiceId:', cleanVoiceId, ')');
-      window.speechSynthesis.speak(utterance);
-    };
-
-    ipcRenderer.on('tts:speak', handleTTSSpeak);
-
-    // Cleanup
-    return () => {
-      ipcRenderer.removeListener('tts:speak', handleTTSSpeak);
-    };
-  }, []);
+  // Note: TTS speak handler is registered in services/tts.ts to prevent duplicate listeners
 
   const menuItems = [
     { id: 'connection', label: 'Connection' },

@@ -350,6 +350,34 @@ export function setupIpcHandlers(): void {
       }
       
       mainWindow?.webContents.send('event:stored', storedEvent);
+
+      // Forward EventSub chat messages to TTS manager so they are enqueued for speaking.
+      // IRC chat is intentionally ignored elsewhere; only EventSub `channel.chat.message` should trigger TTS.
+      try {
+        if (eventType === 'channel.chat.message') {
+          const payload = typeof eventData === 'string' ? JSON.parse(eventData) : eventData;
+          const chatText = payload?.message?.text || payload?.message || '';
+          const username = (storedEvent as any).viewer_username || payload?.chatter_user_login || 'Unknown';
+          const viewerIdForTts = (storedEvent as any).viewer_id || viewerId;
+
+          console.log('[EventSub→TTS] Forwarding chat to TTS:', username, '-', chatText);
+
+          // Initialize and invoke TTS manager in background (don't block response)
+          initializeTTS().then(manager => {
+            if (manager) {
+              try {
+                manager.handleChatMessage(username, chatText, viewerIdForTts);
+              } catch (err) {
+                console.warn('[TTS] Failed to handle chat message:', err);
+              }
+            }
+          }).catch(err => {
+            console.warn('[TTS] Failed to initialize manager for chat forwarding:', err);
+          });
+        }
+      } catch (err) {
+        console.warn('[TTS] Error while attempting to forward stored event to TTS:', err);
+      }
       
       return { success: true, id };
     } catch (error: any) {
