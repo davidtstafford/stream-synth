@@ -1,3 +1,8 @@
+import { getSetting, setSetting } from './database';
+
+// Module-level in-flight map to serialize subscribe operations per broadcaster+eventType
+const inFlightSubscriptions = new Map<string, Promise<void>>();
+
 export async function subscribeToEvent(
   eventType: string,
   accessToken: string,
@@ -14,100 +19,165 @@ export async function subscribeToEvent(
     return;
   }
 
-  try {
-    // Create subscription condition based on event type
-    const condition: any = {};
-    
-    // Different events require different condition fields
-    if (eventType.startsWith('channel.chat')) {
-      // Chat events need both broadcaster and user
-      condition.broadcaster_user_id = broadcasterId;
-      condition.user_id = userId;
-    } else if (eventType === 'channel.raid') {
-      // Raid event - listen for raids TO this broadcaster
-      condition.to_broadcaster_user_id = broadcasterId;
-    } else if (eventType.includes('moderator') || eventType.includes('shield_mode')) {
-      // Moderator events
-      condition.broadcaster_user_id = broadcasterId;
-      condition.moderator_user_id = userId;
-    } else if (eventType.startsWith('channel.shoutout')) {
-      // Shoutout events
-      condition.broadcaster_user_id = broadcasterId;
-      condition.moderator_user_id = userId;
-    } else {
-      // Most other events just need broadcaster_user_id
-      condition.broadcaster_user_id = broadcasterId;
-    }
+  const key = `${broadcasterId}:${eventType}`;
+  if (inFlightSubscriptions.has(key)) {
+    console.log('[EventSub] Subscribe already in-flight for', key, '- awaiting existing operation');
+    await inFlightSubscriptions.get(key);
+    return;
+  }
 
-    // Determine the correct version for each event type
-    let version = '1';
-    // Beta versions are deprecated for most events
-
-    // First, fetch existing subscriptions and avoid creating duplicates
+  const opPromise = (async () => {
     try {
-      const listResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
-        headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId }
-      });
-
-      let listData: any = { data: [] };
-      if (listResponse.ok) {
-        listData = await listResponse.json();
-        console.log('[EventSub] fetched subscriptions count=', (listData.data || []).length);
+      // Create subscription condition based on event type
+      const condition: any = {};
+      if (eventType.startsWith('channel.chat')) {
+        condition.broadcaster_user_id = broadcasterId;
+        condition.user_id = userId;
+      } else if (eventType === 'channel.raid') {
+        condition.to_broadcaster_user_id = broadcasterId;
+      } else if (eventType.includes('moderator') || eventType.includes('shield_mode')) {
+        condition.broadcaster_user_id = broadcasterId;
+        condition.moderator_user_id = userId;
+      } else if (eventType.startsWith('channel.shoutout')) {
+        condition.broadcaster_user_id = broadcasterId;
+        condition.moderator_user_id = userId;
       } else {
-        console.warn('[EventSub] failed to list subscriptions, status=', listResponse.status);
+        condition.broadcaster_user_id = broadcasterId;
       }
 
-      const existing = (listData.data || []).find((s: any) => {
-        try { return s.type === eventType && JSON.stringify(s.condition) === JSON.stringify(condition); } catch (_) { return false; }
-      });
+      let version = '1';
 
-      if (existing) {
-        if (existing.transport && existing.transport.session_id === sessionId) {
-          console.log(`⏭️ Subscription for ${eventType} already exists for this session, skipping creation`, existing);
-          return;
+      const persistedKey = `eventsub:${broadcasterId}:${eventType}:subscription_id`;
+      const persistedCreatedAtKey = `eventsub:${broadcasterId}:${eventType}:created_at`;
+
+      try {
+        const listResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
+          headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId }
+        });
+
+        let listData: any = { data: [] };
+        if (listResponse.ok) {
+          listData = await listResponse.json();
+          console.log('[EventSub] fetched subscriptions count=', (listData.data || []).length);
+        } else {
+          console.warn('[EventSub] failed to list subscriptions, status=', listResponse.status);
         }
 
-        console.log('[EventSub] Found stale subscription(s); attempting cleanup', existing.id);
-        const toRemove = (listData.data || []).filter((s: any) => s.type === eventType && JSON.stringify(s.condition) === JSON.stringify(condition));
+        const persistedId = await getSetting(persistedKey);
+        const persistedCreatedAt = await getSetting(persistedCreatedAtKey);
+        console.log('[EventSub] persisted keys', { persistedKey, hasPersistedId: !!persistedId, persistedCreatedAt });
 
-        for (const s of toRemove) {
-          try {
-            console.log('[EventSub] Deleting subscription', s.id, 'session', s.transport?.session_id);
-            const delRes = await fetch(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${s.id}`, {
-              method: 'DELETE', headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId }
-            });
-            if (delRes.ok) console.log('[EventSub] Deleted', s.id); else console.warn('[EventSub] Failed to delete', s.id, 'status=', delRes.status);
-          } catch (err) {
-            console.warn('[EventSub] Error deleting subscription', s.id, err);
+        const existing = (listData.data || []).find((s: any) => {
+          try { return s.type === eventType && JSON.stringify(s.condition) === JSON.stringify(condition); } catch (_) { return false; }
+        });
+
+        if (persistedId) {
+          const foundById = (listData.data || []).find((s: any) => s.id === persistedId);
+          if (foundById) {
+            if (foundById.transport && foundById.transport.session_id === sessionId) {
+              console.log(`[EventSub] Reusing persisted subscription id for ${eventType}`);
+              return;
+            }
+
+            const ageMs = persistedCreatedAt ? (Date.now() - Number(persistedCreatedAt)) : null;
+            const recentThresholdMs = 10 * 60 * 1000; // 10 minutes
+            if (ageMs !== null && ageMs < recentThresholdMs) {
+              console.log(`[EventSub] Persisted subscription is recent (${Math.round(ageMs/1000)}s); delaying delete to avoid churn`);
+              await new Promise(r => setTimeout(r, 3000));
+              const refreshResp = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', { headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId } });
+              const refreshData = await refreshResp.json().catch(() => ({ data: [] }));
+              const refreshed = (refreshData.data || []).find((s: any) => s.id === persistedId);
+              if (refreshed && refreshed.transport && refreshed.transport.session_id === sessionId) {
+                console.log(`[EventSub] Persisted subscription now matches current session, reusing`);
+                return;
+              }
+              console.log(`[EventSub] Persisted subscription still mismatched, will replace it`);
+            }
           }
         }
-      }
 
-      const maxAttempts = 3;
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          console.log(`[EventSub] Creating subscription attempt ${attempt}/${maxAttempts} for ${eventType}`);
-          const subscriptionResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
-            method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: eventType, version, condition, transport: { method: 'websocket', session_id: sessionId } })
-          });
-
-          const result = await subscriptionResponse.json().catch(() => ({}));
-          if (subscriptionResponse.ok) { console.log('[EventSub] Subscription created:', result); return; }
-          console.warn('[EventSub] Create failed status=', subscriptionResponse.status, 'body=', result);
-          if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 1000 * attempt));
-        } catch (err) {
-          console.warn('[EventSub] Create attempt error', err);
-          if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 1000 * attempt));
+        if (existing) {
+          console.log('[EventSub] Existing matching subscriptions detected; will perform post-create dedupe if needed');
         }
-      }
 
-      console.error('[EventSub] All attempts to create subscription failed for', eventType);
-    } catch (err) {
-      console.error('Error while checking/creating subscription:', err);
+        const maxAttempts = 3;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            console.log(`[EventSub] Creating subscription attempt ${attempt}/${maxAttempts} for ${eventType}`);
+            const subscriptionResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
+              method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: eventType, version, condition, transport: { method: 'websocket', session_id: sessionId } })
+            });
+
+            const result = await subscriptionResponse.json().catch(() => ({}));
+            if (subscriptionResponse.ok) {
+              console.log('[EventSub] Subscription created:', result);
+              if (result && result.data && result.data[0] && result.data[0].id) {
+                try {
+                  const newId = result.data[0].id as string;
+                  await setSetting(persistedKey, newId);
+                  await setSetting(persistedCreatedAtKey, String(Date.now()));
+                  console.log('[EventSub] Persisted subscription id (redacted)');
+                } catch (err) {
+                  console.warn('[EventSub] Failed to persist subscription id', err);
+                }
+              }
+
+              // Post-create: re-list subscriptions and remove duplicates safely
+              try {
+                const postListResp = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', { headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId } });
+                const postList = await postListResp.json().catch(() => ({ data: [] }));
+                const matches = (postList.data || []).filter((s: any) => s.type === eventType && JSON.stringify(s.condition) === JSON.stringify(condition));
+                if (matches.length > 1) {
+                  let keeper = matches.find((s: any) => s.transport?.session_id === sessionId) || null;
+                  if (!keeper && persistedId) keeper = matches.find((s: any) => s.id === persistedId) || null;
+                  if (!keeper) {
+                    keeper = matches.slice().sort((a: any, b: any) => (new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))[0];
+                  }
+                  for (const s of matches) {
+                    if (s.id === keeper.id) continue;
+                    try {
+                      console.log('[EventSub] Post-create deleting duplicate', s.id, 'session', s.transport?.session_id);
+                      await fetch(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${s.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId } });
+                    } catch (err) {
+                      console.warn('[EventSub] Failed to delete duplicate subscription', s.id, err);
+                    }
+                  }
+                  try {
+                    await setSetting(persistedKey, keeper.id);
+                    await setSetting(persistedCreatedAtKey, String(new Date(keeper.created_at).getTime()));
+                  } catch (err) {
+                    console.warn('[EventSub] Failed to persist keeper id', err);
+                  }
+                }
+              } catch (err) {
+                console.warn('[EventSub] Post-create dedupe failed', err);
+              }
+
+              return;
+            }
+            console.warn('[EventSub] Create failed status=', subscriptionResponse.status, 'body=', result);
+            if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 1000 * attempt));
+          } catch (err) {
+            console.warn('[EventSub] Create attempt error', err);
+            if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 1000 * attempt));
+          }
+        }
+
+        console.error('[EventSub] All attempts to create subscription failed for', eventType);
+      } catch (err) {
+        console.error('Error while checking/creating subscription:', err);
+      }
+    } catch (error) {
+      console.error(`Error subscribing to ${eventType}:`, error);
     }
-  } catch (error) {
-    console.error(`Error subscribing to ${eventType}:`, error);
+  })();
+
+  inFlightSubscriptions.set(key, opPromise);
+  try {
+    await opPromise;
+  } finally {
+    inFlightSubscriptions.delete(key);
   }
 }
 
@@ -129,6 +199,22 @@ export async function unsubscribeFromEvent(
 
     const data = await response.json();
     const subscription = data.data?.find((sub: any) => sub.type === eventType);
+
+    // Clear any persisted subscription id/settings for this eventType across broadcasters.
+    try {
+      // persisted key format used by subscribeToEvent
+      const keysToClear = data.data?.map((s: any) => `eventsub:${s.condition?.broadcaster_user_id}:${s.type}:subscription_id`) || [];
+      const createdKeysToClear = data.data?.map((s: any) => `eventsub:${s.condition?.broadcaster_user_id}:${s.type}:created_at`) || [];
+      for (const k of keysToClear) {
+        try { await setSetting(k, ''); } catch (_) { /* ignore */ }
+      }
+      for (const k of createdKeysToClear) {
+        try { await setSetting(k, ''); } catch (_) { /* ignore */ }
+      }
+      console.log('[EventSub] Cleared persisted subscription keys for unsubscribe (best-effort)');
+    } catch (err) {
+      console.warn('[EventSub] Error clearing persisted subscription keys', err);
+    }
 
     if (subscription) {
       await fetch(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${subscription.id}`, {
