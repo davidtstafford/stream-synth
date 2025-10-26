@@ -4,7 +4,7 @@
  */
 
 import { BrowserWindow } from 'electron';
-import { PlatformTTSHandler } from './platform-tts-base';
+import { PlatformTTSHandler } from './base.js';
 
 export class WindowsTTSHandler implements PlatformTTSHandler {
   async initialize(mainWindow: BrowserWindow): Promise<void> {

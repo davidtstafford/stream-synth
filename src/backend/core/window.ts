@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron';
 import * as path from 'path';
 import { setupContentSecurityPolicy } from '../security/csp';
-import { PlatformTTSFactory } from './platform-tts-factory';
+import { PlatformTTSFactory } from './platform-tts';
 
 export async function createMainWindow(): Promise<BrowserWindow> {
   const mainWindow = new BrowserWindow({

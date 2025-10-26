@@ -4,9 +4,9 @@
  */
 
 import { BrowserWindow } from 'electron';
-import { PlatformTTSHandler } from './platform-tts-base';
-import { WindowsTTSHandler } from './platform-tts-windows';
-import { MacOSTTSHandler } from './platform-tts-macos';
+import { PlatformTTSHandler } from './base.js';
+import { WindowsTTSHandler } from './windows.js';
+import { MacOSTTSHandler } from './macos.js';
 
 export class PlatformTTSFactory {
   private static instance: PlatformTTSHandler | null = null;

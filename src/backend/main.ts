@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import { createMainWindow } from './core/window';
 import { setupAllIpcHandlers, runStartupTasks } from './core/ipc-handlers';
-import { PlatformTTSFactory } from './core/platform-tts-factory';
+import { PlatformTTSFactory } from './core/platform-tts';
 import { initializeDatabase, closeDatabase } from './database/connection';
 
 let mainWindow: BrowserWindow | null = null;

@@ -14,7 +14,7 @@
  */
 
 import { BrowserWindow } from 'electron';
-import { PlatformTTSHandler } from './platform-tts-base';
+import { PlatformTTSHandler } from './base.js';
 
 export class MacOSTTSHandler implements PlatformTTSHandler {
   private voiceInitAttempts = 0;
@@ -102,23 +102,8 @@ export class MacOSTTSHandler implements PlatformTTSHandler {
   }
 
   async onVoicesChanged(mainWindow: BrowserWindow): Promise<void> {
-    // Set up listener for voice changes on macOS
-    // The voices-changed event fires when system voices are added/removed
-    await mainWindow.webContents.executeJavaScript(`
-      if (window.speechSynthesis) {
-        window.speechSynthesis.onvoiceschanged = () => {
-          const voices = window.speechSynthesis.getVoices();
-          console.log('[macOS] Voices changed event fired with', voices.length, 'voices');
-          
-          const event = new CustomEvent('tts:voices-changed', {
-            detail: { count: voices.length, platform: 'macos' }
-          });
-          window.dispatchEvent(event);
-        };
-        
-        console.log('[macOS] Voice change listener registered');
-      }
-    `);
+    // Re-initialize voices if they change
+    await this.initializeMacOSVoices(mainWindow);
   }
 
   getPlatform(): 'windows' | 'darwin' | 'linux' {
