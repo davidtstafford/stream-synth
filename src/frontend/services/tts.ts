@@ -154,18 +154,50 @@ function initWebSpeech() {
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     webSpeechSynth = window.speechSynthesis;
     
+    // Track voices we've seen to detect new additions
+    let lastVoiceNames = new Set<string>();
+    
     // Load voices (might be delayed on some browsers)
     const loadVoices = () => {
-      webSpeechVoices = webSpeechSynth!.getVoices();
+      const freshVoices = webSpeechSynth!.getVoices();
+      webSpeechVoices = freshVoices;
       console.log(`[TTS] Loaded ${webSpeechVoices.length} voices from Web Speech API`);
       
       // Group voices by language for debugging
       const byLanguage: Record<string, number> = {};
+      const voiceNames = new Set<string>();
+      
       webSpeechVoices.forEach(voice => {
         const lang = voice.lang.split('-')[0]; // Get base language (en, es, fr, etc.)
         byLanguage[lang] = (byLanguage[lang] || 0) + 1;
+        voiceNames.add(`${voice.name}|${voice.lang}`);
       });
+      
       console.log('[TTS] Voices by language:', byLanguage);
+      
+      // Detect newly added voices (useful for when users install new voices while app is running)
+      const newVoices = Array.from(voiceNames).filter(v => !lastVoiceNames.has(v));
+      if (newVoices.length > 0) {
+        console.log('[TTS] Newly detected voices:', newVoices);
+      }
+      lastVoiceNames = voiceNames;
+      
+      // Log voice details for Windows SAPI5 voices
+      if (webSpeechVoices.length > 0) {
+        console.log('[TTS] Sample voice:', {
+          name: webSpeechVoices[0].name,
+          lang: webSpeechVoices[0].lang,
+          voiceURI: webSpeechVoices[0].voiceURI,
+          localService: webSpeechVoices[0].localService,
+          default: webSpeechVoices[0].default
+        });
+        
+        // Log any Indian English voices (for your Prahbat voice)
+        const indianVoices = webSpeechVoices.filter(v => v.lang.includes('en-IN'));
+        if (indianVoices.length > 0) {
+          console.log('[TTS] Indian English voices found:', indianVoices.map(v => v.name));
+        }
+      }
 
       // Build the voice URI map from current voices
       buildVoiceUriMap();
@@ -174,8 +206,30 @@ function initWebSpeech() {
     loadVoices();
     
     // Some browsers load voices asynchronously
+    // This is especially important on Windows where SAPI5 voices may load with delay
     if (webSpeechSynth.onvoiceschanged !== undefined) {
       webSpeechSynth.onvoiceschanged = loadVoices;
+    }
+    
+    // Fallback: Poll for voices if they don't load immediately (Windows sometimes needs this)
+    // This handles cases where onvoiceschanged doesn't fire
+    if (webSpeechVoices.length === 0) {
+      let pollAttempts = 0;
+      const maxAttempts = 15; // Try for ~3 seconds (15 * 200ms) - longer for voice cache refresh
+      const pollInterval = setInterval(() => {
+        pollAttempts++;
+        const freshVoices = webSpeechSynth!.getVoices();
+        
+        if (freshVoices.length > 0) {
+          console.log(`[TTS] Voices loaded via polling on attempt ${pollAttempts}: ${freshVoices.length} voices`);
+          loadVoices();
+          clearInterval(pollInterval);
+        } else if (pollAttempts >= maxAttempts) {
+          console.warn('[TTS] Polling timeout - voices may not be available or failed to load');
+          console.warn('[TTS] This can happen if Windows voice cache needs refreshing. Try the Windows registry fix.');
+          clearInterval(pollInterval);
+        }
+      }, 200);
     }
   }
 }
