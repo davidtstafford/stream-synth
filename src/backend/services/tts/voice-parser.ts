@@ -11,20 +11,23 @@ export interface ParsedVoice {
   metadata: string | null;
 }
 
-export class VoiceParser {  // Parse Web Speech API voice
+export class VoiceParser {
+  // Parse Web Speech API voice
   static parseWebSpeechVoice(voice: any, index: number): ParsedVoice {
-    const source = this.detectSource(voice.name);
-    const cleanName = this.extractName(voice.name);
-    const gender = this.detectGender(voice.name, voice.voiceURI);
-    // TTSVoice from frontend has 'language', not 'lang'
+    // Defensive checks for undefined properties
+    const voiceName = voice.name || `Voice ${index}`;
+    const voiceUri = voice.voiceURI || '';
     const langCode = voice.language || voice.lang || 'en-US';
+    
+    const source = this.detectSource(voiceName);
+    const cleanName = this.extractName(voiceName);
+    const gender = this.detectGender(voiceName, voiceUri);
     const { languageCode, languageName, region } = this.parseLanguage(langCode);
 
-    // Create a voice ID that's unique and includes the voiceURI we can use for lookup
-    // Format: webspeech_{languageCode}_{index}_{voiceName}
+    // Create a voice ID that's unique and includes identifying information
+    // Format: webspeech_{languageCode}_{index}
     // Store the actual voiceURI in metadata for lookup
-    const voiceUriPart = voice.voiceURI || voice.name;
-    const voiceId = `webspeech_${languageCode}_${index}_${voiceUriPart}`.replace(/\s+/g, '_');
+    const voiceId = `webspeech_${languageCode}_${index}`;
 
     return {
       voice_id: voiceId,
@@ -37,16 +40,17 @@ export class VoiceParser {  // Parse Web Speech API voice
       gender,
       display_order: index,
       metadata: JSON.stringify({
-        voiceURI: voice.voiceURI,
+        voiceURI: voiceUri,
         localService: voice.localService,
         default: voice.default,
-        originalName: voice.name
+        originalName: voiceName
       })
     };
   }
-
   // Detect voice source (System, Siri, Enhanced, etc.)
-  private static detectSource(voiceName: string): string | null {
+  private static detectSource(voiceName: string | undefined): string | null {
+    if (!voiceName) return 'system';
+    
     const lower = voiceName.toLowerCase();
     
     if (lower.includes('siri') || lower.includes('premium')) return 'siri';
@@ -55,9 +59,10 @@ export class VoiceParser {  // Parse Web Speech API voice
     
     return 'system';
   }
-
   // Extract clean name from voice name
-  private static extractName(voiceName: string): string {
+  private static extractName(voiceName: string | undefined): string {
+    if (!voiceName) return 'Unknown Voice';
+    
     // Remove parenthetical information and extra spaces
     const match = voiceName.match(/^([^(]+)/);
     const cleanName = match ? match[1].trim() : voiceName;

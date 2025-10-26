@@ -8,12 +8,28 @@ import { ViewersScreen } from './screens/viewers/viewers';
 import { TTS } from './screens/tts/tts';
 import { Discord } from './screens/discord/discord';
 import * as db from './services/database';
+import * as ttsService from './services/tts';
 
 const { ipcRenderer } = window.require('electron');
 
 const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<string>('connection');
   const [channelId, setChannelId] = useState<string>('');
+
+  // Initialize voice syncing on app startup
+  useEffect(() => {
+    const initializeVoiceSync = async () => {
+      try {
+        console.log('[App] Initializing voice sync on startup...');
+        const result = await ttsService.initializeVoiceSync();
+        console.log('[App] Voice sync initialization result:', result);
+      } catch (err: any) {
+        console.error('[App] Error initializing voice sync:', err);
+      }
+    };
+    
+    initializeVoiceSync();
+  }, []);
 
   // Load current session to get channel ID
   useEffect(() => {

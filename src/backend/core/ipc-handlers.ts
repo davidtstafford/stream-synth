@@ -67,6 +67,31 @@ export async function runStartupTasks(): Promise<void> {
   try {
     console.log('[Startup] Running startup tasks...');
     
+    // Initialize TTS services
+    await initializeTTS();
+    
+    // Sync WebSpeech voices if needed (enabled and not yet synced)
+    console.log('[Startup] Checking WebSpeech voice sync status...');
+    if (voiceSyncService) {
+      if (voiceSyncService.needsSync('webspeech')) {
+        console.log('[Startup] WebSpeech voices need syncing, requesting from renderer...');
+        // The renderer will send voices via IPC when available
+      } else {
+        console.log('[Startup] WebSpeech voices already synced');
+      }
+    }
+    
+    // Sync Azure voices if enabled and needed
+    console.log('[Startup] Checking Azure voice sync status...');
+    if (voiceSyncService) {
+      if (voiceSyncService.needsSync('azure')) {
+        console.log('[Startup] Azure voices need syncing (not implemented in this phase)');
+        // Azure sync happens when user enables it and provides credentials
+      } else {
+        console.log('[Startup] Azure voices already synced or not enabled');
+      }
+    }
+    
     // Check if Discord auto-post is enabled
     const discordSettingsStr = settingsRepo.get('discord_settings');
     if (!discordSettingsStr) {
@@ -699,6 +724,42 @@ export function setupIpcHandlers(): void {
       console.error('[TTS] Error handling audio-finished:', error);
       return { success: false, error: error.message };
     }
+  });  // Get voice metadata by voice_id (for frontend Web Speech lookup)
+  ipcMain.handle('tts:get-voice-metadata', async (event, voiceId: string) => {
+    try {
+      console.log('[IPC] tts:get-voice-metadata called with voiceId:', voiceId);
+      const voice = voicesRepo.getVoiceById(voiceId);
+      
+      if (!voice) {
+        console.warn('[IPC] tts:get-voice-metadata - Voice not found:', voiceId);
+        return { success: false, error: 'Voice not found' };
+      }
+      
+      // Parse metadata to get voiceURI
+      let voiceURI = voice.name; // fallback
+      try {
+        if (voice.metadata) {
+          const meta = JSON.parse(voice.metadata);
+          console.log('[IPC] tts:get-voice-metadata - Parsed metadata:', { voiceURI: meta.voiceURI, originalName: meta.originalName });
+          voiceURI = meta.voiceURI || voice.name;
+        } else {
+          console.warn('[IPC] tts:get-voice-metadata - No metadata stored for voice');
+        }
+      } catch (e) {
+        console.warn('[IPC] Failed to parse voice metadata:', e);
+      }
+      
+      console.log('[IPC] tts:get-voice-metadata - Returning voiceURI:', voiceURI);
+      return {
+        success: true,
+        voiceURI: voiceURI,
+        name: voice.name,
+        language: voice.language_code
+      };
+    } catch (error: any) {
+      console.error('[IPC] Error getting voice metadata:', error);
+      return { success: false, error: error.message };
+    }
   });
 
   ipcMain.handle('tts:speak', async (event, text: string, options?: any) => {
@@ -788,6 +849,49 @@ export function setupIpcHandlers(): void {
     } catch (error: any) {
       console.error('[TTS] Error syncing voices:', error);
       return { success: false, error: error.message };
+    }
+  });
+
+  // Rescan provider voices immediately (fetch fresh voices and refresh UI now)
+  ipcMain.handle('provider:rescan-immediate', async (event, provider: string, voices: any[]) => {
+    try {
+      console.log(`[Provider] Immediate rescan for ${provider}...`);
+      await initializeTTS();
+      
+      if (!voiceSyncService) {
+        return { success: false, error: 'Voice sync service not initialized' };
+      }
+      
+      const count = await voiceSyncService.rescanProviderImmediate(provider, voices);
+      const stats = voiceSyncService.getStats();
+      
+      return { 
+        success: true, 
+        count,
+        message: `${provider} voices rescanned: ${count} voices found`,
+        stats 
+      };
+    } catch (error: any) {
+      console.error(`[Provider] Error rescanning ${provider}:`, error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Check if provider needs syncing
+  ipcMain.handle('provider:check-sync-needed', async (event, provider: string) => {
+    try {
+      await initializeTTS();
+      
+      if (!voiceSyncService) {
+        return false;
+      }
+      
+      const needsSync = voiceSyncService.needsSync(provider);
+      console.log(`[Provider] ${provider} needs sync: ${needsSync}`);
+      return needsSync;
+    } catch (error: any) {
+      console.error(`[Provider] Error checking sync status for ${provider}:`, error);
+      return false;
     }
   });
 
@@ -972,12 +1076,15 @@ export function setupIpcHandlers(): void {
       const { provider, enabled } = payload;
       console.log(`[Provider] ${enabled ? 'Enabling' : 'Disabling'} ${provider}`);
       
-      if (enabled) {
-        // Mark provider voices as available
-        voicesRepo.markProviderAvailable(provider);
-      } else {
-        // Mark provider voices as unavailable
-        voicesRepo.markProviderUnavailable(provider);
+      await initializeTTS();
+      
+      // Update provider status in database
+      const status = voicesRepo.getProviderStatus(provider);
+      const voiceCount = status?.voice_count || 0;
+      voicesRepo.updateProviderStatus(provider, enabled, voiceCount);
+      
+      if (enabled && !status?.last_synced_at) {
+        console.log(`[Provider] ${provider} is enabled but not yet synced. Will sync on next startup.`);
       }
       
       return {

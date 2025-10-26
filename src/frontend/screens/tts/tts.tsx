@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import * as ttsService from '../../services/tts';
-import { AzureSetupWizard } from '../../components/AzureSetupWizard';
 import './tts.css';
 
 interface VoiceGroup {
@@ -23,12 +22,11 @@ export const TTS: React.FC = () => {
   const [voiceGroups, setVoiceGroups] = useState<VoiceGroup[]>([]);
   const [providers, setProviders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [testMessage, setTestMessage] = useState('Hello! This is a test of the text to speech system.');
+  const [error, setError] = useState<string | null>(null);  const [testMessage, setTestMessage] = useState('Hello! This is a test of the text to speech system.');
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // Azure Setup Wizard state
-  const [showAzureWizard, setShowAzureWizard] = useState(false);
+  // Rescan state
+  const [rescanningProvider, setRescanningProvider] = useState<string | null>(null);
 
   // Voice filtering state
   const [searchTerm, setSearchTerm] = useState('');
@@ -77,18 +75,11 @@ export const TTS: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-  const syncAndLoadVoices = async (currentSettings?: ttsService.TTSSettings) => {
+  };  const syncAndLoadVoices = async (currentSettings?: ttsService.TTSSettings) => {
     try {
-      console.log('[TTS Screen] Auto-syncing WebSpeech voices...');
-      
-      // Auto-sync WebSpeech voices from browser to database
-      const syncedCount = await ttsService.autoSyncWebSpeechVoices();
-      console.log(`[TTS Screen] Auto-synced ${syncedCount} WebSpeech voices`);
-      
       console.log('[TTS Screen] Loading voices from database...');
       
-      // Load grouped voices from database
+      // Load grouped voices from database (voices are synced on app startup, not here)
       const grouped = await ttsService.getGroupedVoices();
       console.log('[TTS Screen] Got grouped voices:', grouped);
       
@@ -115,48 +106,94 @@ export const TTS: React.FC = () => {
       console.error('[TTS Screen] Error loading voice stats:', err);
     }
   };
-
   // Handle provider toggle (enable/disable provider voices in database)
   const handleProviderToggle = async (provider: 'webspeech' | 'azure' | 'google', enabled: boolean) => {
     try {
+      // Prevent Azure provider from being toggled
+      if (provider === 'azure') {
+        console.warn('[TTS] Azure provider is disabled');
+        setError('Azure provider is currently disabled. Only WebSpeech is available.');
+        return;
+      }
+
       console.log(`[TTS] Toggling ${provider} provider:`, enabled);
       
       // Save the enable setting
       await ttsService.saveSettings({ [`${provider}Enabled`]: enabled } as any);
       setSettings(prev => prev ? { ...prev, [`${provider}Enabled`]: enabled } : null);
       
-      // If enabling Azure, sync voices from API
-      if (provider === 'azure' && enabled) {
-        const azureSettings = settings;
-        if (!azureSettings?.azureApiKey || !azureSettings?.azureRegion) {
-          console.warn('[TTS] Azure enabled but credentials not configured');
-          return;
-        }
-        
-        console.log('[TTS] Syncing Azure voices from API...');
-        const { ipcRenderer } = window.require('electron');
-        const result = await ipcRenderer.invoke('azure:sync-voices', {
-          apiKey: azureSettings.azureApiKey,
-          region: azureSettings.azureRegion
-        });
-        console.log('[TTS] Azure voices synced:', result);
-        
-        // Reload voices
-        await syncAndLoadVoices();
-        await loadVoiceStats();
-      } else {
-        // For disabling or other providers, just toggle availability
-        const { ipcRenderer } = window.require('electron');
-        await ipcRenderer.invoke('provider:toggle', { provider, enabled });
-        console.log(`[TTS] Provider ${provider} ${enabled ? 'enabled' : 'disabled'}`);
-        
-        // Reload voices
-        await syncAndLoadVoices();
-        await loadVoiceStats();
-      }
+      // For other providers, just toggle availability
+      const { ipcRenderer } = window.require('electron');
+      await ipcRenderer.invoke('provider:toggle', { provider, enabled });
+      console.log(`[TTS] Provider ${provider} ${enabled ? 'enabled' : 'disabled'}`);
+      
+      // Reload voices
+      await syncAndLoadVoices();
+      await loadVoiceStats();
     } catch (err: any) {
       setError(err.message);
       console.error(`[TTS] Error toggling ${provider} provider:`, err);
+    }
+  };  // Handle provider rescan - immediate, with loading spinner
+  const handleProviderRescan = async (provider: 'webspeech' | 'azure' | 'google') => {
+    try {
+      // Prevent Azure provider from being rescanned
+      if (provider === 'azure') {
+        console.warn('[TTS] Azure provider is disabled');
+        setError('Azure provider is currently disabled. Only WebSpeech is available.');
+        return;
+      }
+
+      setRescanningProvider(provider);
+      setError(null);
+      
+      console.log(`[TTS] Rescanning ${provider} voices immediately...`);
+      
+      // Get current voices from Web Speech API for this provider
+      let currentVoices: any[] = [];
+      if (provider === 'webspeech') {
+        if (!window.speechSynthesis) {
+          throw new Error('Web Speech API not available');
+        }
+        const rawVoices = window.speechSynthesis.getVoices();
+        console.log(`[TTS] Found ${rawVoices.length} Web Speech voices for rescan`);
+        
+        // Convert SpeechSynthesisVoice objects to plain objects for IPC serialization
+        currentVoices = rawVoices.map(v => ({
+          name: v.name,
+          lang: v.lang,
+          voiceURI: v.voiceURI,
+          localService: v.localService,
+          default: v.default
+        }));
+        
+        console.log(`[TTS] Serialized voices for IPC:`, currentVoices[0]); // Log first voice to verify
+      }
+      
+      if (currentVoices.length === 0) {
+        throw new Error(`No ${provider} voices available to rescan`);
+      }
+      
+      // Call backend to rescan immediately
+      const { ipcRenderer } = window.require('electron');
+      const result = await ipcRenderer.invoke('provider:rescan-immediate', provider, currentVoices);
+      
+      if (result.success) {
+        console.log(`[TTS] Rescan complete: ${result.count} voices found`);
+        
+        // Reload voice list from database
+        await syncAndLoadVoices();
+        await loadVoiceStats();
+        
+        setError(`✓ ${provider} rescanned: ${result.count} voices found`);
+      } else {
+        throw new Error(result.error || 'Rescan failed');
+      }
+    } catch (err: any) {
+      setError(`Error rescanning ${provider}: ${err.message}`);
+      console.error(`[TTS] Error rescanning ${provider}:`, err);
+    } finally {
+      setRescanningProvider(null);
     }
   };
 
@@ -259,23 +296,14 @@ export const TTS: React.FC = () => {
 
   const getVisibleVoiceCount = (): number => {
     return getFilteredGroups().reduce((sum, group) => sum + group.voices.length, 0);
-  };
-
-  // Get voice counts by provider
+  };  // Get voice counts by provider (only WebSpeech)
   const getProviderVoiceCounts = () => {
-    const counts = { webspeech: 0, azure: 0, google: 0 };
+    const counts = { webspeech: 0 };
     
     voiceGroups.forEach(group => {
       group.voices.forEach(voice => {
-        const voiceId = voice.voice_id || '';
-        if (voiceId.startsWith('azure_')) {
-          counts.azure++;
-        } else if (voiceId.startsWith('google_')) {
-          counts.google++;
-        } else {
-          // Anything without azure_ or google_ prefix is Web Speech
-          counts.webspeech++;
-        }
+        // All available voices are Web Speech (Azure and Google are disabled)
+        counts.webspeech++;
       });
     });
     
@@ -484,9 +512,7 @@ export const TTS: React.FC = () => {
   const handleResetVoice = async () => {
     if (!selectedViewer) return;
     await handleUpdateRule({ customVoiceId: null });
-  };
-
-  // Get filtered voice groups for viewer voice picker
+  };  // Get filtered voice groups for viewer voice picker
   const getViewerFilteredGroups = () => {
     if (!voiceGroups.length || !settings) return [];
 
@@ -494,20 +520,17 @@ export const TTS: React.FC = () => {
       .map(group => ({
         ...group,
         voices: group.voices.filter(voice => {
-          // Only show available voices from ENABLED providers
+          // Only show available voices from ENABLED providers (WebSpeech only)
           const voiceId = voice.voice_id || '';
-          let providerEnabled = false;
           
-          if (voiceId.startsWith('azure_')) {
-            providerEnabled = settings.azureEnabled ?? false;
-          } else if (voiceId.startsWith('google_')) {
-            providerEnabled = settings.googleEnabled ?? false;
-          } else if (voiceId.startsWith('webspeech_')) {
-            providerEnabled = settings.webspeechEnabled ?? false;
+          // Skip Google voices (Google provider is disabled)
+          if (voiceId.startsWith('google_')) {
+            return false;
           }
           
-          // Skip if provider is disabled
-          if (!providerEnabled) return false;
+          // All other voices must be from WebSpeech
+          const webspeechEnabled = settings.webspeechEnabled ?? false;
+          if (!webspeechEnabled) return false;
           
           const matchesSearch = !viewerVoiceSearch ||
             voice.name.toLowerCase().includes(viewerVoiceSearch.toLowerCase()) ||
@@ -554,27 +577,7 @@ export const TTS: React.FC = () => {
       {error && (
         <div className="error-message">
           {error}
-        </div>
-      )}
-
-      {/* Azure Setup Wizard Modal */}
-      {showAzureWizard && (
-        <AzureSetupWizard 
-          onClose={() => setShowAzureWizard(false)}
-          onComplete={async (apiKey: string, region: string) => {
-            console.log('[TTS] Azure setup completed - API Key:', apiKey.substring(0, 10) + '...', 'Region:', region);
-            
-            // Save Azure credentials
-            await handleSettingChange('azureApiKey', apiKey);
-            await handleSettingChange('azureRegion', region);
-            
-            setShowAzureWizard(false);
-            
-            // Reload settings and voices after Azure setup
-            await loadData();
-          }}
-        />
-      )}
+        </div>      )}
 
       {/* Tab Navigation */}
       <div className="tab-navigation">
@@ -662,86 +665,41 @@ export const TTS: React.FC = () => {
           <span className="setting-hint" style={{ display: 'block', fontWeight: 'normal', fontSize: '0.9em', marginTop: '5px' }}>
             Enable multiple providers to use different voices for different viewers
           </span>
-        </label>
-
-        {/* Web Speech Provider */}
+        </label>        {/* Web Speech Provider */}
         <div className="provider-toggle-section" style={{ marginBottom: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
-          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-            <input
-              type="checkbox"
-              checked={settings.webspeechEnabled ?? true}
-              onChange={(e) => handleProviderToggle('webspeech', e.target.checked)}
-            />
-            <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
-              🌐 Web Speech API (Free)
-            </span>
-          </label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={settings.webspeechEnabled ?? true}
+                onChange={(e) => handleProviderToggle('webspeech', e.target.checked)}
+              />              <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
+                🌐 Web Speech API (Free)
+              </span>
+            </label>
+            <button
+              onClick={() => handleProviderRescan('webspeech')}
+              disabled={rescanningProvider === 'webspeech'}
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.9em',
+                backgroundColor: rescanningProvider === 'webspeech' ? '#555' : '#4a4a4a',
+                border: '1px solid #666',
+                borderRadius: '4px',
+                cursor: rescanningProvider === 'webspeech' ? 'not-allowed' : 'pointer',
+                color: '#fff',
+                opacity: rescanningProvider === 'webspeech' ? 0.7 : 1
+              }}
+              title={rescanningProvider === 'webspeech' ? 'Rescanning...' : 'Click to rescan voices immediately'}
+            >
+              {rescanningProvider === 'webspeech' ? '⏳ Rescanning...' : '🔄 Rescan'}
+            </button>
+          </div>
           <div style={{ marginLeft: '28px', color: '#888' }}>
             <div>✓ {providerCounts.webspeech} system voices available</div>
             <div>✓ No API key required</div>
-            <div>✓ Works offline</div>
-          </div>
+            <div>✓ Works offline</div>          </div>
         </div>
-
-        {/* Azure Provider */}
-        <div className="provider-toggle-section" style={{ marginBottom: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
-          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-            <input
-              type="checkbox"
-              checked={settings.azureEnabled ?? false}
-              onChange={(e) => handleProviderToggle('azure', e.target.checked)}
-            />
-            <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
-              ☁️ Azure TTS (5M chars/month free)
-            </span>
-          </label>
-          <div style={{ marginLeft: '28px', color: '#888' }}>
-            <div>✓ {providerCounts.azure > 0 ? `${providerCounts.azure} neural voices` : '400+ neural voices'}</div>
-            <div>✓ 53 languages</div>
-            <div>✓ Speaking styles support</div>
-            {settings.azureEnabled && settings.azureApiKey && settings.azureRegion && (
-              <div style={{ color: '#4CAF50', marginTop: '8px' }}>
-                ✓ Configured ({settings.azureRegion})
-              </div>
-            )}
-            {settings.azureEnabled && !settings.azureApiKey && (
-              <div style={{ color: '#ff9800', marginTop: '8px' }}>
-                ⚠️ API key not configured
-              </div>
-            )}
-          </div>
-          {settings.azureEnabled && (
-            <button
-              onClick={() => setShowAzureWizard(true)}
-              className="btn btn-secondary"
-              style={{ marginTop: '10px', marginLeft: '28px' }}
-            >
-              🔧 {settings.azureApiKey ? 'Update' : 'Setup'} Azure Credentials
-            </button>
-          )}
-        </div>
-
-        {/* Google Provider */}
-        <div className="provider-toggle-section" style={{ marginBottom: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
-          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-            <input
-              type="checkbox"
-              checked={settings.googleEnabled ?? false}
-              onChange={(e) => handleProviderToggle('google', e.target.checked)}
-              disabled={true}
-            />
-            <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold', opacity: 0.5 }}>
-              🔊 Google Cloud TTS (1M chars/month free)
-            </span>
-          </label>
-          <div style={{ marginLeft: '28px', color: '#888' }}>
-            <div>✓ 380+ WaveNet voices</div>
-            <div>✓ 40+ languages</div>
-            <div>✓ Premium quality</div>
-            <div style={{ color: '#666', marginTop: '8px', fontStyle: 'italic' }}>
-              Coming in Phase 2 (after Azure)
-            </div>
-          </div>        </div>
       </div>
 
       {/* Debug Section */}
@@ -1373,52 +1331,44 @@ export const TTS: React.FC = () => {
   }
 
   function renderViewerRuleEditor() {
-    if (!viewerRule || !settings) return null;
-
-    // Get the voice info by numeric ID (for viewer custom voices)
+    if (!viewerRule || !settings) return null;    // Get the voice info by numeric ID (for viewer custom voices)
     const getVoiceInfoById = (voiceId: number | null) => {
       if (voiceId === null) return { name: null, voice: null, available: true };
       // Find the voice in voice groups
       for (const group of voiceGroups) {
         const voice = group.voices.find(v => v.id === voiceId);
         if (voice) {
-          // Check if the voice's provider is enabled
+          // Check if the voice's provider is enabled (WebSpeech only)
           const voiceIdStr = voice.voice_id || '';
-          let providerEnabled = false;
           
-          if (voiceIdStr.startsWith('azure_')) {
-            providerEnabled = settings.azureEnabled ?? false;
-          } else if (voiceIdStr.startsWith('google_')) {
-            providerEnabled = settings.googleEnabled ?? false;
-          } else if (voiceIdStr.startsWith('webspeech_')) {
-            providerEnabled = settings.webspeechEnabled ?? false;
+          // Skip Google voices (Google provider is disabled)
+          if (voiceIdStr.startsWith('google_')) {
+            return { name: voice.name, voice, available: false };
           }
           
-          return { name: voice.name, voice, available: providerEnabled };
+          // Check if WebSpeech is enabled
+          const webspeechEnabled = settings.webspeechEnabled ?? false;
+          return { name: voice.name, voice, available: webspeechEnabled };
         }
       }
       return { name: `Voice #${voiceId}`, voice: null, available: false };
-    };
-
-    // Get the voice info by voice_id string (for global voice setting)
+    };    // Get the voice info by voice_id string (for global voice setting)
     const getVoiceInfoByVoiceId = (voiceIdStr: string) => {
       if (!voiceIdStr) return { name: null, voice: null, available: true };
       // Find the voice in voice groups
       for (const group of voiceGroups) {
         const voice = group.voices.find(v => v.voice_id === voiceIdStr);
         if (voice) {
-          // Check if the voice's provider is enabled
-          let providerEnabled = false;
+          // Check if the voice's provider is enabled (WebSpeech only)
           
-          if (voiceIdStr.startsWith('azure_')) {
-            providerEnabled = settings.azureEnabled ?? false;
-          } else if (voiceIdStr.startsWith('google_')) {
-            providerEnabled = settings.googleEnabled ?? false;
-          } else if (voiceIdStr.startsWith('webspeech_')) {
-            providerEnabled = settings.webspeechEnabled ?? false;
+          // Skip Google voices (Google provider is disabled)
+          if (voiceIdStr.startsWith('google_')) {
+            return { name: voice.name, voice, available: false };
           }
           
-          return { name: voice.name, voice, available: providerEnabled };
+          // Check if WebSpeech is enabled
+          const webspeechEnabled = settings.webspeechEnabled ?? false;
+          return { name: voice.name, voice, available: webspeechEnabled };
         }
       }
       return { name: voiceIdStr, voice: null, available: false };
@@ -1429,12 +1379,9 @@ export const TTS: React.FC = () => {
     
     const viewerFilteredGroups = getViewerFilteredGroups();
     const viewerVisibleCount = getViewerVisibleVoiceCount();
-    
-    // Get list of enabled providers for display
+      // Get list of enabled providers for display (WebSpeech only)
     const enabledProviders: string[] = [];
     if (settings.webspeechEnabled) enabledProviders.push('Web Speech');
-    if (settings.azureEnabled) enabledProviders.push('Azure');
-    if (settings.googleEnabled) enabledProviders.push('Google');
     const providersText = enabledProviders.length > 0 ? enabledProviders.join(', ') : 'None';
 
     return (

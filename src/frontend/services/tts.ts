@@ -95,6 +95,54 @@ export async function autoSyncWebSpeechVoices(): Promise<number> {
   }
 }
 
+// Initialize voice syncing on app startup (one-time per provider)
+export async function initializeVoiceSync(): Promise<{ success: boolean; count: number }> {
+  try {
+    console.log('[TTS] Checking if voice sync is needed...');
+    
+    if (!window.speechSynthesis) {
+      console.warn('[TTS] Web Speech API not available');
+      return { success: true, count: 0 };
+    }
+
+    // Check with backend if WebSpeech voices need syncing
+    const syncNeeded = await ipcRenderer.invoke('provider:check-sync-needed', 'webspeech');
+    
+    if (!syncNeeded) {
+      console.log('[TTS] WebSpeech voices already synced, skipping');
+      return { success: true, count: 0 };
+    }    console.log('[TTS] WebSpeech voices need syncing, performing sync...');
+    
+    const rawVoices = window.speechSynthesis.getVoices();
+    if (rawVoices.length === 0) {
+      console.log('[TTS] No WebSpeech voices available to sync');
+      return { success: true, count: 0 };
+    }
+
+    // Convert SpeechSynthesisVoice objects to plain objects for IPC serialization
+    const serializedVoices = rawVoices.map(v => ({
+      name: v.name,
+      lang: v.lang,
+      voiceURI: v.voiceURI,
+      localService: v.localService,
+      default: v.default
+    }));
+    
+    const result = await ipcRenderer.invoke('tts:sync-voices', 'webspeech', serializedVoices);
+    
+    if (result.success) {
+      console.log(`[TTS] Synced ${result.count} WebSpeech voices on startup`);
+      return { success: true, count: result.count };
+    } else {
+      console.error('[TTS] Failed to sync WebSpeech voices:', result.error);
+      return { success: false, count: 0 };
+    }
+  } catch (error: any) {
+    console.error('[TTS] Error in initializeVoiceSync:', error);
+    return { success: false, count: 0 };
+  }
+}
+
 // Web Speech API - Renderer Process Only
 let webSpeechSynth: SpeechSynthesis | null = null;
 let webSpeechVoices: SpeechSynthesisVoice[] = [];
@@ -209,7 +257,7 @@ function getLanguageName(langCode: string): string {
   return langMap[langCode] || langCode;
 }
 
-function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): void {
+async function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): Promise<void> {
   if (!webSpeechSynth) {
     throw new Error('Web Speech API not available');
   }
@@ -221,16 +269,26 @@ function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): voi
   
   const utterance = new SpeechSynthesisUtterance(text);
   
-  // Extract voice info from the complex voiceId format: webspeech_en-GB_0_Microsoft_George...
-  // Try to find the voice by index position first
   let voice: SpeechSynthesisVoice | undefined;
   
-  // Method 1: Try matching the full voiceURI or name directly
-  const cleanVoiceId = voiceId.replace(/^webspeech_/, '');
-  voice = webSpeechVoices.find(v => v.voiceURI === cleanVoiceId || v.name === cleanVoiceId);
+  // Try to get voiceURI from database metadata
+  try {
+    const metaResult = await ipcRenderer.invoke('tts:get-voice-metadata', voiceId);
+    if (metaResult.success && metaResult.voiceURI) {
+      console.log('[TTS] webSpeechSpeak() - Got voiceURI from database:', metaResult.voiceURI);
+      // Find voice by voiceURI
+      voice = webSpeechVoices.find(v => v.voiceURI === metaResult.voiceURI);
+      if (voice) {
+        console.log('[TTS] webSpeechSpeak() - Found voice by voiceURI:', voice.name, voice.lang);
+      }
+    }
+  } catch (error) {
+    console.warn('[TTS] webSpeechSpeak() - Could not get voice metadata:', error);
+  }
   
-  // Method 2: If not found, try to parse the complex ID and match by index
+  // Fallback: If not found by voiceURI, try to parse the complex ID and match by index
   if (!voice && voiceId.startsWith('webspeech_')) {
+    const cleanVoiceId = voiceId.replace(/^webspeech_/, '');
     const parts = cleanVoiceId.split('_');
     if (parts.length >= 2) {
       const langCode = parts[0]; // e.g., 'en-GB'
@@ -243,15 +301,17 @@ function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): voi
       // Get the voice at the specified index
       if (voicesForLang.length > index) {
         voice = voicesForLang[index];
-        console.log('[TTS] webSpeechSpeak() - Found voice by index:', voice?.name, voice?.lang, 'index:', index);
+        console.log('[TTS] webSpeechSpeak() - Found voice by index fallback:', voice.name, voice.lang);
       }
-    }
-  }
+    }  }
   
-  console.log('[TTS] webSpeechSpeak() - Looking for voiceId:', voiceId, 'Found:', voice?.name, voice?.lang);
+  console.log('[TTS] webSpeechSpeak() - Final voice selection:', voice?.name, voice?.lang, 'voiceURI:', voice?.voiceURI);
   
   if (voice) {
     utterance.voice = voice;
+    console.log('[TTS] webSpeechSpeak() - ✓ Voice set to:', voice.name, '(' + voice.lang + ')');
+  } else {
+    console.warn('[TTS] webSpeechSpeak() - ✗ Could not find voice, using browser default');
   }
   
   // Set options
@@ -319,7 +379,7 @@ export async function testVoice(voiceId: string, options?: TTSOptions): Promise<
   
   // Use Web Speech for non-Azure/Google voices
   if (!isAzureVoice && !isGoogleVoice) {
-    webSpeechSpeak(testMessage, voiceId, options || {});
+    await webSpeechSpeak(testMessage, voiceId, options || {});
     return;
   }
   
@@ -337,11 +397,10 @@ export async function speak(text: string, options?: TTSOptions): Promise<void> {
   const voiceId = options?.voiceId || settings.voiceId;
   const isAzureVoice = voiceId?.startsWith('azure_');
   const isGoogleVoice = voiceId?.startsWith('google_');
-  
-  // Use Web Speech for non-Azure/Google voices
+    // Use Web Speech for non-Azure/Google voices
   if (!isAzureVoice && !isGoogleVoice) {
     console.log('[TTS Service] speak() - Using Web Speech for voiceId:', voiceId);
-    webSpeechSpeak(text, voiceId, options || {});
+    await webSpeechSpeak(text, voiceId, options || {});
     return;
   }
   

@@ -182,6 +182,18 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tts_voice_ids_lookup ON tts_voice_ids(voice_id)
   `);
 
+  // Create tts_provider_status table to track voice sync state per provider
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tts_provider_status (
+      provider TEXT PRIMARY KEY,
+      is_enabled INTEGER DEFAULT 1,
+      last_synced_at TEXT,
+      voice_count INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
   // Create viewer_tts_rules table for per-viewer TTS overrides
   db.exec(`
     CREATE TABLE IF NOT EXISTS viewer_tts_rules (

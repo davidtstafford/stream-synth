@@ -1,7 +1,6 @@
 import { getDatabase } from '../connection';
 
 export interface VoiceRecord {
-  id: number;
   voice_id: string;
   provider: string;
   source: string | null;
@@ -10,9 +9,7 @@ export interface VoiceRecord {
   language_name: string;
   region: string | null;
   gender: string | null;
-  is_available: number;
   display_order: number | null;
-  last_seen_at: string | null;
   created_at: string;
   metadata: string | null;
 }
@@ -21,23 +18,32 @@ export interface VoiceWithNumericId extends VoiceRecord {
   numeric_id: number;
 }
 
+export interface ProviderStatus {
+  provider: string;
+  is_enabled: number;
+  last_synced_at: string | null;
+  voice_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export class VoicesRepository {
-  // Create or update a voice
-  upsertVoice(voice: Omit<VoiceRecord, 'id' | 'created_at' | 'last_seen_at'>): number {
+  // Create or update a voice (using voice_id as natural key)
+  upsertVoice(voice: Omit<VoiceRecord, 'created_at'>): string {
     const db = getDatabase();
     const now = new Date().toISOString();
     
     const existing = db.prepare(
-      'SELECT id FROM tts_voices WHERE voice_id = ?'
-    ).get(voice.voice_id) as { id: number } | undefined;
+      'SELECT voice_id FROM tts_voices WHERE voice_id = ?'
+    ).get(voice.voice_id) as { voice_id: string } | undefined;
 
     if (existing) {
-      // Update existing
+      // Update existing - don't touch numeric_id
       db.prepare(`
         UPDATE tts_voices 
         SET provider = ?, source = ?, name = ?, language_code = ?,
-            language_name = ?, region = ?, gender = ?, is_available = 1,
-            display_order = ?, last_seen_at = ?, metadata = ?
+            language_name = ?, region = ?, gender = ?,
+            display_order = ?, metadata = ?
         WHERE voice_id = ?
       `).run(
         voice.provider,
@@ -48,18 +54,16 @@ export class VoicesRepository {
         voice.region,
         voice.gender,
         voice.display_order,
-        now,
         voice.metadata,
         voice.voice_id
       );
-      return existing.id;
     } else {
-      // Insert new
-      const result = db.prepare(`
+      // Insert new voice (numeric_id will be auto-assigned in reassignNumericIds)
+      db.prepare(`
         INSERT INTO tts_voices (
           voice_id, provider, source, name, language_code, language_name,
-          region, gender, is_available, display_order, last_seen_at, created_at, metadata
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+          region, gender, display_order, created_at, metadata
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         voice.voice_id,
         voice.provider,
@@ -71,79 +75,67 @@ export class VoicesRepository {
         voice.gender,
         voice.display_order,
         now,
-        now,
         voice.metadata
       );
-      
-      // Assign numeric ID
-      db.prepare(`
-        INSERT INTO tts_voice_ids (voice_id) VALUES (?)
-      `).run(voice.voice_id);
-      
-      return result.lastInsertRowid as number;
-    }
-  }
-
-  // Mark voices as unavailable if not in current list (provider-specific)
-  markUnavailableExcept(provider: string, currentVoiceIds: string[]): void {
-    const db = getDatabase();
-    
-    if (currentVoiceIds.length === 0) {
-      // Mark all voices from this provider as unavailable
-      db.prepare(`
-        UPDATE tts_voices 
-        SET is_available = 0 
-        WHERE voice_id LIKE ?
-      `).run(`${provider}_%`);
-      return;
     }
     
-    const placeholders = currentVoiceIds.map(() => '?').join(',');
-    db.prepare(`
-      UPDATE tts_voices 
-      SET is_available = 0 
-      WHERE voice_id LIKE ? AND voice_id NOT IN (${placeholders})
-    `).run(`${provider}_%`, ...currentVoiceIds);
+    return voice.voice_id;
   }
-
-  // Mark voices as unavailable if not in current list (deprecated - use markUnavailableExcept)
-  markUnavailable(currentVoiceIds: string[]): void {
+  // Purge all voices and numeric IDs for a provider (clean slate on rescan)
+  purgeProvider(provider: string): void {
     const db = getDatabase();
     
-    if (currentVoiceIds.length === 0) {
-      // Mark all as unavailable
-      db.prepare('UPDATE tts_voices SET is_available = 0').run();
-      return;
+    // Get all voice_ids for this provider first
+    const voiceIds = db.prepare(
+      'SELECT voice_id FROM tts_voices WHERE provider = ?'
+    ).all(provider) as { voice_id: string }[];
+    
+    // Delete numeric ID mappings
+    for (const { voice_id } of voiceIds) {
+      db.prepare('DELETE FROM tts_voice_ids WHERE voice_id = ?').run(voice_id);
     }
     
-    const placeholders = currentVoiceIds.map(() => '?').join(',');
-    db.prepare(`
-      UPDATE tts_voices 
-      SET is_available = 0 
-      WHERE voice_id NOT IN (${placeholders})
-    `).run(...currentVoiceIds);
+    // Delete voices
+    const result = db.prepare(
+      'DELETE FROM tts_voices WHERE provider = ?'
+    ).run(provider);
+    
+    console.log(`[Voices] Purged ${result.changes} ${provider} voices and their numeric ID mappings`);
   }
 
-  // Mark all voices from a specific provider as unavailable
-  markProviderUnavailable(provider: string): void {
+  // Assign sequential numeric IDs to all voices for a provider (1, 2, 3...)
+  assignNumericIds(provider: string): void {
     const db = getDatabase();
-    db.prepare(`
-      UPDATE tts_voices 
-      SET is_available = 0 
-      WHERE voice_id LIKE ?
-    `).run(`${provider}_%`);
-    console.log(`[Voices] Marked all ${provider} voices as unavailable`);
+    
+    // Get all voices for this provider in order
+    const voices = db.prepare(`
+      SELECT voice_id FROM tts_voices 
+      WHERE provider = ? 
+      ORDER BY display_order, language_code, name
+    `).all(provider) as { voice_id: string }[];
+
+    let nextId = 1;
+    
+    for (const voice of voices) {
+      // Insert new numeric ID (no existing ones since we just purged)
+      db.prepare(
+        'INSERT INTO tts_voice_ids (numeric_id, voice_id) VALUES (?, ?)'
+      ).run(nextId, voice.voice_id);
+      nextId++;
+    }
+      console.log(`[Voices] Assigned numeric IDs for ${provider}: ${voices.length} voices`);
   }
 
-  // Mark all voices from a specific provider as available
-  markProviderAvailable(provider: string): void {
+  // Get all voices for a provider
+  getVoicesByProvider(provider: string): VoiceWithNumericId[] {
     const db = getDatabase();
-    const result = db.prepare(`
-      UPDATE tts_voices 
-      SET is_available = 1 
-      WHERE voice_id LIKE ?
-    `).run(`${provider}_%`);
-    console.log(`[Voices] Marked ${result.changes} ${provider} voices as available`);
+    return db.prepare(`
+      SELECT v.*, n.numeric_id
+      FROM tts_voices v
+      LEFT JOIN tts_voice_ids n ON v.voice_id = n.voice_id
+      WHERE v.provider = ?
+      ORDER BY COALESCE(n.numeric_id, 999999), v.name
+    `).all(provider) as VoiceWithNumericId[];
   }
 
   // Get all available voices with numeric IDs
@@ -153,7 +145,6 @@ export class VoicesRepository {
       SELECT v.*, n.numeric_id
       FROM tts_voices v
       LEFT JOIN tts_voice_ids n ON v.voice_id = n.voice_id
-      WHERE v.is_available = 1
       ORDER BY v.provider, v.language_code, v.source, v.display_order, v.name
     `).all() as VoiceWithNumericId[];
   }
@@ -169,7 +160,7 @@ export class VoicesRepository {
     `).get(numericId) as VoiceWithNumericId | undefined;
   }
 
-  // Get voice by voice_id
+  // Get voice by voice_id (natural key)
   getVoiceById(voiceId: string): VoiceWithNumericId | undefined {
     const db = getDatabase();
     return db.prepare(`
@@ -204,15 +195,55 @@ export class VoicesRepository {
     return parts.join(' - ');
   }
 
+  // Provider status methods
+  getProviderStatus(provider: string): ProviderStatus | undefined {
+    const db = getDatabase();
+    return db.prepare(
+      'SELECT * FROM tts_provider_status WHERE provider = ?'
+    ).get(provider) as ProviderStatus | undefined;
+  }
+
+  updateProviderStatus(provider: string, isEnabled: boolean, voiceCount: number): void {
+    const db = getDatabase();
+    const now = new Date().toISOString();
+    
+    const existing = this.getProviderStatus(provider);
+    
+    if (existing) {
+      db.prepare(`
+        UPDATE tts_provider_status 
+        SET is_enabled = ?, voice_count = ?, last_synced_at = ?, updated_at = ?
+        WHERE provider = ?
+      `).run(isEnabled ? 1 : 0, voiceCount, now, now, provider);
+    } else {
+      db.prepare(`
+        INSERT INTO tts_provider_status (provider, is_enabled, voice_count, last_synced_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(provider, isEnabled ? 1 : 0, voiceCount, now, now, now);
+    }
+    
+    console.log(`[Voices] Updated provider status: ${provider} (enabled=${isEnabled}, voices=${voiceCount})`);
+  }
+
+  clearProviderSyncStatus(provider: string): void {
+    const db = getDatabase();
+    const now = new Date().toISOString();
+    
+    db.prepare(`
+      UPDATE tts_provider_status 
+      SET last_synced_at = NULL, updated_at = ?
+      WHERE provider = ?
+    `).run(now, provider);
+    
+    console.log(`[Voices] Cleared sync status for ${provider}`);
+  }
   // Stats for display
   getStats(): { total: number; available: number; byProvider: Record<string, number> } {
     const db = getDatabase();
     const total = db.prepare('SELECT COUNT(*) as count FROM tts_voices').get() as { count: number };
-    const available = db.prepare('SELECT COUNT(*) as count FROM tts_voices WHERE is_available = 1').get() as { count: number };
     const byProvider = db.prepare(`
       SELECT provider, COUNT(*) as count 
       FROM tts_voices 
-      WHERE is_available = 1 
       GROUP BY provider
     `).all() as { provider: string; count: number }[];
 
@@ -223,7 +254,7 @@ export class VoicesRepository {
 
     return {
       total: total.count,
-      available: available.count,
+      available: total.count, // All stored voices are considered available in new design
       byProvider: providerCounts
     };
   }
