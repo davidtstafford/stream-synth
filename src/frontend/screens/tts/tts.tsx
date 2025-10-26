@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import * as ttsService from '../../services/tts';
+import { VoiceSettingsTab } from './tabs/VoiceSettingsTab';
+import { TTSRulesTab } from './tabs/TTSRulesTab';
+import { ViewersTab } from './tabs/ViewersTab';
 import './tts.css';
 
 interface VoiceGroup {
@@ -22,7 +25,8 @@ export const TTS: React.FC = () => {
   const [voiceGroups, setVoiceGroups] = useState<VoiceGroup[]>([]);
   const [providers, setProviders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);  const [testMessage, setTestMessage] = useState('Hello! This is a test of the text to speech system.');
+  const [error, setError] = useState<string | null>(null);
+  const [testMessage, setTestMessage] = useState('Hello! This is a test of the text to speech system.');
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   // Rescan state
@@ -39,8 +43,7 @@ export const TTS: React.FC = () => {
   const [viewerSearchResults, setViewerSearchResults] = useState<Array<{ id: string; username: string; display_name?: string }>>([]);
   const [selectedViewer, setSelectedViewer] = useState<string | null>(null);
   const [viewerRule, setViewerRule] = useState<ttsService.ViewerTTSRule | null>(null);
-  const [loadingViewerRule, setLoadingViewerRule] = useState(false);
-  
+
   // Viewer voice filters
   const [viewerVoiceSearch, setViewerVoiceSearch] = useState('');
   const [viewerLanguageFilter, setViewerLanguageFilter] = useState('all');
@@ -55,15 +58,15 @@ export const TTS: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const [loadedSettings, loadedProviders] = await Promise.all([
         ttsService.getSettings(),
         ttsService.getProviders()
       ]);
-      
+
       setSettings(loadedSettings);
       setProviders(loadedProviders);
-      
+
       // Load voices for current provider
       if (loadedSettings) {
         await syncAndLoadVoices(loadedSettings);
@@ -75,20 +78,22 @@ export const TTS: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };  const syncAndLoadVoices = async (currentSettings?: ttsService.TTSSettings) => {
+  };
+
+  const syncAndLoadVoices = async (currentSettings?: ttsService.TTSSettings) => {
     try {
       console.log('[TTS Screen] Loading voices from database...');
-      
+
       // Load grouped voices from database (voices are synced on app startup, not here)
       const grouped = await ttsService.getGroupedVoices();
       console.log('[TTS Screen] Got grouped voices:', grouped);
-      
+
       // Convert Record to array of VoiceGroup objects
       const groupArray: VoiceGroup[] = Object.entries(grouped).map(([category, voices]) => ({
         category,
         voices: voices as any[]
       }));
-      
+
       console.log(`[TTS Screen] Created ${groupArray.length} voice groups`);
       console.log('[TTS Screen] Sample voices:', groupArray[0]?.voices.slice(0, 3));
       setVoiceGroups(groupArray);
@@ -106,6 +111,7 @@ export const TTS: React.FC = () => {
       console.error('[TTS Screen] Error loading voice stats:', err);
     }
   };
+
   // Handle provider toggle (enable/disable provider voices in database)
   const handleProviderToggle = async (provider: 'webspeech' | 'azure' | 'google', enabled: boolean) => {
     try {
@@ -117,16 +123,16 @@ export const TTS: React.FC = () => {
       }
 
       console.log(`[TTS] Toggling ${provider} provider:`, enabled);
-      
+
       // Save the enable setting
       await ttsService.saveSettings({ [`${provider}Enabled`]: enabled } as any);
       setSettings(prev => prev ? { ...prev, [`${provider}Enabled`]: enabled } : null);
-      
+
       // For other providers, just toggle availability
       const { ipcRenderer } = window.require('electron');
       await ipcRenderer.invoke('provider:toggle', { provider, enabled });
       console.log(`[TTS] Provider ${provider} ${enabled ? 'enabled' : 'disabled'}`);
-      
+
       // Reload voices
       await syncAndLoadVoices();
       await loadVoiceStats();
@@ -134,7 +140,9 @@ export const TTS: React.FC = () => {
       setError(err.message);
       console.error(`[TTS] Error toggling ${provider} provider:`, err);
     }
-  };  // Handle provider rescan - immediate, with loading spinner
+  };
+
+  // Handle provider rescan - immediate, with loading spinner
   const handleProviderRescan = async (provider: 'webspeech' | 'azure' | 'google') => {
     try {
       // Prevent Azure provider from being rescanned
@@ -146,9 +154,9 @@ export const TTS: React.FC = () => {
 
       setRescanningProvider(provider);
       setError(null);
-      
+
       console.log(`[TTS] Rescanning ${provider} voices immediately...`);
-      
+
       // Get current voices from Web Speech API for this provider
       let currentVoices: any[] = [];
       if (provider === 'webspeech') {
@@ -157,7 +165,7 @@ export const TTS: React.FC = () => {
         }
         const rawVoices = window.speechSynthesis.getVoices();
         console.log(`[TTS] Found ${rawVoices.length} Web Speech voices for rescan`);
-        
+
         // Convert SpeechSynthesisVoice objects to plain objects for IPC serialization
         currentVoices = rawVoices.map(v => ({
           name: v.name,
@@ -166,25 +174,25 @@ export const TTS: React.FC = () => {
           localService: v.localService,
           default: v.default
         }));
-        
+
         console.log(`[TTS] Serialized voices for IPC:`, currentVoices[0]); // Log first voice to verify
       }
-      
+
       if (currentVoices.length === 0) {
         throw new Error(`No ${provider} voices available to rescan`);
       }
-      
+
       // Call backend to rescan immediately
       const { ipcRenderer } = window.require('electron');
       const result = await ipcRenderer.invoke('provider:rescan-immediate', provider, currentVoices);
-      
+
       if (result.success) {
         console.log(`[TTS] Rescan complete: ${result.count} voices found`);
-        
+
         // Reload voice list from database
         await syncAndLoadVoices();
         await loadVoiceStats();
-        
+
         setError(`✓ ${provider} rescanned: ${result.count} voices found`);
       } else {
         throw new Error(result.error || 'Rescan failed');
@@ -207,6 +215,7 @@ export const TTS: React.FC = () => {
       setError(err.message);
     }
   };
+
   const handleTestVoice = async () => {
     if (!settings?.voiceId) {
       setError('Please select a voice first');
@@ -216,13 +225,13 @@ export const TTS: React.FC = () => {
     try {
       setIsSpeaking(true);
       setError(null);
-      
+
       console.log('[TTS Test] Testing voice with voiceId:', settings.voiceId, 'options:', {
         volume: settings.volume,
         rate: settings.rate,
         pitch: settings.pitch
       });
-      
+
       await ttsService.testVoice(settings.voiceId, {
         volume: settings.volume,
         rate: settings.rate,
@@ -263,10 +272,10 @@ export const TTS: React.FC = () => {
       voices: group.voices.filter(voice => {
         // Only show available voices (no prefix checking needed)
         // The database handles availability based on provider enable state
-        
+
         // Search filter
         const searchLower = searchTerm.toLowerCase();
-        const matchesSearch = !searchTerm || 
+        const matchesSearch = !searchTerm ||
           voice.name.toLowerCase().includes(searchLower) ||
           voice.language_name.toLowerCase().includes(searchLower) ||
           voice.region.toLowerCase().includes(searchLower) ||
@@ -286,34 +295,33 @@ export const TTS: React.FC = () => {
   const formatVoiceOption = (voice: VoiceGroup['voices'][0]): string => {
     const genderIcon = voice.gender === 'male' ? '♂️' : voice.gender === 'female' ? '♀️' : '⚧';
     const id = voice.id.toString().padStart(3, '0');
-    
+
     // Include region if available to differentiate voices with same name
     const location = voice.region ? ` (${voice.region})` : '';
-    
+
     return `${id} │ ${voice.name}${location} ${genderIcon}`;
   };
 
   const getVisibleVoiceCount = (): number => {
     return getFilteredGroups().reduce((sum, group) => sum + group.voices.length, 0);
-  };  // Get voice counts by provider (only WebSpeech)
+  };
+
+  // Get voice counts by provider (only WebSpeech)
   const getProviderVoiceCounts = () => {
     const counts = { webspeech: 0 };
-    
+
     voiceGroups.forEach(group => {
       group.voices.forEach(voice => {
         // All available voices are Web Speech (Azure and Google are disabled)
         counts.webspeech++;
       });
     });
-    
+
     return counts;
   };
-  
-  const providerCounts = getProviderVoiceCounts();
 
   // Viewer tab handlers
-  const handleViewerSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const query = e.target.value;
+  const handleViewerSearch = async (query: string) => {
     setViewerSearchTerm(query);
 
     if (query.length < 2) {
@@ -336,7 +344,6 @@ export const TTS: React.FC = () => {
     setSelectedViewer(username);
     setViewerSearchTerm('');
     setViewerSearchResults([]);
-    setLoadingViewerRule(true);
 
     try {
       const rule = await ttsService.getViewerRule(username);
@@ -344,8 +351,6 @@ export const TTS: React.FC = () => {
     } catch (err: any) {
       console.error('[Viewers] Error loading viewer rule:', err);
       setError(err.message);
-    } finally {
-      setLoadingViewerRule(false);
     }
   };
 
@@ -511,7 +516,9 @@ export const TTS: React.FC = () => {
   const handleResetVoice = async () => {
     if (!selectedViewer) return;
     await handleUpdateRule({ customVoiceId: null });
-  };  // Get filtered voice groups for viewer voice picker
+  };
+
+  // Get filtered voice groups for viewer voice picker
   const getViewerFilteredGroups = () => {
     if (!voiceGroups.length || !settings) return [];
 
@@ -521,16 +528,16 @@ export const TTS: React.FC = () => {
         voices: group.voices.filter(voice => {
           // Only show available voices from ENABLED providers (WebSpeech only)
           const voiceId = voice.voice_id || '';
-          
+
           // Skip Google voices (Google provider is disabled)
           if (voiceId.startsWith('google_')) {
             return false;
           }
-          
+
           // All other voices must be from WebSpeech
           const webspeechEnabled = settings.webspeechEnabled ?? false;
           if (!webspeechEnabled) return false;
-          
+
           const matchesSearch = !viewerVoiceSearch ||
             voice.name.toLowerCase().includes(viewerVoiceSearch.toLowerCase()) ||
             voice.voice_id.toString().includes(viewerVoiceSearch);
@@ -568,15 +575,18 @@ export const TTS: React.FC = () => {
 
   const filteredGroups = getFilteredGroups();
   const visibleCount = getVisibleVoiceCount();
+  const providerCounts = getProviderVoiceCounts();
+  const viewerFilteredGroups = getViewerFilteredGroups();
 
   return (
     <div className="tts-container">
       <h2>Text-to-Speech</h2>
-      
+
       {error && (
         <div className="error-message">
           {error}
-        </div>      )}
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <div className="tab-navigation">
@@ -603,964 +613,79 @@ export const TTS: React.FC = () => {
       {/* Tab Content */}
       {activeTab === 'settings' && (
         <div className="tab-content">
-          {renderVoiceSettingsTab()}
+          <VoiceSettingsTab
+            settings={settings}
+            voiceGroups={voiceGroups}
+            voiceStats={voiceStats}
+            testMessage={testMessage}
+            isSpeaking={isSpeaking}
+            rescanningProvider={rescanningProvider}
+            searchTerm={searchTerm}
+            languageFilter={languageFilter}
+            genderFilter={genderFilter}
+            onSettingChange={handleSettingChange}
+            onTestVoice={handleTestVoice}
+            onStop={handleStop}
+            onTestMessageChange={setTestMessage}
+            onProviderToggle={handleProviderToggle}
+            onProviderRescan={handleProviderRescan}
+            onSearchChange={setSearchTerm}
+            onLanguageFilterChange={setLanguageFilter}
+            onGenderFilterChange={setGenderFilter}
+            getUniqueLanguages={getUniqueLanguages}
+            getFilteredGroups={getFilteredGroups}
+            getVisibleVoiceCount={getVisibleVoiceCount}
+            formatVoiceOption={formatVoiceOption}
+            getProviderVoiceCounts={() => providerCounts}
+          />
         </div>
       )}
 
       {activeTab === 'rules' && (
         <div className="tab-content">
-          {renderTTSRulesTab()}
+          <TTSRulesTab
+            settings={settings}
+            onSettingChange={handleSettingChange}
+          />
         </div>
       )}
 
       {activeTab === 'viewers' && (
         <div className="tab-content">
-          {renderViewersTab()}
+          <ViewersTab
+            settings={settings}
+            voiceGroups={viewerFilteredGroups}
+            voiceStats={voiceStats}
+            viewerSearchTerm={viewerSearchTerm}
+            viewerSearchResults={viewerSearchResults}
+            selectedViewer={selectedViewer}
+            viewerRule={viewerRule}
+            viewerVoiceSearch={viewerVoiceSearch}
+            viewerLanguageFilter={viewerLanguageFilter}
+            viewerGenderFilter={viewerGenderFilter}
+            onViewerSearch={handleViewerSearch}
+            onSelectViewer={handleSelectViewer}
+            onCreateRule={handleCreateRule}
+            onDeleteRule={handleDeleteRule}
+            onUpdateRule={handleUpdateRule}
+            onMuteChange={handleMuteChange}
+            onMuteDurationChange={handleMuteDurationChange}
+            getMuteDurationMinutes={getMuteDurationMinutes}
+            onCooldownChange={handleCooldownChange}
+            onCooldownDurationChange={handleCooldownDurationChange}
+            getCooldownDurationMinutes={getCooldownDurationMinutes}
+            onViewerVoiceSearchChange={setViewerVoiceSearch}
+            onViewerLanguageFilterChange={setViewerLanguageFilter}
+            onViewerGenderFilterChange={setViewerGenderFilter}
+            onResetVoice={handleResetVoice}
+            getUniqueLanguages={getUniqueLanguages}
+            getViewerFilteredGroups={getViewerFilteredGroups}
+            getViewerVisibleVoiceCount={getViewerVisibleVoiceCount}
+            formatVoiceOption={formatVoiceOption}
+          />
         </div>
       )}
     </div>
   );
-
-  // Voice Settings Tab Content
-  function renderVoiceSettingsTab() {
-    if (!settings) {
-      return <div>Loading settings...</div>;
-    }
-
-    return (
-      <>
-        {/* Voice Statistics Bar */}
-        <div className="stats-bar">
-          <div className="stat">
-            <span className="stat-label">Total Voices:</span>
-            <span className="stat-value">{voiceStats.total}</span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">Available:</span>
-            <span className="stat-value available">{voiceStats.available}</span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">Showing:</span>
-            <span className="stat-value">{visibleCount}</span>
-          </div>
-        </div>
-
-      {/* Enable/Disable Toggle */}
-      <div className="setting-group">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={settings.enabled}
-            onChange={(e) => handleSettingChange('enabled', e.target.checked)}
-          />
-          <span className="checkbox-text">Enable TTS</span>
-        </label>
-      </div>
-
-      {/* Provider Enable Toggles */}
-      <div className="setting-group">
-        <label className="setting-label">
-          TTS Providers
-          <span className="setting-hint" style={{ display: 'block', fontWeight: 'normal', fontSize: '0.9em', marginTop: '5px' }}>
-            Enable multiple providers to use different voices for different viewers
-          </span>
-        </label>        {/* Web Speech Provider */}
-        <div className="provider-toggle-section" style={{ marginBottom: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
-              <input
-                type="checkbox"
-                checked={settings.webspeechEnabled ?? true}
-                onChange={(e) => handleProviderToggle('webspeech', e.target.checked)}
-              />              <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
-                🌐 Web Speech API (Free)
-              </span>
-            </label>
-            <button
-              onClick={() => handleProviderRescan('webspeech')}
-              disabled={rescanningProvider === 'webspeech'}
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.9em',
-                backgroundColor: rescanningProvider === 'webspeech' ? '#555' : '#4a4a4a',
-                border: '1px solid #666',
-                borderRadius: '4px',
-                cursor: rescanningProvider === 'webspeech' ? 'not-allowed' : 'pointer',
-                color: '#fff',
-                opacity: rescanningProvider === 'webspeech' ? 0.7 : 1
-              }}
-              title={rescanningProvider === 'webspeech' ? 'Rescanning...' : 'Click to rescan voices immediately'}
-            >
-              {rescanningProvider === 'webspeech' ? '⏳ Rescanning...' : '🔄 Rescan'}
-            </button>
-          </div>
-          <div style={{ marginLeft: '28px', color: '#888' }}>
-            <div>✓ {providerCounts.webspeech} system voices available</div>
-            <div>✓ No API key required</div>
-            <div>✓ Works offline</div>          </div>
-        </div>
-      </div>      {/* Voice Search and Filters */}
-      <div className="voice-filters">
-        <input
-          type="text"
-          placeholder="🔍 Search voices by name, language, or ID..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="search-input"
-        />
-        
-        <select
-          value={languageFilter}
-          onChange={(e) => setLanguageFilter(e.target.value)}
-          className="filter-select"
-        >
-          <option value="all">All Languages</option>
-          {getUniqueLanguages().map(lang => (
-            <option key={lang} value={lang}>{lang}</option>
-          ))}
-        </select>
-
-        <select
-          value={genderFilter}
-          onChange={(e) => setGenderFilter(e.target.value)}
-          className="filter-select"
-        >
-          <option value="all">All Genders</option>
-          <option value="male">♂️ Male</option>
-          <option value="female">♀️ Female</option>
-          <option value="neutral">⚧ Neutral</option>
-        </select>
-      </div>
-
-      {/* Voice Selection with Grouped Dropdown */}
-      <div className="setting-group">
-        <label className="setting-label">
-          Voice ({visibleCount} of {voiceStats.available} available)
-        </label>
-        <select
-          value={settings.voiceId || ''}
-          onChange={(e) => handleSettingChange('voiceId', e.target.value)}
-          className="voice-select"
-        >
-          <option value="">Select a voice...</option>
-          {filteredGroups.map(group => (
-            <optgroup key={group.category} label={group.category}>
-              {group.voices.map(voice => (
-                <option key={voice.voice_id} value={voice.voice_id}>
-                  {formatVoiceOption(voice)}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </div>
-
-      {/* Volume Control */}
-      <div className="setting-group">
-        <label className="setting-label">
-          Volume: {settings.volume}%
-        </label>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={settings.volume}
-          onChange={(e) => handleSettingChange('volume', parseInt(e.target.value))}
-          className="slider"
-        />
-      </div>
-
-      {/* Rate Control */}
-      <div className="setting-group">
-        <label className="setting-label">
-          Speed: {settings.rate}x
-        </label>
-        <input
-          type="range"
-          min="0.5"
-          max="2.0"
-          step="0.1"
-          value={settings.rate}
-          onChange={(e) => handleSettingChange('rate', parseFloat(e.target.value))}
-          className="slider"
-        />
-      </div>
-
-      {/* Pitch Control */}
-      <div className="setting-group">
-        <label className="setting-label">
-          Pitch: {settings.pitch}x
-        </label>
-        <input
-          type="range"
-          min="0.5"
-          max="2.0"
-          step="0.1"
-          value={settings.pitch}
-          onChange={(e) => handleSettingChange('pitch', parseFloat(e.target.value))}
-          className="slider"
-        />
-      </div>
-
-      {/* Test Message */}
-      <div className="setting-group">
-        <label className="setting-label">
-          Test Message
-        </label>
-        <textarea
-          value={testMessage}
-          onChange={(e) => setTestMessage(e.target.value)}
-          rows={3}
-          className="test-textarea"
-        />
-      </div>
-
-      {/* Test Buttons */}
-      <div className="button-group">
-        <button
-          onClick={handleTestVoice}
-          disabled={!settings.voiceId || isSpeaking}
-          className={`btn btn-primary ${(!settings.voiceId || isSpeaking) ? 'disabled' : ''}`}
-        >
-          {isSpeaking ? '🔊 Speaking...' : '▶️ Test Voice'}
-        </button>
-          <button
-          onClick={handleStop}
-          disabled={!isSpeaking}
-          className={`btn btn-danger ${!isSpeaking ? 'disabled' : ''}`}
-        >
-          ⏹️ Stop
-        </button>
-      </div>
-      </>
-    );
-  }
-
-  // TTS Rules Tab Content
-  function renderTTSRulesTab() {
-    if (!settings) {
-      return <div>Loading settings...</div>;
-    }
-
-    return (
-      <div className="rules-tab">
-        <h3>📋 TTS Filtering & Rules</h3>
-        <p className="section-description">
-          Control which messages are read aloud and how they are processed.
-        </p>
-
-        {/* Message Filtering */}
-        <div className="rules-section">
-          <h4>� Message Filtering</h4>
-          
-          <div className="setting-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.filterCommands ?? true}
-                onChange={(e) => handleSettingChange('filterCommands', e.target.checked)}
-              />
-              <span className="checkbox-text">
-                Filter Commands
-                <span className="setting-hint">Skip messages starting with ! or ~ (e.g., !followage, ~setmyvoice)</span>
-              </span>
-            </label>
-          </div>
-
-          <div className="setting-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.filterBots ?? true}
-                onChange={(e) => handleSettingChange('filterBots', e.target.checked)}
-              />
-              <span className="checkbox-text">
-                Filter Bot Messages
-                <span className="setting-hint">Skip messages from Nightbot, StreamElements, Streamlabs, Moobot, Fossabot, Wizebot</span>
-              </span>
-            </label>
-          </div>
-
-          <div className="setting-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.filterUrls ?? true}
-                onChange={(e) => handleSettingChange('filterUrls', e.target.checked)}
-              />
-              <span className="checkbox-text">
-                Remove URLs
-                <span className="setting-hint">Strip http:// and https:// links from messages before speaking</span>
-              </span>
-            </label>
-          </div>
-        </div>
-
-        {/* Username Announcement */}
-        <div className="rules-section">
-          <h4>👤 Username Announcement</h4>
-          
-          <div className="setting-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.announceUsername ?? true}
-                onChange={(e) => handleSettingChange('announceUsername', e.target.checked)}
-              />
-              <span className="checkbox-text">
-                Announce Username
-                <span className="setting-hint">Say "Username says:" before each message. Disable to only read the message.</span>
-              </span>
-            </label>
-          </div>
-
-          <div className="example-box">
-            <strong>Example:</strong>
-            <div className="example-text">
-              {settings.announceUsername ?? true
-                ? '🔊 "ViewerName says: Hello everyone!"'
-                : '🔊 "Hello everyone!"'}
-            </div>
-          </div>
-        </div>
-
-        {/* Message Length Limits */}
-        <div className="rules-section">
-          <h4>📏 Message Length Limits</h4>
-          
-          <div className="setting-group">
-            <label className="setting-label">
-              Minimum Length: {settings.minMessageLength ?? 0} characters
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="50"
-              value={settings.minMessageLength ?? 0}
-              onChange={(e) => handleSettingChange('minMessageLength', parseInt(e.target.value))}
-              className="slider"
-            />
-            <p className="setting-hint">
-              Skip messages shorter than this. Set to 0 to disable. Useful for filtering single-emoji spam.
-            </p>
-          </div>
-
-          <div className="setting-group">
-            <label className="setting-label">
-              Maximum Length: {settings.maxMessageLength ?? 500} characters
-            </label>
-            <input
-              type="range"
-              min="50"
-              max="500"
-              step="10"
-              value={settings.maxMessageLength ?? 500}
-              onChange={(e) => handleSettingChange('maxMessageLength', parseInt(e.target.value))}
-              className="slider"
-            />
-            <p className="setting-hint">
-              Truncate messages longer than this. Prevents excessive reading of copypastas.
-            </p>
-          </div>
-        </div>
-
-        {/* Duplicate Detection */}
-        <div className="rules-section">
-          <h4>🔁 Duplicate Message Detection</h4>
-          
-          <div className="setting-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.skipDuplicateMessages ?? true}
-                onChange={(e) => handleSettingChange('skipDuplicateMessages', e.target.checked)}
-              />
-              <span className="checkbox-text">
-                Skip Duplicate Messages
-                <span className="setting-hint">Don't read the same message twice within the time window</span>
-              </span>
-            </label>
-          </div>
-
-          <div className="setting-group">
-            <label className="setting-label">
-              Duplicate Window: {settings.duplicateMessageWindow ?? 300} seconds ({Math.floor((settings.duplicateMessageWindow ?? 300) / 60)} minutes)
-            </label>
-            <input
-              type="range"
-              min="60"
-              max="600"
-              step="30"
-              value={settings.duplicateMessageWindow ?? 300}
-              onChange={(e) => handleSettingChange('duplicateMessageWindow', parseInt(e.target.value))}
-              className="slider"
-            />
-            <p className="setting-hint">
-              How long to remember messages. Same message can only be read once per window.
-            </p>
-          </div>
-        </div>
-
-        {/* Rate Limiting & Cooldowns */}
-        <div className="rules-section">
-          <h4>⏱️ Rate Limiting & Cooldowns</h4>
-          
-          <div className="setting-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.userCooldownEnabled ?? true}
-                onChange={(e) => handleSettingChange('userCooldownEnabled', e.target.checked)}
-              />
-              <span className="checkbox-text">
-                Per-User Cooldown
-                <span className="setting-hint">Limit how often each user can trigger TTS</span>
-              </span>
-            </label>
-          </div>
-
-          {settings.userCooldownEnabled && (
-            <div className="setting-group" style={{ marginLeft: '28px' }}>
-              <label className="setting-label">
-                User Cooldown: {settings.userCooldownSeconds ?? 30} seconds
-              </label>
-              <input
-                type="range"
-                min="5"
-                max="120"
-                step="5"
-                value={settings.userCooldownSeconds ?? 30}
-                onChange={(e) => handleSettingChange('userCooldownSeconds', parseInt(e.target.value))}
-                className="slider"
-              />
-            </div>
-          )}
-
-          <div className="setting-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.globalCooldownEnabled ?? false}
-                onChange={(e) => handleSettingChange('globalCooldownEnabled', e.target.checked)}
-              />
-              <span className="checkbox-text">
-                Global Cooldown
-                <span className="setting-hint">Limit TTS frequency across all users (prevents spam during raids)</span>
-              </span>
-            </label>
-          </div>
-
-          {settings.globalCooldownEnabled && (
-            <div className="setting-group" style={{ marginLeft: '28px' }}>
-              <label className="setting-label">
-                Global Cooldown: {settings.globalCooldownSeconds ?? 5} seconds
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="30"
-                value={settings.globalCooldownSeconds ?? 5}
-                onChange={(e) => handleSettingChange('globalCooldownSeconds', parseInt(e.target.value))}
-                className="slider"
-              />
-            </div>
-          )}
-
-          <div className="setting-group">
-            <label className="setting-label">
-              Max Queue Size: {settings.maxQueueSize ?? 20} messages
-            </label>
-            <input
-              type="range"
-              min="5"
-              max="50"
-              step="5"
-              value={settings.maxQueueSize ?? 20}
-              onChange={(e) => handleSettingChange('maxQueueSize', parseInt(e.target.value))}
-              className="slider"
-            />
-            <p className="setting-hint">
-              Maximum messages in queue. New messages dropped if queue is full.
-            </p>
-          </div>
-        </div>
-
-        {/* Emote & Emoji Limits */}
-        <div className="rules-section">
-          <h4>😀 Emote & Emoji Limits</h4>
-          
-          <div className="setting-group">
-            <label className="setting-label">
-              Max Emotes per Message: {settings.maxEmotesPerMessage ?? 5}
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="20"
-              value={settings.maxEmotesPerMessage ?? 5}
-              onChange={(e) => handleSettingChange('maxEmotesPerMessage', parseInt(e.target.value))}
-              className="slider"
-            />
-            <p className="setting-hint">
-              Limit Twitch emotes per message. Set to 0 for no limit.
-            </p>
-          </div>
-
-          <div className="setting-group">
-            <label className="setting-label">
-              Max Emojis per Message: {settings.maxEmojisPerMessage ?? 3}
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="10"
-              value={settings.maxEmojisPerMessage ?? 3}
-              onChange={(e) => handleSettingChange('maxEmojisPerMessage', parseInt(e.target.value))}
-              className="slider"
-            />
-            <p className="setting-hint">
-              Limit Unicode emojis per message. Set to 0 for no limit.
-            </p>
-          </div>
-
-          <div className="setting-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.stripExcessiveEmotes ?? true}
-                onChange={(e) => handleSettingChange('stripExcessiveEmotes', e.target.checked)}
-              />
-              <span className="checkbox-text">
-                Strip Excessive Emotes
-                <span className="setting-hint">Remove excess emotes instead of skipping the entire message</span>
-              </span>
-            </label>
-          </div>
-        </div>
-
-        {/* Character Repetition */}
-        <div className="rules-section">
-          <h4>🔤 Character & Word Repetition</h4>
-          
-          <div className="setting-group">
-            <label className="setting-label">
-              Max Repeated Characters: {settings.maxRepeatedChars ?? 3}
-            </label>
-            <input
-              type="range"
-              min="2"
-              max="10"
-              value={settings.maxRepeatedChars ?? 3}
-              onChange={(e) => handleSettingChange('maxRepeatedChars', parseInt(e.target.value))}
-              className="slider"
-            />
-            <p className="setting-hint">
-              "woooooow" → "wooow", "lolllll" → "lolll" (limits consecutive chars to {settings.maxRepeatedChars ?? 3})
-            </p>
-          </div>
-
-          <div className="setting-group">
-            <label className="setting-label">
-              Max Repeated Words: {settings.maxRepeatedWords ?? 2}
-            </label>
-            <input
-              type="range"
-              min="1"
-              max="5"
-              value={settings.maxRepeatedWords ?? 2}
-              onChange={(e) => handleSettingChange('maxRepeatedWords', parseInt(e.target.value))}
-              className="slider"
-            />
-            <p className="setting-hint">
-              "really really really really" → "really really"
-            </p>
-          </div>
-        </div>
-
-        {/* Content Filters */}
-        <div className="rules-section">
-          <h4>🛡️ Content Filters</h4>
-          
-          <div className="setting-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.copypastaFilterEnabled ?? false}
-                onChange={(e) => handleSettingChange('copypastaFilterEnabled', e.target.checked)}
-              />
-              <span className="checkbox-text">
-                Block Known Copypastas
-                <span className="setting-hint">Skip common copypasta spam (basic list included)</span>
-              </span>
-            </label>
-          </div>
-        </div>
-
-        {/* Future Features */}
-        <div className="rules-section">
-          <h4>✨ Coming Soon</h4>
-          <ul className="feature-list">
-            <li>Per-viewer voice assignments</li>
-            <li>Chat command: <code>~setmyvoice [voice_id]</code></li>
-            <li>Muted viewers list</li>
-            <li>Account age requirements</li>
-            <li>Watch time requirements</li>
-            <li>Role-based voice rules (subscribers, mods, VIPs)</li>
-            <li>Priority queue for specific users</li>
-            <li>Custom copypasta blocklist</li>
-          </ul>
-        </div>
-      </div>
-    );
-  }
-
-  // Viewers Tab Content
-  function renderViewersTab() {
-    return (
-      <div className="viewers-tab">
-        <div className="viewer-search-section">
-          <h3>Find Viewer</h3>
-          <div className="viewer-search-container">
-            <input
-              type="text"
-              className="viewer-search-input"
-              placeholder="Search for a viewer..."
-              value={viewerSearchTerm}
-              onChange={handleViewerSearch}
-            />
-            {viewerSearchResults.length > 0 && (
-              <div className="viewer-search-results">
-                {viewerSearchResults.map((viewer) => (
-                  <div
-                    key={viewer.id}
-                    className="viewer-search-result"
-                    onClick={() => handleSelectViewer(viewer.username)}
-                  >
-                    {viewer.display_name || viewer.username}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {selectedViewer && (
-          <div className="viewer-rule-section">
-            <div className="viewer-header">
-              <h3>{selectedViewer}</h3>
-              <button
-                className="delete-rule-button"
-                onClick={handleDeleteRule}
-              >
-                {viewerRule ? 'Delete Rules' : 'Cancel'}
-              </button>
-            </div>
-
-            {!viewerRule && (
-              <div className="no-rules-message">
-                <p>No custom rules for this viewer</p>
-                <button className="create-rule-button" onClick={handleCreateRule}>
-                  Create Rules
-                </button>
-              </div>
-            )}
-
-            {viewerRule && renderViewerRuleEditor()}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function renderViewerRuleEditor() {
-    if (!viewerRule || !settings) return null;    // Get the voice info by numeric ID (for viewer custom voices)
-    const getVoiceInfoById = (voiceId: number | null) => {
-      if (voiceId === null) return { name: null, voice: null, available: true };
-      // Find the voice in voice groups
-      for (const group of voiceGroups) {
-        const voice = group.voices.find(v => v.id === voiceId);
-        if (voice) {
-          // Check if the voice's provider is enabled (WebSpeech only)
-          const voiceIdStr = voice.voice_id || '';
-          
-          // Skip Google voices (Google provider is disabled)
-          if (voiceIdStr.startsWith('google_')) {
-            return { name: voice.name, voice, available: false };
-          }
-          
-          // Check if WebSpeech is enabled
-          const webspeechEnabled = settings.webspeechEnabled ?? false;
-          return { name: voice.name, voice, available: webspeechEnabled };
-        }
-      }
-      return { name: `Voice #${voiceId}`, voice: null, available: false };
-    };    // Get the voice info by voice_id string (for global voice setting)
-    const getVoiceInfoByVoiceId = (voiceIdStr: string) => {
-      if (!voiceIdStr) return { name: null, voice: null, available: true };
-      // Find the voice in voice groups
-      for (const group of voiceGroups) {
-        const voice = group.voices.find(v => v.voice_id === voiceIdStr);
-        if (voice) {
-          // Check if the voice's provider is enabled (WebSpeech only)
-          
-          // Skip Google voices (Google provider is disabled)
-          if (voiceIdStr.startsWith('google_')) {
-            return { name: voice.name, voice, available: false };
-          }
-          
-          // Check if WebSpeech is enabled
-          const webspeechEnabled = settings.webspeechEnabled ?? false;
-          return { name: voice.name, voice, available: webspeechEnabled };
-        }
-      }
-      return { name: voiceIdStr, voice: null, available: false };
-    };
-
-    const customVoiceInfo = getVoiceInfoById(viewerRule.customVoiceId);
-    const globalVoiceInfo = getVoiceInfoByVoiceId(settings.voiceId);
-    
-    const viewerFilteredGroups = getViewerFilteredGroups();
-    const viewerVisibleCount = getViewerVisibleVoiceCount();
-      // Get list of enabled providers for display (WebSpeech only)
-    const enabledProviders: string[] = [];
-    if (settings.webspeechEnabled) enabledProviders.push('Web Speech');
-    const providersText = enabledProviders.length > 0 ? enabledProviders.join(', ') : 'None';
-
-    return (
-      <div className="viewer-rule-editor">
-        {/* TTS Provider (display enabled providers) */}
-        <div className="rule-setting-group">
-          <label className="rule-label">Enabled TTS Providers</label>
-          <div className="provider-display">
-            {providersText}
-          </div>
-          <p className="setting-hint" style={{ fontSize: '12px', marginTop: '5px', color: '#888' }}>
-            Only voices from enabled providers are shown. Toggle providers in the Settings tab.
-          </p>
-        </div>
-
-        {/* Voice Search and Filters */}
-        <div className="voice-filters">
-          <input
-            type="text"
-            placeholder="🔍 Search voices by name, language, or ID..."
-            value={viewerVoiceSearch}
-            onChange={(e) => setViewerVoiceSearch(e.target.value)}
-            className="search-input"
-          />
-          
-          <select
-            value={viewerLanguageFilter}
-            onChange={(e) => setViewerLanguageFilter(e.target.value)}
-            className="filter-select"
-          >
-            <option value="all">All Languages</option>
-            {getUniqueLanguages().map(lang => (
-              <option key={lang} value={lang}>{lang}</option>
-            ))}
-          </select>
-
-          <select
-            value={viewerGenderFilter}
-            onChange={(e) => setViewerGenderFilter(e.target.value)}
-            className="filter-select"
-          >
-            <option value="all">All Genders</option>
-            <option value="male">♂️ Male</option>
-            <option value="female">♀️ Female</option>
-            <option value="neutral">⚧ Neutral</option>
-          </select>
-        </div>
-
-        {/* Voice Selection */}
-        <div className="rule-setting-group">
-          <label className="rule-label">
-            Voice ({viewerVisibleCount} of {voiceStats.available} available)
-          </label>
-          
-          {/* Warning if custom voice is unavailable */}
-          {viewerRule.customVoiceId !== null && !customVoiceInfo.available && (
-            <div style={{ 
-              padding: '10px', 
-              marginBottom: '10px', 
-              backgroundColor: '#ff6b6b', 
-              color: 'white', 
-              borderRadius: '4px',
-              fontSize: '14px'
-            }}>
-              ⚠️ Voice "{customVoiceInfo.name}" is unavailable (provider disabled).
-              <button 
-                onClick={() => handleUpdateRule({ customVoiceId: null })}
-                style={{
-                  marginLeft: '10px',
-                  padding: '5px 10px',
-                  backgroundColor: 'white',
-                  color: '#ff6b6b',
-                  border: 'none',
-                  borderRadius: '3px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                Use Global Voice
-              </button>
-            </div>
-          )}
-          
-          {/* Warning if global voice is unavailable */}
-          {viewerRule.customVoiceId === null && !globalVoiceInfo.available && (
-            <div style={{ 
-              padding: '10px', 
-              marginBottom: '10px', 
-              backgroundColor: '#ffa500', 
-              color: 'white', 
-              borderRadius: '4px',
-              fontSize: '14px'
-            }}>
-              ⚠️ Global voice "{globalVoiceInfo.name}" is unavailable (provider disabled). Please select a custom voice or enable the provider in Settings tab.
-            </div>
-          )}
-          
-          <select
-            value={viewerRule.customVoiceId?.toString() || ''}
-            onChange={(e) => handleUpdateRule({ customVoiceId: e.target.value ? parseInt(e.target.value) : null })}
-            className="voice-select"
-          >
-            <option value="">Use Global Voice ({globalVoiceInfo.name || 'None'})</option>
-            {viewerFilteredGroups.map(group => (
-              <optgroup key={group.category} label={group.category}>
-                {group.voices.map(voice => (
-                  <option key={voice.voice_id} value={voice.id}>
-                    {formatVoiceOption(voice)}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          {viewerRule.customVoiceId !== null && (
-            <button className="reset-voice-button" onClick={() => handleResetVoice()}>
-              Reset to Global Voice
-            </button>
-          )}
-        </div>
-
-        {/* Pitch Override */}
-        <div className="rule-setting-group">
-          <label className="rule-label">
-            Pitch: {viewerRule.pitchOverride ?? settings.pitch}
-            {viewerRule.pitchOverride === null && <span className="global-indicator"> (global)</span>}
-          </label>
-          <input
-            type="range"
-            min="0.5"
-            max="2.0"
-            step="0.1"
-            value={viewerRule.pitchOverride ?? settings.pitch}
-            onChange={(e) => handleUpdateRule({ pitchOverride: parseFloat(e.target.value) })}
-            className="slider"
-          />
-        </div>
-
-        {/* Rate Override */}
-        <div className="rule-setting-group">
-          <label className="rule-label">
-            Speed: {viewerRule.rateOverride ?? settings.rate}
-            {viewerRule.rateOverride === null && <span className="global-indicator"> (global)</span>}
-          </label>
-          <input
-            type="range"
-            min="0.5"
-            max="3.0"
-            step="0.1"
-            value={viewerRule.rateOverride ?? settings.rate}
-            onChange={(e) => handleUpdateRule({ rateOverride: parseFloat(e.target.value) })}
-            className="slider"
-          />
-        </div>
-
-        {/* Mute */}
-        <div className="rule-setting-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={viewerRule.isMuted}
-              onChange={(e) => handleMuteChange(e.target.checked)}
-            />
-            <span className="checkbox-text">Mute this viewer</span>
-          </label>
-          {viewerRule.isMuted && (
-            <div className="mute-duration">
-              <label className="rule-label">
-                Mute Duration: {getMuteDurationMinutes() === 0 ? 'Permanent' : `${getMuteDurationMinutes()} minutes`}
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1440"
-                step="5"
-                value={getMuteDurationMinutes()}
-                onChange={(e) => handleMuteDurationChange(parseInt(e.target.value))}
-                className="slider"
-              />
-              <p className="setting-hint">
-                0 = permanent, or set minutes (max 1440 = 24 hours)
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Cooldown */}
-        <div className="rule-setting-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={viewerRule.cooldownEnabled}
-              onChange={(e) => handleCooldownChange(e.target.checked)}
-            />
-            <span className="checkbox-text">Custom cooldown for this viewer</span>
-          </label>
-          {viewerRule.cooldownEnabled && (
-            <div className="cooldown-settings">
-              <div className="cooldown-duration-section">
-                <label className="rule-label">
-                  Cooldown Window: {viewerRule.cooldownSeconds ?? (settings.userCooldownSeconds || 30)}s
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="300"
-                  step="5"
-                  value={viewerRule.cooldownSeconds ?? (settings.userCooldownSeconds || 30)}
-                  onChange={(e) => handleUpdateRule({ cooldownSeconds: parseInt(e.target.value) })}
-                  className="slider"
-                />
-                <p className="setting-hint">
-                  Time between messages. Effective: {Math.max(settings.userCooldownSeconds || 30, viewerRule.cooldownSeconds ?? 0)}s (never less than global {settings.userCooldownSeconds || 30}s)
-                </p>
-              </div>
-
-              <div className="cooldown-duration-section">
-                <label className="rule-label">
-                  Cooldown Duration: {getCooldownDurationMinutes() === 0 ? 'Permanent' : `${getCooldownDurationMinutes()} minutes`}
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1440"
-                  step="5"
-                  value={getCooldownDurationMinutes()}
-                  onChange={(e) => handleCooldownDurationChange(parseInt(e.target.value))}
-                  className="slider"
-                />
-                <p className="setting-hint">
-                  0 = permanent custom cooldown, or set minutes (max 1440 = 24 hours)
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 };
 
