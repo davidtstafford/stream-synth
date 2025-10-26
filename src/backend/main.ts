@@ -1,6 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import { createMainWindow } from './core/window';
-import { setupIpcHandlers, setMainWindow, runStartupTasks } from './core/ipc-handlers';
+import { setupAllIpcHandlers, runStartupTasks } from './core/ipc-handlers';
 import { PlatformTTSFactory } from './core/platform-tts-factory';
 import { initializeDatabase, closeDatabase } from './database/connection';
 
@@ -11,8 +11,7 @@ async function initialize(): Promise<void> {
   initializeDatabase();
   
   mainWindow = await createMainWindow();
-  setMainWindow(mainWindow);
-  setupIpcHandlers();
+  setupAllIpcHandlers(mainWindow);
 
   mainWindow.on('closed', () => {
     mainWindow = null;
