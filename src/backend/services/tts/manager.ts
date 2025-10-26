@@ -894,14 +894,11 @@ export class TTSManager {
               rate: item.rate ?? this.settings?.rate,
               pitch: item.pitch ?? this.settings?.pitch
             });
+            
+            // Wait for frontend to confirm Web Speech playback is complete
+            console.log('[TTS] Waiting for Web Speech utterance to finish...');
+            await this.waitForAudioFinished();
           }
-          
-          // Wait a bit before next message (estimate speaking time)
-          const effectiveRate = item.rate ?? this.settings?.rate ?? 1.0;
-          const wordsPerMinute = 150 * effectiveRate;
-          const words = textToSpeak.split(' ').length;
-          const estimatedMs = (words / wordsPerMinute) * 60 * 1000;
-          await new Promise(resolve => setTimeout(resolve, Math.max(estimatedMs, 1000)));
         } else if (voiceId.startsWith('azure_')) {
           // Use Azure provider
           const azureProvider = this.providers.get('azure');

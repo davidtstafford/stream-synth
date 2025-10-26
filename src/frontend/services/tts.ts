@@ -184,6 +184,26 @@ function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): voi
   utterance.rate = options.rate ?? 1.0;
   utterance.pitch = options.pitch ?? 1.0;
   
+  // Notify backend when speech finishes (for proper queue sequencing)
+  utterance.onend = async () => {
+    console.log('[TTS] Web Speech utterance finished');
+    try {
+      await ipcRenderer.invoke('tts:audio-finished');
+    } catch (error) {
+      console.error('[TTS] Error notifying audio finished:', error);
+    }
+  };
+  
+  // Handle errors
+  utterance.onerror = async (event) => {
+    console.error('[TTS] Web Speech error:', event);
+    try {
+      await ipcRenderer.invoke('tts:audio-finished');
+    } catch (error) {
+      console.error('[TTS] Error notifying audio finished after error:', error);
+    }
+  };
+  
   console.log('[TTS] webSpeechSpeak() - Speaking with voice:', utterance.voice?.name, 'volume:', utterance.volume, 'rate:', utterance.rate, 'pitch:', utterance.pitch);
   webSpeechSynth.speak(utterance);
   console.log('[TTS] webSpeechSpeak() - speak() called on SpeechSynthesis');
