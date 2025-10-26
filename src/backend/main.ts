@@ -1,15 +1,16 @@
 import { app, BrowserWindow } from 'electron';
 import { createMainWindow } from './core/window';
 import { setupIpcHandlers, setMainWindow, runStartupTasks } from './core/ipc-handlers';
+import { PlatformTTSFactory } from './core/platform-tts-factory';
 import { initializeDatabase, closeDatabase } from './database/connection';
 
 let mainWindow: BrowserWindow | null = null;
 
-function initialize(): void {
+async function initialize(): Promise<void> {
   // Initialize database first
   initializeDatabase();
   
-  mainWindow = createMainWindow();
+  mainWindow = await createMainWindow();
   setMainWindow(mainWindow);
   setupIpcHandlers();
 
@@ -38,7 +39,14 @@ app.on('activate', () => {
   }
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
+  // Cleanup platform TTS handler
+  try {
+    await PlatformTTSFactory.cleanup();
+  } catch (error) {
+    console.error('Error cleaning up TTS handler:', error);
+  }
+  
   closeDatabase();
 });
 

@@ -207,7 +207,6 @@ export const TTS: React.FC = () => {
       setError(err.message);
     }
   };
-
   const handleTestVoice = async () => {
     if (!settings?.voiceId) {
       setError('Please select a voice first');
@@ -228,7 +227,7 @@ export const TTS: React.FC = () => {
         volume: settings.volume,
         rate: settings.rate,
         pitch: settings.pitch
-      });
+      }, testMessage);
     } catch (err: any) {
       setError(err.message);
     } finally {

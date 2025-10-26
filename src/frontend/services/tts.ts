@@ -424,8 +424,8 @@ export async function getVoices(): Promise<TTSVoice[]> {
   return result.voices;
 }
 
-export async function testVoice(voiceId: string, options?: TTSOptions): Promise<void> {
-  const testMessage = 'Hello! This is a test of the text to speech system.';
+export async function testVoice(voiceId: string, options?: TTSOptions, message?: string): Promise<void> {
+  const testMessage = message || 'Hello! This is a test of the text to speech system.';
   
   // Determine provider from voice ID prefix
   const isAzureVoice = voiceId?.startsWith('azure_');
@@ -438,7 +438,7 @@ export async function testVoice(voiceId: string, options?: TTSOptions): Promise<
   }
   
   // For Azure/Google, call backend
-  const result = await ipcRenderer.invoke('tts:test-voice', voiceId, options);
+  const result = await ipcRenderer.invoke('tts:test-voice', voiceId, options, message);
   if (!result.success) {
     throw new Error(result.error);
   }

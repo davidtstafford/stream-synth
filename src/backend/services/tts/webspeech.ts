@@ -153,9 +153,8 @@ export class WebSpeechProvider implements TTSProvider {
       this.currentUtterance = null;
     }
   }
-
-  async test(voiceId: string, options: TTSOptions = {}): Promise<void> {
-    const testMessage = "Hello! This is a test of the text to speech system.";
+  async test(voiceId: string, options: TTSOptions = {}, message?: string): Promise<void> {
+    const testMessage = message || "Hello! This is a test of the text to speech system.";
     return this.speak(testMessage, voiceId, options);
   }
 }

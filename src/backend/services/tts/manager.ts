@@ -251,12 +251,11 @@ export class TTSManager {
       this.currentProvider.stop();
     }
   }
-
   /**
    * Test a specific voice
    */
-  async testVoice(voiceId: string, options?: Partial<TTSOptions>): Promise<void> {
-    console.log('[TTS Manager] testVoice() called with voiceId:', voiceId);
+  async testVoice(voiceId: string, options?: Partial<TTSOptions>, message?: string): Promise<void> {
+    console.log('[TTS Manager] testVoice() called with voiceId:', voiceId, 'message:', message);
     
     // Web Speech voices are handled in renderer (check voiceId prefix, not global provider)
     if (voiceId.startsWith('webspeech_')) {
@@ -278,7 +277,7 @@ export class TTSManager {
     };
 
     console.log('[TTS Manager] testVoice() - Calling currentProvider.test()');
-    await this.currentProvider.test(actualVoiceId, ttsOptions);
+    await this.currentProvider.test(actualVoiceId, ttsOptions, message);
     console.log('[TTS Manager] testVoice() - Provider test completed');
     
     // For Azure voices, retrieve audio data and send to renderer

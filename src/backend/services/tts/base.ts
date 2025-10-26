@@ -88,11 +88,10 @@ export interface TTSProvider {
    * Stop speaking
    */
   stop(): void;
-  
-  /**
+    /**
    * Test a voice with a sample message
    */
-  test(voiceId: string, options?: TTSOptions): Promise<void>;
+  test(voiceId: string, options?: TTSOptions, message?: string): Promise<void>;
 }
 
 export interface TTSUsageStats {

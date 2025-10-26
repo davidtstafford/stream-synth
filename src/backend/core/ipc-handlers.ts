@@ -692,10 +692,9 @@ export function setupIpcHandlers(): void {
 
   // TTS Handlers (legacy handlers for Azure/Google providers)
   // Note: tts:get-voices is now handled by the voice categorization system below
-  
-  ipcMain.handle('tts:test-voice', async (event, voiceId: string, options?: any) => {
+    ipcMain.handle('tts:test-voice', async (event, voiceId: string, options?: any, message?: string) => {
     try {
-      console.log('[IPC] tts:test-voice called with voiceId:', voiceId, 'options:', options);
+      console.log('[IPC] tts:test-voice called with voiceId:', voiceId, 'options:', options, 'message:', message);
       const manager = await initializeTTS();
       
       // Check voice ID prefix to determine provider (not the global settings.provider)
@@ -705,7 +704,7 @@ export function setupIpcHandlers(): void {
       }
       
       console.log('[IPC] tts:test-voice - Calling manager.testVoice() for Azure/Google voice');
-      await manager.testVoice(voiceId, options);
+      await manager.testVoice(voiceId, options, message);
       console.log('[IPC] tts:test-voice - Completed successfully');
       return { success: true };
     } catch (error: any) {

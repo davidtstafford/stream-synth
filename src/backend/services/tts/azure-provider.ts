@@ -293,12 +293,11 @@ export class AzureTTSProvider implements TTSProvider {
       }
     }
   }
-
   /**
    * Test a voice with a sample message
    */
-  async test(voiceId: string, options?: TTSOptions): Promise<void> {
-    const testMessage = 'Hello! This is a test of the Azure text to speech system.';
+  async test(voiceId: string, options?: TTSOptions, message?: string): Promise<void> {
+    const testMessage = message || 'Hello! This is a test of the Azure text to speech system.';
     await this.speak(testMessage, voiceId, options);
   }
 
