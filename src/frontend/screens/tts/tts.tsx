@@ -78,12 +78,17 @@ export const TTS: React.FC = () => {
       setLoading(false);
     }
   };
-
   const syncAndLoadVoices = async (currentSettings?: ttsService.TTSSettings) => {
     try {
+      console.log('[TTS Screen] Auto-syncing WebSpeech voices...');
+      
+      // Auto-sync WebSpeech voices from browser to database
+      const syncedCount = await ttsService.autoSyncWebSpeechVoices();
+      console.log(`[TTS Screen] Auto-synced ${syncedCount} WebSpeech voices`);
+      
       console.log('[TTS Screen] Loading voices from database...');
       
-      // Load grouped voices from database (no syncing - that happens via provider toggles)
+      // Load grouped voices from database
       const grouped = await ttsService.getGroupedVoices();
       console.log('[TTS Screen] Got grouped voices:', grouped);
       
@@ -736,7 +741,52 @@ export const TTS: React.FC = () => {
             <div style={{ color: '#666', marginTop: '8px', fontStyle: 'italic' }}>
               Coming in Phase 2 (after Azure)
             </div>
-          </div>
+          </div>        </div>
+      </div>
+
+      {/* Debug Section */}
+      <div style={{ marginBottom: '20px', padding: '15px', border: '1px dashed #666', borderRadius: '8px', backgroundColor: '#0a0a0a' }}>
+        <div style={{ fontSize: '0.9em', color: '#aaa', marginBottom: '10px' }}>
+          🔧 <strong>Troubleshooting:</strong> If you see "0 system voices available" above, use the buttons below to debug.
+        </div>
+        <button
+          onClick={() => {
+            const { debugWebSpeechVoices } = require('../../services/voice-debug');
+            debugWebSpeechVoices();
+          }}
+          style={{
+            padding: '8px 12px',
+            marginRight: '10px',
+            marginBottom: '8px',
+            backgroundColor: '#1a3a1a',
+            border: '1px solid #4CAF50',
+            color: '#4CAF50',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '0.9em'
+          }}
+        >
+          📋 Check Available Voices (see console)
+        </button>
+        <button
+          onClick={() => {
+            const { testVoiceSynthesis } = require('../../services/voice-debug');
+            testVoiceSynthesis();
+          }}
+          style={{
+            padding: '8px 12px',
+            backgroundColor: '#1a2a3a',
+            border: '1px solid #2196F3',
+            color: '#2196F3',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '0.9em'
+          }}
+        >
+          🔊 Test Voice Output
+        </button>
+        <div style={{ fontSize: '0.8em', color: '#666', marginTop: '10px' }}>
+          Tip: Open DevTools (Ctrl+Shift+I) and check the Console tab to see detailed voice information.
         </div>
       </div>
 

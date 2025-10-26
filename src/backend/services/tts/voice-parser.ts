@@ -11,16 +11,23 @@ export interface ParsedVoice {
   metadata: string | null;
 }
 
-export class VoiceParser {
-  // Parse Web Speech API voice
+export class VoiceParser {  // Parse Web Speech API voice
   static parseWebSpeechVoice(voice: any, index: number): ParsedVoice {
     const source = this.detectSource(voice.name);
     const cleanName = this.extractName(voice.name);
     const gender = this.detectGender(voice.name, voice.voiceURI);
-    const { languageCode, languageName, region } = this.parseLanguage(voice.lang || 'en-US');
+    // TTSVoice from frontend has 'language', not 'lang'
+    const langCode = voice.language || voice.lang || 'en-US';
+    const { languageCode, languageName, region } = this.parseLanguage(langCode);
+
+    // Create a voice ID that's unique and includes the voiceURI we can use for lookup
+    // Format: webspeech_{languageCode}_{index}_{voiceName}
+    // Store the actual voiceURI in metadata for lookup
+    const voiceUriPart = voice.voiceURI || voice.name;
+    const voiceId = `webspeech_${languageCode}_${index}_${voiceUriPart}`.replace(/\s+/g, '_');
 
     return {
-      voice_id: `webspeech_${voice.voiceURI}`,
+      voice_id: voiceId,
       provider: 'webspeech',
       source,
       name: cleanName,

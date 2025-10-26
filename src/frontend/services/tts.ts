@@ -60,9 +60,47 @@ export interface TTSOptions {
   pitch?: number;
 }
 
+// Auto-sync WebSpeech voices to database
+export async function autoSyncWebSpeechVoices(): Promise<number> {
+  try {
+    if (!window.speechSynthesis) {
+      console.warn('[TTS] Web Speech API not available');
+      return 0;
+    }
+
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length === 0) {
+      console.log('[TTS] No WebSpeech voices to sync');
+      return 0;
+    }
+
+    console.log(`[TTS] Auto-syncing ${voices.length} WebSpeech voices...`);
+
+    // Convert browser voices to TTSVoice format
+    const ttsVoices = mapWebSpeechVoices();
+    
+    // Send to backend for syncing
+    const result = await ipcRenderer.invoke('tts:sync-voices', 'webspeech', ttsVoices);
+    
+    if (result.success) {
+      console.log(`[TTS] Auto-synced ${result.count} WebSpeech voices`);
+      return result.count;
+    } else {
+      console.error('[TTS] Failed to sync WebSpeech voices:', result.error);
+      return 0;
+    }
+  } catch (error) {
+    console.error('[TTS] Error in autoSyncWebSpeechVoices:', error);
+    return 0;
+  }
+}
+
 // Web Speech API - Renderer Process Only
 let webSpeechSynth: SpeechSynthesis | null = null;
 let webSpeechVoices: SpeechSynthesisVoice[] = [];
+
+// Map to cache voiceURI for quick lookup during speak
+let voiceUriMap: Map<string, string> = new Map();
 
 function initWebSpeech() {
   if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -80,6 +118,9 @@ function initWebSpeech() {
         byLanguage[lang] = (byLanguage[lang] || 0) + 1;
       });
       console.log('[TTS] Voices by language:', byLanguage);
+
+      // Build the voice URI map from current voices
+      buildVoiceUriMap();
     };
     
     loadVoices();
@@ -89,6 +130,19 @@ function initWebSpeech() {
       webSpeechSynth.onvoiceschanged = loadVoices;
     }
   }
+}
+
+// Build the voice URI map from current voices
+function buildVoiceUriMap() {
+  voiceUriMap.clear();
+  webSpeechVoices.forEach((voice, index) => {
+    // Store multiple keys that might be used to look up this voice
+    const langCode = voice.lang || 'en-US';
+    const baseId = `webspeech_${langCode}_${index}`;
+    voiceUriMap.set(baseId, voice.voiceURI);
+    // Also store by clean name for fallback
+    voiceUriMap.set(voice.name, voice.voiceURI);
+  });
 }
 
 // Initialize on module load
@@ -167,13 +221,34 @@ function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): voi
   
   const utterance = new SpeechSynthesisUtterance(text);
   
-  // Strip provider prefix if present (e.g., "webspeech_com.apple.voice.compact.en-US.Samantha")
-  const cleanVoiceId = voiceId.replace(/^webspeech_/, '');
+  // Extract voice info from the complex voiceId format: webspeech_en-GB_0_Microsoft_George...
+  // Try to find the voice by index position first
+  let voice: SpeechSynthesisVoice | undefined;
   
-  // Find the voice
-  console.log('[TTS] webSpeechSpeak() - Looking for voiceId:', cleanVoiceId, '(original:', voiceId, ') in', webSpeechVoices.length, 'voices');
-  const voice = webSpeechVoices.find(v => v.voiceURI === cleanVoiceId || v.name === cleanVoiceId);
-  console.log('[TTS] webSpeechSpeak() - Found voice:', voice?.name, voice?.voiceURI);
+  // Method 1: Try matching the full voiceURI or name directly
+  const cleanVoiceId = voiceId.replace(/^webspeech_/, '');
+  voice = webSpeechVoices.find(v => v.voiceURI === cleanVoiceId || v.name === cleanVoiceId);
+  
+  // Method 2: If not found, try to parse the complex ID and match by index
+  if (!voice && voiceId.startsWith('webspeech_')) {
+    const parts = cleanVoiceId.split('_');
+    if (parts.length >= 2) {
+      const langCode = parts[0]; // e.g., 'en-GB'
+      const indexStr = parts[1]; // e.g., '0'
+      const index = parseInt(indexStr, 10);
+      
+      // Find all voices with this language
+      const voicesForLang = webSpeechVoices.filter(v => v.lang === langCode);
+      
+      // Get the voice at the specified index
+      if (voicesForLang.length > index) {
+        voice = voicesForLang[index];
+        console.log('[TTS] webSpeechSpeak() - Found voice by index:', voice?.name, voice?.lang, 'index:', index);
+      }
+    }
+  }
+  
+  console.log('[TTS] webSpeechSpeak() - Looking for voiceId:', voiceId, 'Found:', voice?.name, voice?.lang);
   
   if (voice) {
     utterance.voice = voice;
@@ -204,7 +279,7 @@ function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions): voi
     }
   };
   
-  console.log('[TTS] webSpeechSpeak() - Speaking with voice:', utterance.voice?.name, 'volume:', utterance.volume, 'rate:', utterance.rate, 'pitch:', utterance.pitch);
+  console.log('[TTS] webSpeechSpeak() - Speaking with voice:', utterance.voice?.name, 'lang:', utterance.voice?.lang, 'volume:', utterance.volume, 'rate:', utterance.rate, 'pitch:', utterance.pitch);
   webSpeechSynth.speak(utterance);
   console.log('[TTS] webSpeechSpeak() - speak() called on SpeechSynthesis');
 }
