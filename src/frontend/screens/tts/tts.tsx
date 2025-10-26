@@ -700,55 +700,7 @@ export const TTS: React.FC = () => {
             <div>✓ No API key required</div>
             <div>✓ Works offline</div>          </div>
         </div>
-      </div>
-
-      {/* Debug Section */}
-      <div style={{ marginBottom: '20px', padding: '15px', border: '1px dashed #666', borderRadius: '8px', backgroundColor: '#0a0a0a' }}>
-        <div style={{ fontSize: '0.9em', color: '#aaa', marginBottom: '10px' }}>
-          🔧 <strong>Troubleshooting:</strong> If you see "0 system voices available" above, use the buttons below to debug.
-        </div>
-        <button
-          onClick={() => {
-            const { debugWebSpeechVoices } = require('../../services/voice-debug');
-            debugWebSpeechVoices();
-          }}
-          style={{
-            padding: '8px 12px',
-            marginRight: '10px',
-            marginBottom: '8px',
-            backgroundColor: '#1a3a1a',
-            border: '1px solid #4CAF50',
-            color: '#4CAF50',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '0.9em'
-          }}
-        >
-          📋 Check Available Voices (see console)
-        </button>
-        <button
-          onClick={() => {
-            const { testVoiceSynthesis } = require('../../services/voice-debug');
-            testVoiceSynthesis();
-          }}
-          style={{
-            padding: '8px 12px',
-            backgroundColor: '#1a2a3a',
-            border: '1px solid #2196F3',
-            color: '#2196F3',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '0.9em'
-          }}
-        >
-          🔊 Test Voice Output
-        </button>
-        <div style={{ fontSize: '0.8em', color: '#666', marginTop: '10px' }}>
-          Tip: Open DevTools (Ctrl+Shift+I) and check the Console tab to see detailed voice information.
-        </div>
-      </div>
-
-      {/* Voice Search and Filters */}
+      </div>      {/* Voice Search and Filters */}
       <div className="voice-filters">
         <input
           type="text"
@@ -873,21 +825,12 @@ export const TTS: React.FC = () => {
         >
           {isSpeaking ? '🔊 Speaking...' : '▶️ Test Voice'}
         </button>
-        
-        <button
+          <button
           onClick={handleStop}
           disabled={!isSpeaking}
           className={`btn btn-danger ${!isSpeaking ? 'disabled' : ''}`}
         >
           ⏹️ Stop
-        </button>
-
-        <button
-          onClick={() => syncAndLoadVoices().then(loadVoiceStats)}
-          disabled={loading}
-          className={`btn btn-secondary ${loading ? 'disabled' : ''}`}
-        >
-          🔄 Refresh Voices
         </button>
       </div>
       </>
