@@ -138,8 +138,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           <span className="setting-hint" style={{ display: 'block', fontWeight: 'normal', fontSize: '0.9em', marginTop: '5px' }}>
             Enable multiple providers to use different voices for different viewers
           </span>
-        </label>
-        {/* Web Speech Provider */}
+        </label>        {/* Web Speech Provider */}
         <div className="provider-toggle-section" style={{ marginBottom: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
             <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
@@ -150,41 +149,46 @@ export const VoiceSettingsTab: React.FC<Props> = ({
               />
               <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
                 🌐 Web Speech API (Free)
-              </span>            </label>
-            <button
-              onClick={() => setShowWebSpeechGuide(true)}
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.9em',
-                backgroundColor: '#4a7c59',
-                border: '1px solid #5a9c69',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                color: '#fff',
-                marginRight: '8px',
-                fontWeight: 'bold'
-              }}
-              title="View Web Speech voice installation guide"
-            >
-              ⚙️ Setup
-            </button>
-            <button
-              onClick={() => onProviderRescan('webspeech')}
-              disabled={rescanningProvider === 'webspeech'}
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.9em',
-                backgroundColor: rescanningProvider === 'webspeech' ? '#555' : '#4a4a4a',
-                border: '1px solid #666',
-                borderRadius: '4px',
-                cursor: rescanningProvider === 'webspeech' ? 'not-allowed' : 'pointer',
-                color: '#fff',
-                opacity: rescanningProvider === 'webspeech' ? 0.7 : 1
-              }}
-              title={rescanningProvider === 'webspeech' ? 'Rescanning...' : 'Click to rescan voices immediately'}
-            >
-              {rescanningProvider === 'webspeech' ? '⏳ Rescanning...' : '🔄 Rescan'}
-            </button>
+              </span>
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setShowWebSpeechGuide(true)}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: '0.95em',
+                  backgroundColor: '#0078d4',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap'
+                }}
+                title="View Web Speech voice installation guide"
+              >
+                ⚙️ Setup
+              </button>
+              <button
+                onClick={() => onProviderRescan('webspeech')}
+                disabled={rescanningProvider === 'webspeech'}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: '0.95em',
+                  backgroundColor: rescanningProvider === 'webspeech' ? '#555' : '#28a745',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: rescanningProvider === 'webspeech' ? 'not-allowed' : 'pointer',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap',
+                  opacity: rescanningProvider === 'webspeech' ? 0.6 : 1
+                }}
+                title={rescanningProvider === 'webspeech' ? 'Rescanning...' : 'Click to rescan voices immediately'}
+              >
+                {rescanningProvider === 'webspeech' ? '⟳ Rescanning...' : '⟳ Rescan'}
+              </button>
+            </div>
           </div>
           <div style={{ marginLeft: '28px', color: '#888' }}>
             <div>✓ {providerCounts.webspeech} system voices available</div>
