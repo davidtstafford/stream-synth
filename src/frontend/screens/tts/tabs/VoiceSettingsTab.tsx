@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as ttsService from '../../../services/tts';
-import { AzureSetupGuide } from './VoiceSettingGuides';
+import { AzureSetupGuide, WebSpeechSetupGuide } from './VoiceSettingGuides';
 
 // VoiceGroup interface is defined in parent component, but we need to mirror it here
 // This is defined in tts.tsx as well - kept in sync for type safety
@@ -73,6 +73,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   getProviderVoiceCounts,
 }) => {
   const [showAzureGuide, setShowAzureGuide] = useState(false);
+  const [showWebSpeechGuide, setShowWebSpeechGuide] = useState(false);
   
   const filteredGroups = getFilteredGroups();
   const visibleCount = getVisibleVoiceCount();
@@ -149,8 +150,24 @@ export const VoiceSettingsTab: React.FC<Props> = ({
               />
               <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
                 🌐 Web Speech API (Free)
-              </span>
-            </label>
+              </span>            </label>
+            <button
+              onClick={() => setShowWebSpeechGuide(true)}
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.9em',
+                backgroundColor: '#4a7c59',
+                border: '1px solid #5a9c69',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                color: '#fff',
+                marginRight: '8px',
+                fontWeight: 'bold'
+              }}
+              title="View Web Speech voice installation guide"
+            >
+              ⚙️ Setup
+            </button>
             <button
               onClick={() => onProviderRescan('webspeech')}
               disabled={rescanningProvider === 'webspeech'}
@@ -470,13 +487,18 @@ export const VoiceSettingsTab: React.FC<Props> = ({
         >
           ⏹️ Stop
         </button>
-      </div>
-
-      {/* Azure Setup Guide Modal */}
+      </div>      {/* Azure Setup Guide Modal */}
       {showAzureGuide && (
         <AzureSetupGuide
           onClose={handleAzureGuideClose}
           onComplete={handleAzureGuideComplete}
+        />
+      )}
+
+      {/* WebSpeech Setup Guide Modal */}
+      {showWebSpeechGuide && (
+        <WebSpeechSetupGuide
+          onClose={() => setShowWebSpeechGuide(false)}
         />
       )}
     </>
