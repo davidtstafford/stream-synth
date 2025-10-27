@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import * as ttsService from '../../../services/tts';
 import { AzureSetupGuide } from './VoiceSettingGuides';
 
+// VoiceGroup interface is defined in parent component, but we need to mirror it here
+// This is defined in tts.tsx as well - kept in sync for type safety
 interface VoiceGroup {
   category: string;
   voices: Array<{
@@ -11,6 +13,7 @@ interface VoiceGroup {
     language_name: string;
     region: string;
     gender: string;
+    provider: string;
   }>;
 }
 
@@ -24,6 +27,7 @@ interface Props {
   searchTerm: string;
   languageFilter: string;
   genderFilter: string;
+  providerFilter: string;
   onSettingChange: (key: keyof ttsService.TTSSettings, value: any) => Promise<void>;
   onTestVoice: () => Promise<void>;
   onStop: () => Promise<void>;
@@ -33,6 +37,7 @@ interface Props {
   onSearchChange: (term: string) => void;
   onLanguageFilterChange: (filter: string) => void;
   onGenderFilterChange: (filter: string) => void;
+  onProviderFilterChange: (filter: string) => void;
   getUniqueLanguages: () => string[];
   getFilteredGroups: () => VoiceGroup[];
   getVisibleVoiceCount: () => number;
@@ -50,6 +55,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   searchTerm,
   languageFilter,
   genderFilter,
+  providerFilter,
   onSettingChange,
   onTestVoice,
   onStop,
@@ -59,6 +65,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   onSearchChange,
   onLanguageFilterChange,
   onGenderFilterChange,
+  onProviderFilterChange,
   getUniqueLanguages,
   getFilteredGroups,
   getVisibleVoiceCount,
@@ -74,12 +81,19 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   const handleAzureGuideClose = () => {
     setShowAzureGuide(false);
   };
-
   const handleAzureGuideComplete = async (apiKey: string, region: string) => {
-    // Save the Azure credentials
+    // Save the Azure credentials and sync voices
     try {
+      console.log('[VoiceSettingsTab] Azure setup complete, saving credentials and syncing voices...');
       await onSettingChange('azureApiKey', apiKey);
       await onSettingChange('azureRegion', region);
+      
+      // Sync Azure voices to database before enabling
+      console.log('[VoiceSettingsTab] Syncing Azure voices...');
+      const { ipcRenderer } = window.require('electron');
+      const syncResult = await ipcRenderer.invoke('azure:sync-voices', { apiKey, region });
+      console.log('[VoiceSettingsTab] Sync result:', syncResult);
+      
       // Enable Azure provider
       await onProviderToggle('azure', true);
       setShowAzureGuide(false);
@@ -160,9 +174,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
             <div>✓ No API key required</div>
             <div>✓ Works offline</div>
           </div>
-        </div>
-
-        {/* Azure Provider Setup Button */}
+        </div>        {/* Azure Provider Setup Button */}
         <div className="provider-toggle-section" style={{ padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
@@ -173,37 +185,69 @@ export const VoiceSettingsTab: React.FC<Props> = ({
                 <div>✓ Free tier: 500K characters/month</div>
               </div>
             </div>
-            <button
-              onClick={() => setShowAzureGuide(true)}
-              style={{
-                padding: '10px 16px',
-                fontSize: '0.95em',
-                backgroundColor: '#0078d4',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                color: '#fff',
-                fontWeight: 'bold',
-                whiteSpace: 'nowrap',
-                marginLeft: '16px'
-              }}
-              title="Click to set up Azure Neural Voices"
-            >
-              ⚙️ Setup
-            </button>
+            <div style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
+              <button
+                onClick={() => setShowAzureGuide(true)}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: '0.95em',
+                  backgroundColor: '#0078d4',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap'
+                }}
+                title={settings?.azureApiKey ? 'Click to edit Azure setup' : 'Click to set up Azure Neural Voices'}
+              >
+                {settings?.azureApiKey ? '✏️ Edit Setup' : '⚙️ Setup'}
+              </button>
+              {settings?.azureApiKey && (
+                <button
+                  onClick={() => onProviderRescan('azure')}
+                  disabled={rescanningProvider === 'azure'}
+                  style={{
+                    padding: '10px 16px',
+                    fontSize: '0.95em',
+                    backgroundColor: rescanningProvider === 'azure' ? '#555' : '#28a745',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: rescanningProvider === 'azure' ? 'not-allowed' : 'pointer',
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap',
+                    opacity: rescanningProvider === 'azure' ? 0.6 : 1
+                  }}
+                  title="Rescan Azure voices for changes"
+                >
+                  {rescanningProvider === 'azure' ? '⟳ Rescanning...' : '⟳ Rescan'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Voice Search and Filters */}
-      <div className="voice-filters">
-        <input
+      <div className="voice-filters">        <input
           type="text"
           placeholder="🔍 Search voices by name, language, or ID..."
           value={searchTerm}
           onChange={(e) => onSearchChange(e.target.value)}
           className="search-input"
         />
+
+        <select
+          value={providerFilter}
+          onChange={(e) => onProviderFilterChange(e.target.value)}
+          className="filter-select"
+        >
+          <option value="all">All Providers</option>
+          <option value="webspeech">🌐 WebSpeech</option>
+          <option value="azure">☁️ Azure</option>
+          <option value="google">🔵 Google</option>
+        </select>
 
         <select
           value={languageFilter}

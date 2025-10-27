@@ -1,8 +1,10 @@
 import { VoicesRepository } from '../../database/repositories/voices';
 import { VoiceParser } from './voice-parser';
+import { generateNumericVoiceId, VoiceProvider } from './voice-id-generator';
 
 export class VoiceSyncService {
   constructor(private voicesRepo: VoicesRepository) {}
+  
   // Sync Web Speech voices - called only on app startup if not already synced
   async syncWebSpeechVoices(voices: any[]): Promise<number> {
     console.log(`[Voice Sync] Syncing ${voices.length} Web Speech voices`);
@@ -17,16 +19,20 @@ export class VoiceSyncService {
     this.voicesRepo.purgeProvider('webspeech');
     
     const voiceIds: string[] = [];
-    
-    // Upsert all voices
+      // Upsert all voices with deterministic numeric IDs
     voices.forEach((voice, index) => {
       const parsed = VoiceParser.parseWebSpeechVoice(voice, index);
-      this.voicesRepo.upsertVoice(parsed);
+      this.voicesRepo.upsertVoice({
+        voice_id: parsed.voice_id,
+        provider: parsed.provider,
+        name: parsed.name,
+        language_name: parsed.language_name,
+        region: parsed.region,
+        gender: parsed.gender,
+        metadata: parsed.metadata
+      });
       voiceIds.push(parsed.voice_id);
     });
-
-    // Assign sequential numeric IDs (1, 2, 3...)
-    this.voicesRepo.assignNumericIds('webspeech');
 
     // Update provider status
     this.voicesRepo.updateProviderStatus('webspeech', true, voiceIds.length);
@@ -50,18 +56,16 @@ export class VoiceSyncService {
     
     const voiceIds: string[] = [];
     
+    // Upsert all voices with deterministic numeric IDs
     voices.forEach(voice => {
       // TTSVoice uses 'id' property, already has azure_ prefix from provider
       this.voicesRepo.upsertVoice({
         voice_id: voice.id,
         provider: 'azure',
-        source: 'Azure Neural',
         name: voice.name,
-        language_code: voice.language,
         language_name: voice.languageName,
         region: voice.language,
         gender: voice.gender,
-        display_order: null,
         metadata: JSON.stringify({ 
           styles: voice.styles || [],
           shortName: voice.shortName
@@ -70,14 +74,12 @@ export class VoiceSyncService {
       voiceIds.push(voice.id);
     });
 
-    // Assign sequential numeric IDs (1, 2, 3...)
-    this.voicesRepo.assignNumericIds('azure');
-
     // Update provider status
-    this.voicesRepo.updateProviderStatus('azure', true, voiceIds.length);    console.log(`[Voice Sync] Synced ${voiceIds.length} Azure voices`);
+    this.voicesRepo.updateProviderStatus('azure', true, voiceIds.length);
+    
+    console.log(`[Voice Sync] Synced ${voiceIds.length} Azure voices`);
     return voiceIds.length;
   }
-
   // Rescan provider voices immediately (fetch fresh voices and update UI now)
   async rescanProviderImmediate(provider: string, currentVoices: any[]): Promise<number> {
     console.log(`[Voice Sync] Immediate rescan for ${provider} with ${currentVoices.length} voices`);

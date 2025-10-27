@@ -14,6 +14,7 @@ interface VoiceGroup {
     language_name: string;
     region: string;
     gender: string;
+    provider: string;
   }>;
 }
 
@@ -31,11 +32,11 @@ export const TTS: React.FC = () => {
 
   // Rescan state
   const [rescanningProvider, setRescanningProvider] = useState<string | null>(null);
-
   // Voice filtering state
   const [searchTerm, setSearchTerm] = useState('');
   const [languageFilter, setLanguageFilter] = useState('all');
   const [genderFilter, setGenderFilter] = useState('all');
+  const [providerFilter, setProviderFilter] = useState('all');
   const [voiceStats, setVoiceStats] = useState({ total: 0, available: 0, unavailable: 0 });
 
   // Viewer tab state
@@ -111,17 +112,9 @@ export const TTS: React.FC = () => {
       console.error('[TTS Screen] Error loading voice stats:', err);
     }
   };
-
   // Handle provider toggle (enable/disable provider voices in database)
   const handleProviderToggle = async (provider: 'webspeech' | 'azure' | 'google', enabled: boolean) => {
     try {
-      // Prevent Azure provider from being toggled
-      if (provider === 'azure') {
-        console.warn('[TTS] Azure provider is disabled');
-        setError('Azure provider is currently disabled. Only WebSpeech is available.');
-        return;
-      }
-
       console.log(`[TTS] Toggling ${provider} provider:`, enabled);
 
       // Save the enable setting
@@ -140,62 +133,80 @@ export const TTS: React.FC = () => {
       setError(err.message);
       console.error(`[TTS] Error toggling ${provider} provider:`, err);
     }
-  };
-
-  // Handle provider rescan - immediate, with loading spinner
+  };  // Handle provider rescan - immediate, with loading spinner
   const handleProviderRescan = async (provider: 'webspeech' | 'azure' | 'google') => {
     try {
-      // Prevent Azure provider from being rescanned
-      if (provider === 'azure') {
-        console.warn('[TTS] Azure provider is disabled');
-        setError('Azure provider is currently disabled. Only WebSpeech is available.');
-        return;
-      }
-
       setRescanningProvider(provider);
       setError(null);
 
       console.log(`[TTS] Rescanning ${provider} voices immediately...`);
 
-      // Get current voices from Web Speech API for this provider
-      let currentVoices: any[] = [];
-      if (provider === 'webspeech') {
-        if (!window.speechSynthesis) {
-          throw new Error('Web Speech API not available');
-        }
-        const rawVoices = window.speechSynthesis.getVoices();
-        console.log(`[TTS] Found ${rawVoices.length} Web Speech voices for rescan`);
-
-        // Convert SpeechSynthesisVoice objects to plain objects for IPC serialization
-        currentVoices = rawVoices.map(v => ({
-          name: v.name,
-          lang: v.lang,
-          voiceURI: v.voiceURI,
-          localService: v.localService,
-          default: v.default
-        }));
-
-        console.log(`[TTS] Serialized voices for IPC:`, currentVoices[0]); // Log first voice to verify
-      }
-
-      if (currentVoices.length === 0) {
-        throw new Error(`No ${provider} voices available to rescan`);
-      }
-
-      // Call backend to rescan immediately
       const { ipcRenderer } = window.require('electron');
-      const result = await ipcRenderer.invoke('provider:rescan-immediate', provider, currentVoices);
+      
+      // For Azure: use sync-voices handler with stored credentials
+      if (provider === 'azure') {
+        const currentSettings = await ttsService.getSettings();
+        if (!currentSettings?.azureApiKey || !currentSettings?.azureRegion) {
+          throw new Error('Azure not configured. Please set up Azure first.');
+        }
+        
+        console.log(`[TTS] Rescanning Azure with stored credentials for region: ${currentSettings.azureRegion}`);
+        const result = await ipcRenderer.invoke('azure:sync-voices', {
+          apiKey: currentSettings.azureApiKey,
+          region: currentSettings.azureRegion
+        });
 
-      if (result.success) {
-        console.log(`[TTS] Rescan complete: ${result.count} voices found`);
+        if (result.success) {
+          console.log(`[TTS] Azure rescan complete: ${result.voiceCount} voices found`);
+          
+          // Reload voice list from database
+          await syncAndLoadVoices();
+          await loadVoiceStats();
 
-        // Reload voice list from database
-        await syncAndLoadVoices();
-        await loadVoiceStats();
-
-        setError(`✓ ${provider} rescanned: ${result.count} voices found`);
+          setError(`✓ Azure rescanned: ${result.voiceCount} voices found`);
+        } else {
+          throw new Error(result.error || 'Azure rescan failed');
+        }
       } else {
-        throw new Error(result.error || 'Rescan failed');
+        // For WebSpeech and other providers: get voices and rescan
+        let currentVoices: any[] = [];
+        if (provider === 'webspeech') {
+          if (!window.speechSynthesis) {
+            throw new Error('Web Speech API not available');
+          }
+          const rawVoices = window.speechSynthesis.getVoices();
+          console.log(`[TTS] Found ${rawVoices.length} Web Speech voices for rescan`);
+
+          // Convert SpeechSynthesisVoice objects to plain objects for IPC serialization
+          currentVoices = rawVoices.map(v => ({
+            name: v.name,
+            lang: v.lang,
+            voiceURI: v.voiceURI,
+            localService: v.localService,
+            default: v.default
+          }));
+
+          console.log(`[TTS] Serialized voices for IPC:`, currentVoices[0]); // Log first voice to verify
+        }
+
+        if (currentVoices.length === 0) {
+          throw new Error(`No ${provider} voices available to rescan`);
+        }
+
+        // Call backend to rescan immediately
+        const result = await ipcRenderer.invoke('provider:rescan-immediate', provider, currentVoices);
+
+        if (result.success) {
+          console.log(`[TTS] Rescan complete: ${result.count} voices found`);
+
+          // Reload voice list from database
+          await syncAndLoadVoices();
+          await loadVoiceStats();
+
+          setError(`✓ ${provider} rescanned: ${result.count} voices found`);
+        } else {
+          throw new Error(result.error || 'Rescan failed');
+        }
       }
     } catch (err: any) {
       setError(`Error rescanning ${provider}: ${err.message}`);
@@ -264,7 +275,6 @@ export const TTS: React.FC = () => {
     });
     return Array.from(languages).sort();
   };
-
   // Filter voices based on search and filters
   const getFilteredGroups = (): VoiceGroup[] => {
     return voiceGroups.map(group => ({
@@ -281,17 +291,19 @@ export const TTS: React.FC = () => {
           voice.region.toLowerCase().includes(searchLower) ||
           voice.id.toString().includes(searchTerm);
 
+        // Provider filter
+        const matchesProvider = providerFilter === 'all' || voice.provider === providerFilter;
+
         // Language filter
         const matchesLanguage = languageFilter === 'all' || voice.language_name === languageFilter;
 
         // Gender filter
         const matchesGender = genderFilter === 'all' || voice.gender === genderFilter;
 
-        return matchesSearch && matchesLanguage && matchesGender;
+        return matchesSearch && matchesProvider && matchesLanguage && matchesGender;
       })
     })).filter(group => group.voices.length > 0);
   };
-
   const formatVoiceOption = (voice: VoiceGroup['voices'][0]): string => {
     const genderIcon = voice.gender === 'male' ? '♂️' : voice.gender === 'female' ? '♀️' : '⚧';
     const id = voice.id.toString().padStart(3, '0');
@@ -299,7 +311,7 @@ export const TTS: React.FC = () => {
     // Include region if available to differentiate voices with same name
     const location = voice.region ? ` (${voice.region})` : '';
 
-    return `${id} │ ${voice.name}${location} ${genderIcon}`;
+    return `${id} │ ${voice.provider} │ ${voice.name}${location} ${genderIcon}`;
   };
 
   const getVisibleVoiceCount = (): number => {
@@ -611,8 +623,7 @@ export const TTS: React.FC = () => {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'settings' && (
-        <div className="tab-content">
+      {activeTab === 'settings' && (        <div className="tab-content">
           <VoiceSettingsTab
             settings={settings}
             voiceGroups={voiceGroups}
@@ -623,6 +634,7 @@ export const TTS: React.FC = () => {
             searchTerm={searchTerm}
             languageFilter={languageFilter}
             genderFilter={genderFilter}
+            providerFilter={providerFilter}
             onSettingChange={handleSettingChange}
             onTestVoice={handleTestVoice}
             onStop={handleStop}
@@ -632,6 +644,7 @@ export const TTS: React.FC = () => {
             onSearchChange={setSearchTerm}
             onLanguageFilterChange={setLanguageFilter}
             onGenderFilterChange={setGenderFilter}
+            onProviderFilterChange={setProviderFilter}
             getUniqueLanguages={getUniqueLanguages}
             getFilteredGroups={getFilteredGroups}
             getVisibleVoiceCount={getVisibleVoiceCount}

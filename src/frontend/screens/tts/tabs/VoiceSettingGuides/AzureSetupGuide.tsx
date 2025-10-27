@@ -122,7 +122,6 @@ export const AzureSetupGuide: React.FC<AzureSetupGuideProps> = ({ onClose, onCom
   const openUrl = (url: string) => {
     shell.openExternal(url);
   };
-
   const handleNext = () => {
     const steps: WizardStep[] = [
       'introduction',
@@ -135,8 +134,14 @@ export const AzureSetupGuide: React.FC<AzureSetupGuideProps> = ({ onClose, onCom
     ];
 
     const currentIndex = steps.indexOf(state.currentStep);
+    console.log('[Azure Guide] handleNext() called. Current step:', state.currentStep, 'Index:', currentIndex, 'Total steps:', steps.length);
+    
     if (currentIndex < steps.length - 1) {
-      setState(prev => ({ ...prev, currentStep: steps[currentIndex + 1], error: null }));
+      const nextStep = steps[currentIndex + 1];
+      console.log('[Azure Guide] Moving to next step:', nextStep);
+      setState(prev => ({ ...prev, currentStep: nextStep, error: null }));
+    } else {
+      console.log('[Azure Guide] Already at final step');
     }
   };
 
@@ -155,27 +160,24 @@ export const AzureSetupGuide: React.FC<AzureSetupGuideProps> = ({ onClose, onCom
     if (currentIndex > 0) {
       setState(prev => ({ ...prev, currentStep: steps[currentIndex - 1], error: null }));
     }
-  };
-
-  const handleTestConnection = async () => {
-    setState(prev => ({ ...prev, isLoading: true, error: null, testResult: null }));
+  };  const handleTestConnection = async () => {
+    console.log('[Azure Guide] Starting connection test...');
+    // Move to test-connection step and show loading
+    setState(prev => ({ ...prev, currentStep: 'test-connection', isLoading: true, error: null, testResult: null }));
 
     try {
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Connection test timed out after 30 seconds. Please check your internet connection and try again.')), 30000);
-      });
+      console.log('[Azure Guide] Calling ipcRenderer.invoke...');
+      
+      // Test Azure connection directly - backend has its own timeout
+      const result = await ipcRenderer.invoke('azure:test-connection', {
+        apiKey: state.apiKey,
+        region: state.region
+      }) as any;
 
-      // Test Azure connection with timeout
-      const result = await Promise.race([
-        ipcRenderer.invoke('azure:test-connection', {
-          apiKey: state.apiKey,
-          region: state.region
-        }),
-        timeoutPromise
-      ]) as any;
+      console.log('[Azure Guide] Got result from backend:', result);
 
-      if (result.success) {
+      if (result && result.success) {
+        console.log('[Azure Guide] Connection successful, updating state...');
         setState(prev => ({
           ...prev,
           isLoading: false,
@@ -186,12 +188,16 @@ export const AzureSetupGuide: React.FC<AzureSetupGuideProps> = ({ onClose, onCom
           }
         }));
         // Auto-advance to success step
-        setTimeout(() => handleNext(), 1500);
+        console.log('[Azure Guide] Auto-advancing to next step in 1.5 seconds...');
+        setTimeout(() => {
+          setState(prev => ({ ...prev, currentStep: 'success' }));
+        }, 1500);
       } else {
+        console.log('[Azure Guide] Connection failed:', result?.error);
         setState(prev => ({
           ...prev,
           isLoading: false,
-          error: result.error || 'Connection test failed'
+          error: result?.error || 'Connection test failed'
         }));
       }
     } catch (error: any) {

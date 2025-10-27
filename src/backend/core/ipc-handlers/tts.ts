@@ -101,14 +101,12 @@ export function setupTTSHandlers(): void {
         }
       } catch (e) {
         console.warn('[IPC] Failed to parse voice metadata:', e);
-      }
-
-      console.log('[IPC] tts:get-voice-metadata - Returning voiceURI:', voiceURI);
+      }      console.log('[IPC] tts:get-voice-metadata - Returning voiceURI:', voiceURI);
       return {
         success: true,
         voiceURI: voiceURI,
         name: voice.name,
-        language: voice.language_code
+        language: voice.language_name
       };
     } catch (error: any) {
       console.error('[IPC] Error getting voice metadata:', error);
@@ -189,7 +187,6 @@ export function setupTTSHandlers(): void {
       return { success: false, error: error.message };
     }
   });
-
   // TTS: Sync Voices
   ipcMain.handle('tts:sync-voices', async (event, provider: string, voices: any[]) => {
     try {
@@ -197,8 +194,16 @@ export function setupTTSHandlers(): void {
       console.log(`[TTS] Syncing voices for provider: ${provider}, count: ${voices.length}`);
       let count = 0;
 
-      if (provider === 'webspeech' && voiceSyncService) {
-        count = await voiceSyncService.syncWebSpeechVoices(voices);
+      if (voiceSyncService) {
+        if (provider === 'webspeech') {
+          count = await voiceSyncService.syncWebSpeechVoices(voices);
+        } else if (provider === 'azure') {
+          count = await voiceSyncService.syncAzureVoices(voices);
+        } else if (provider === 'google') {
+          count = await voiceSyncService.syncGoogleVoices(voices);
+        } else {
+          return { success: false, error: `Unknown provider: ${provider}` };
+        }
       }
 
       const stats = voiceSyncService?.getStats();
@@ -253,18 +258,21 @@ export function setupTTSHandlers(): void {
       return false;
     }
   });
-
   // TTS: Get Voices
   ipcMain.handle('tts:get-voices', async () => {
     try {
       const voices = voicesRepo.getAvailableVoices();
-      return { success: true, voices };
+      // Map numeric_id to id for frontend compatibility
+      const mappedVoices = voices.map(v => ({
+        ...v,
+        id: v.numeric_id
+      }));
+      return { success: true, voices: mappedVoices };
     } catch (error: any) {
       console.error('[TTS] Error getting voices:', error);
       return { success: false, error: error.message, voices: [] };
     }
   });
-
   // TTS: Get Grouped Voices
   ipcMain.handle('tts:get-grouped-voices', async () => {
     try {
@@ -272,7 +280,11 @@ export function setupTTSHandlers(): void {
       const result: Record<string, any[]> = {};
 
       grouped.forEach((voices, key) => {
-        result[key] = voices;
+        // Map numeric_id to id for frontend compatibility
+        result[key] = voices.map(v => ({
+          ...v,
+          id: v.numeric_id
+        }));
       });
 
       return { success: true, grouped: result };
@@ -292,18 +304,18 @@ export function setupTTSHandlers(): void {
       return { success: false, error: error.message, stats: null };
     }
   });
-
   // TTS: Get Voice by ID
   ipcMain.handle('tts:get-voice-by-id', async (event, numericId: number) => {
     try {
       const voice = voicesRepo.getVoiceByNumericId(numericId);
-      return { success: true, voice };
+      // Map numeric_id to id for frontend compatibility
+      const mapped = voice ? { ...voice, id: voice.numeric_id } : null;
+      return { success: true, voice: mapped };
     } catch (error: any) {
       console.error('[TTS] Error getting voice by ID:', error);
       return { success: false, error: error.message, voice: null };
     }
   });
-
   // TTS: Azure - Test Connection
   ipcMain.handle('azure:test-connection', async (event, credentials: { apiKey: string; region: string }) => {
     try {
@@ -345,44 +357,62 @@ export function setupTTSHandlers(): void {
           success: false,
           error: `Invalid region: ${region}. Please select a valid Azure region.`
         };
-      }
+      }      console.log('[Azure] Starting connection test with apiKey length:', apiKey.length, 'region:', region);
 
-      // Initialize Azure provider and test connection
-      const manager = await initializeTTS();
-      const azureProvider = manager['providers'].get('azure');
+      // Initialize Azure provider and test connection with timeout
+      const testPromise = (async () => {
+        try {
+          console.log('[Azure] [1/5] Initializing TTS manager...');
+          const manager = await initializeTTS();
+          console.log('[Azure] [2/5] Getting Azure provider from manager...');
+          const azureProvider = manager['providers'].get('azure');
 
-      if (!azureProvider) {
-        return {
-          success: false,
-          error: 'Azure provider not available'
-        };
-      }
+          if (!azureProvider) {
+            throw new Error('Azure provider not available');
+          }
+          console.log('[Azure] [3/5] Initializing Azure provider with credentials...');
 
-      // Initialize provider with credentials
-      await azureProvider.initialize({ apiKey, region });
+          // Initialize provider with credentials
+          await azureProvider.initialize({ apiKey, region });
+          console.log('[Azure] [4/5] Calling getVoices()...');
 
-      // Get voices to verify connection
-      const voices = await azureProvider.getVoices();
+          // Get voices to verify connection
+          const voices = await azureProvider.getVoices();
+          console.log('[Azure] [5/5] Got voices, preparing preview...');
 
-      // Get preview voices (first 10)
-      const previewVoices = voices.slice(0, 10).map((v: any) => ({
-        name: v.name,
-        language: v.languageName,
-        gender: v.gender
-      }));
+          // Get preview voices (first 10)
+          const previewVoices = voices.slice(0, 10).map((v: any) => ({
+            name: v.name,
+            language: v.languageName,
+            gender: v.gender
+          }));
 
-      console.log('[Azure] Connection test successful, found', voices.length, 'voices');
+          console.log('[Azure] Connection test successful, found', voices.length, 'voices');
 
-      return {
-        success: true,
-        voiceCount: voices.length,
-        previewVoices
-      };
+          return {
+            success: true,
+            voiceCount: voices.length,
+            previewVoices
+          };
+        } catch (err) {
+          console.error('[Azure] Error in testPromise:', err);
+          throw err;
+        }
+      })();      console.log('[Azure] Waiting for connection test to complete (15s fetch timeout + buffer)...');
+      
+      // Directly await the test promise - don't use Promise.race
+      // The fetch already has a 15s timeout with AbortController
+      const result = await testPromise;
+      console.log('[Azure] Test completed successfully, returning result to frontend');
+      return result;
+      
     } catch (error: any) {
       console.error('[Azure] Error testing connection:', error);
+      const errorMessage = error.message || 'Failed to connect to Azure Speech Services';
+      console.error('[Azure] Full error:', error);
       return {
         success: false,
-        error: error.message || 'Failed to connect to Azure Speech Services'
+        error: errorMessage
       };
     }
   });

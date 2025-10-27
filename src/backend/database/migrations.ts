@@ -137,49 +137,83 @@ export function runMigrations(db: Database.Database): void {
       ('max_repeated_words', '2'),
       ('copypasta_filter_enabled', 'false')
   `);
-
-  // Create tts_voices table for discovered voices
+  // Create WebSpeech voices table
   db.exec(`
-    CREATE TABLE IF NOT EXISTS tts_voices (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      voice_id TEXT NOT NULL UNIQUE,
-      provider TEXT NOT NULL,
-      source TEXT,
+    CREATE TABLE IF NOT EXISTS webspeech_voices (
+      voice_id TEXT PRIMARY KEY,
+      numeric_id INTEGER UNIQUE,
       name TEXT NOT NULL,
-      language_code TEXT NOT NULL,
       language_name TEXT NOT NULL,
       region TEXT,
       gender TEXT,
-      is_available INTEGER DEFAULT 1,
-      display_order INTEGER,
-      last_seen_at TEXT,
-      created_at TEXT NOT NULL,
-      metadata TEXT
+      provider TEXT DEFAULT 'webspeech',
+      metadata TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
 
-  // Create indexes for voices table
+  // Create indexes for WebSpeech voices
   db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_tts_voices_provider ON tts_voices(provider)
+    CREATE INDEX IF NOT EXISTS idx_webspeech_voices_numeric_id ON webspeech_voices(numeric_id)
   `);
   db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_tts_voices_available ON tts_voices(is_available)
-  `);
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_tts_voices_language ON tts_voices(language_code)
+    CREATE INDEX IF NOT EXISTS idx_webspeech_voices_language ON webspeech_voices(language_name)
   `);
 
-  // Create tts_voice_ids table for numeric ID mapping
+  // Create Azure voices table
   db.exec(`
-    CREATE TABLE IF NOT EXISTS tts_voice_ids (
-      numeric_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      voice_id TEXT NOT NULL UNIQUE,
-      FOREIGN KEY (voice_id) REFERENCES tts_voices(voice_id)
+    CREATE TABLE IF NOT EXISTS azure_voices (
+      voice_id TEXT PRIMARY KEY,
+      numeric_id INTEGER UNIQUE,
+      name TEXT NOT NULL,
+      language_name TEXT NOT NULL,
+      region TEXT,
+      gender TEXT,
+      provider TEXT DEFAULT 'azure',
+      metadata TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
 
+  // Create indexes for Azure voices
   db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_tts_voice_ids_lookup ON tts_voice_ids(voice_id)
+    CREATE INDEX IF NOT EXISTS idx_azure_voices_numeric_id ON azure_voices(numeric_id)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_azure_voices_language ON azure_voices(language_name)
+  `);
+
+  // Create Google voices table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS google_voices (
+      voice_id TEXT PRIMARY KEY,
+      numeric_id INTEGER UNIQUE,
+      name TEXT NOT NULL,
+      language_name TEXT NOT NULL,
+      region TEXT,
+      gender TEXT,
+      provider TEXT DEFAULT 'google',
+      metadata TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Create indexes for Google voices
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_google_voices_numeric_id ON google_voices(numeric_id)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_google_voices_language ON google_voices(language_name)
+  `);
+
+  // Create view combining all voices
+  db.exec(`
+    CREATE VIEW IF NOT EXISTS all_voices AS
+    SELECT * FROM webspeech_voices
+    UNION ALL
+    SELECT * FROM azure_voices
+    UNION ALL
+    SELECT * FROM google_voices
   `);
 
   // Create tts_provider_status table to track voice sync state per provider
@@ -193,7 +227,6 @@ export function runMigrations(db: Database.Database): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
-
   // Create viewer_tts_rules table for per-viewer TTS overrides
   db.exec(`
     CREATE TABLE IF NOT EXISTS viewer_tts_rules (
@@ -208,8 +241,7 @@ export function runMigrations(db: Database.Database): void {
       cooldown_seconds INTEGER,
       cooldown_until TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY (custom_voice_id) REFERENCES tts_voice_ids(numeric_id)
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
 

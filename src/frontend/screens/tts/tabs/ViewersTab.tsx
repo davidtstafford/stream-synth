@@ -10,6 +10,7 @@ interface VoiceGroup {
     language_name: string;
     region: string;
     gender: string;
+    provider: string;
   }>;
 }
 

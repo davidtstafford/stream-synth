@@ -19,11 +19,12 @@ export class AzureTTSProvider implements TTSProvider {
   private region: string = '';
   private isInitialized: boolean = false;
   private lastAudioData: Buffer | null = null;
-
   /**
    * Initialize the Azure provider with API credentials
    */
   async initialize(credentials?: { apiKey?: string; region?: string }): Promise<void> {
+    console.log('[Azure TTS] initialize() called with region:', credentials?.region);
+    
     if (!credentials?.apiKey || !credentials?.region) {
       throw new Error('Azure TTS requires both apiKey and region');
     }
@@ -33,14 +34,18 @@ export class AzureTTSProvider implements TTSProvider {
 
     try {
       // Create speech config
+      console.log('[Azure TTS] Creating speech config from subscription...');
       this.speechConfig = sdk.SpeechConfig.fromSubscription(this.apiKey, this.region);
+      console.log('[Azure TTS] Speech config created successfully');
       
       // Set output format to MP3 for web playback
+      console.log('[Azure TTS] Setting output format to MP3...');
       this.speechConfig.speechSynthesisOutputFormat = sdk.SpeechSynthesisOutputFormat.Audio24Khz96KBitRateMonoMp3;
       
       // Use null audio config - we'll handle audio playback ourselves
       // This allows us to get the audio data and send it to frontend for playback
       // (Required for OBS browser source capture)
+      console.log('[Azure TTS] Creating speech synthesizer...');
       this.synthesizer = new sdk.SpeechSynthesizer(this.speechConfig, undefined);
 
       this.isInitialized = true;
@@ -50,9 +55,7 @@ export class AzureTTSProvider implements TTSProvider {
       console.error('[Azure TTS] Initialization error:', error);
       throw new Error(`Failed to initialize Azure TTS: ${error}`);
     }
-  }
-
-  /**
+  }/**
    * Get list of available voices from Azure
    */
   async getVoices(): Promise<TTSVoice[]> {
@@ -60,28 +63,49 @@ export class AzureTTSProvider implements TTSProvider {
       throw new Error('Azure TTS not initialized. Call initialize() first.');
     }
 
+    console.log('[Azure TTS] Fetching voices from region:', this.region);
+    
+    // Use REST API to get voices list instead of SDK method
+    const endpoint = `https://${this.region}.tts.speech.microsoft.com/cognitiveservices/voices/list`;
+    console.log('[Azure TTS] Request endpoint:', endpoint);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log('[Azure TTS] Request timeout - aborting');
+      controller.abort();
+    }, 15000); // 15 second timeout for this fetch
+    
     try {
-      // Use REST API to get voices list instead of SDK method
-      const endpoint = `https://${this.region}.tts.speech.microsoft.com/cognitiveservices/voices/list`;
-      
       const response = await fetch(endpoint, {
         headers: {
           'Ocp-Apim-Subscription-Key': this.apiKey
-        }
+        },
+        signal: controller.signal
       });
+      
+      console.log('[Azure TTS] Response status:', response.status);
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch voices: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('[Azure TTS] Error response body:', errorText);
+        throw new Error(`Failed to fetch voices: ${response.status} ${response.statusText}`);
       }
 
       const azureVoices = await response.json() as any[];
-      const voices: TTSVoice[] = azureVoices.map((voice: any) => this.mapAzureVoiceFromAPI(voice));
+      console.log(`[Azure TTS] Retrieved ${azureVoices.length} voices from API`);
       
-      console.log(`[Azure TTS] Retrieved ${voices.length} voices`);
+      const voices: TTSVoice[] = azureVoices.map((voice: any) => this.mapAzureVoiceFromAPI(voice));
+      console.log(`[Azure TTS] Mapped to ${voices.length} internal voice objects`);
       return voices;
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('[Azure TTS] Request was aborted due to timeout');
+        throw new Error('Request to Azure timed out. Verify your internet connection and API key.');
+      }
       console.error('[Azure TTS] Error retrieving voices:', error);
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
