@@ -175,17 +175,17 @@ export const ExportImport: React.FC<ExportImportProps> = ({ userId, onImportComp
         }}>
           {message.text}
         </div>
-      )}
-
-      {showPreview && preview && (
+      )}      {showPreview && preview && (
         <div style={{
           marginTop: '20px',
           padding: '15px',
           backgroundColor: '#1a1a1a',
           borderRadius: '4px',
-          border: '1px solid #444'
+          border: '1px solid #444',
+          maxHeight: '70vh',
+          overflowY: 'auto'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h3 style={{ fontSize: '16px' }}>Export Preview</h3>
             <button
               onClick={() => setShowPreview(false)}
@@ -204,42 +204,256 @@ export const ExportImport: React.FC<ExportImportProps> = ({ userId, onImportComp
           </div>
           
           <div style={{ fontSize: '13px', color: '#aaa' }}>
-            <p><strong>Version:</strong> {preview.version}</p>
-            <p><strong>Exported At:</strong> {new Date(preview.exported_at).toLocaleString()}</p>
+            <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#252525', borderRadius: '4px' }}>
+              <p><strong>📅 Exported At:</strong> {new Date(preview.exported_at).toLocaleString()}</p>
+              <p><strong>📦 Version:</strong> {preview.version}</p>
+            </div>
             
-            <div style={{ marginTop: '15px' }}>
-              <p><strong>📊 What will be exported:</strong></p>
-              <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
-                <li>⚙️ {preview.settings?.length || 0} app settings</li>
-                <li>🎯 {preview.event_profiles?.length || 0} event profiles (
-                  {preview.event_profiles?.reduce((sum: number, p: any) => sum + p.events.length, 0) || 0} total events)
-                </li>
-                <li>📜 {preview.connection_history?.length || 0} connection history entries</li>
-              </ul>
+            <div style={{ marginBottom: '15px' }}>
+              <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#9147ff', marginBottom: '8px' }}>📊 Export Summary</p>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '10px'
+              }}>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>App Settings</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.settings?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Event Profiles</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.event_profiles?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>TTS Settings</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.tts_settings?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Viewer Preferences</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.viewers?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Total Events</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.event_profiles?.reduce((sum: number, p: any) => sum + p.events.length, 0) || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Connection History</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.connection_history?.length || 0}</p>
+                </div>
+              </div>
             </div>
 
+            {preview.settings && preview.settings.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#9147ff', marginBottom: '8px' }}>⚙️ App Settings</p>
+                <div style={{ 
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                  gap: '8px'
+                }}>
+                  {preview.settings.slice(0, 6).map((setting: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '8px',
+                      backgroundColor: '#252525',
+                      borderRadius: '4px',
+                      fontSize: '12px'
+                    }}>
+                      <p style={{ margin: '0 0 4px 0', color: '#6dff8e', fontWeight: 'bold' }}>{setting.key}</p>
+                      <p style={{ margin: 0, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {typeof setting.value === 'string' ? setting.value.substring(0, 40) : JSON.stringify(setting.value).substring(0, 40)}
+                      </p>
+                    </div>
+                  ))}
+                  {preview.settings.length > 6 && (
+                    <div style={{ 
+                      padding: '8px',
+                      backgroundColor: '#252525',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#888'
+                    }}>
+                      +{preview.settings.length - 6} more settings
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {preview.tts_settings && preview.tts_settings.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#9147ff', marginBottom: '8px' }}>🔊 TTS Settings</p>
+                <div style={{ 
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                  gap: '8px'
+                }}>
+                  {preview.tts_settings.slice(0, 8).map((setting: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '8px',
+                      backgroundColor: '#252525',
+                      borderRadius: '4px',
+                      fontSize: '12px'
+                    }}>
+                      <p style={{ margin: '0 0 4px 0', color: '#6dff8e', fontWeight: 'bold' }}>{setting.key}</p>
+                      <p style={{ margin: 0, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {typeof setting.value === 'string' ? setting.value.substring(0, 40) : JSON.stringify(setting.value).substring(0, 40)}
+                      </p>
+                    </div>
+                  ))}
+                  {preview.tts_settings.length > 8 && (
+                    <div style={{ 
+                      padding: '8px',
+                      backgroundColor: '#252525',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#888'
+                    }}>
+                      +{preview.tts_settings.length - 8} more settings
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {preview.event_profiles && preview.event_profiles.length > 0 && (
-              <div style={{ marginTop: '15px' }}>
-                <p><strong>Event Profiles:</strong></p>
-                {preview.event_profiles.slice(0, 3).map((profile: any, idx: number) => (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#9147ff', marginBottom: '8px' }}>🎯 Event Profiles ({preview.event_profiles.length})</p>
+                {preview.event_profiles.map((profile: any, idx: number) => (
                   <div key={idx} style={{ 
-                    marginLeft: '20px', 
-                    marginTop: '8px',
-                    padding: '8px',
+                    marginBottom: '8px',
+                    padding: '10px',
                     backgroundColor: '#252525',
-                    borderRadius: '4px'
+                    borderRadius: '4px',
+                    border: '1px solid #333'
                   }}>
-                    <p>👤 {profile.user_login || 'Unknown'} → 📺 {profile.channel_login || 'Unknown'}</p>
-                    <p style={{ fontSize: '12px', color: '#888' }}>
-                      {profile.events.length} events configured
+                    <p style={{ margin: '0 0 6px 0', fontWeight: 'bold', color: '#9147ff' }}>
+                      Profile #{idx + 1}: {profile.user_login || 'Unknown User'}
                     </p>
+                    <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#aaa' }}>
+                      📺 Monitoring: <strong>{profile.channel_login || 'Unknown Channel'}</strong>
+                    </p>
+                    <div style={{ fontSize: '12px' }}>
+                      <p style={{ margin: '0 0 4px 0', color: '#888' }}>Events Configured: {profile.events.length}</p>
+                      <div style={{ marginLeft: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {profile.events.slice(0, 5).map((event: string, eventIdx: number) => (
+                          <span 
+                            key={eventIdx}
+                            style={{ 
+                              fontSize: '11px',
+                              padding: '2px 6px',
+                              backgroundColor: '#1a1a1a',
+                              borderRadius: '3px',
+                              border: '1px solid #444',
+                              color: '#6dff8e'
+                            }}
+                          >
+                            {event}
+                          </span>
+                        ))}
+                        {profile.events.length > 5 && (
+                          <span style={{ 
+                            fontSize: '11px',
+                            padding: '2px 6px',
+                            color: '#888'
+                          }}>
+                            +{profile.events.length - 5} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
-                {preview.event_profiles.length > 3 && (
-                  <p style={{ marginLeft: '20px', marginTop: '8px', color: '#888' }}>
-                    ... and {preview.event_profiles.length - 3} more
-                  </p>
-                )}
+              </div>
+            )}
+
+            {preview.viewers && preview.viewers.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#9147ff', marginBottom: '8px' }}>👥 Viewer TTS Preferences ({preview.viewers.length})</p>
+                <div style={{ 
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gap: '10px'
+                }}>
+                  {preview.viewers.slice(0, 12).map((viewer: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '10px',
+                      backgroundColor: '#252525',
+                      borderRadius: '4px',
+                      border: '1px solid #333',
+                      fontSize: '12px'
+                    }}>
+                      <p style={{ margin: '0 0 4px 0', fontWeight: 'bold', color: '#9147ff' }}>
+                        {viewer.display_name || viewer.username}
+                      </p>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#aaa' }}>
+                        @{viewer.username}
+                      </p>
+                      <div style={{ fontSize: '11px' }}>
+                        <p style={{ margin: '0 0 2px 0', color: '#888' }}>
+                          TTS Voice: <span style={{ color: viewer.tts_voice_id ? '#6dff8e' : '#ff9d6d' }}>
+                            {viewer.tts_voice_id || 'Default'}
+                          </span>
+                        </p>
+                        <p style={{ margin: 0, color: '#888' }}>
+                          Status: <span style={{ color: viewer.tts_enabled ? '#6dff8e' : '#ff6d6d' }}>
+                            {viewer.tts_enabled ? '✓ Enabled' : '✗ Disabled'}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  {preview.viewers.length > 12 && (
+                    <div style={{ 
+                      padding: '10px',
+                      backgroundColor: '#252525',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#888',
+                      fontSize: '12px',
+                      fontWeight: 'bold'
+                    }}>
+                      +{preview.viewers.length - 12} more viewers
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {preview.connection_history && preview.connection_history.length > 0 && (
+              <div>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#9147ff', marginBottom: '8px' }}>📜 Connection History ({preview.connection_history.length})</p>
+                <div style={{ 
+                  maxHeight: '200px',
+                  overflowY: 'auto',
+                  backgroundColor: '#252525',
+                  borderRadius: '4px',
+                  border: '1px solid #333'
+                }}>
+                  {preview.connection_history.map((entry: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '8px 10px',
+                      borderBottom: idx < preview.connection_history.length - 1 ? '1px solid #333' : 'none',
+                      fontSize: '12px'
+                    }}>
+                      <p style={{ margin: '0 0 2px 0', color: '#6dff8e' }}>
+                        {entry.user_login || 'Unknown'} → {entry.channel_login || 'Unknown'}
+                      </p>
+                      <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>
+                        {new Date(entry.connected_at).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

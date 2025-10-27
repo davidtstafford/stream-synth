@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Connection } from '../../components/Connection';
-import { ChannelSelector } from '../../components/ChannelSelector';
 import { EventSubscriptions } from '../../components/EventSubscriptions';
-import { ExportImport } from '../../components/ExportImport';
 import { createWebSocketConnection } from '../../services/websocket';
 import * as db from '../../services/database';
 
@@ -21,10 +19,8 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
   const [broadcasterId, setBroadcasterId] = useState<string>('');
   const [broadcasterLogin, setBroadcasterLogin] = useState<string>('');
   const [isBroadcaster, setIsBroadcaster] = useState<boolean>(false);
-  const [sessionId, setSessionId] = useState<string>('');
-  const [wsConnection, setWsConnection] = useState<any>(null);
+  const [sessionId, setSessionId] = useState<string>('');  const [wsConnection, setWsConnection] = useState<any>(null);
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null);
-  const [showChannelSelector, setShowChannelSelector] = useState<boolean>(false);
   const [isAutoReconnecting, setIsAutoReconnecting] = useState<boolean>(true);
 
   // Auto-reconnect on mount
@@ -365,27 +361,7 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
           message: 'WebSocket connection closed'
         });
       }
-    });
-
-    setWsConnection(ws);
-  };
-
-  const handleChannelSelected = async (channelId: string, channelLogin: string, isBroadcasterFlag: boolean) => {
-    setBroadcasterId(channelId);
-    setBroadcasterLogin(channelLogin);
-    setIsBroadcaster(isBroadcasterFlag);
-    setShowChannelSelector(false);
-    
-    // Update saved channel settings
-    await db.setSetting('last_connected_channel_id', channelId);
-    await db.setSetting('last_connected_channel_login', channelLogin);
-    await db.setSetting('last_is_broadcaster', isBroadcasterFlag.toString());
-    
-    // Update status message
-    setStatusMessage({
-      type: 'success',
-      message: `Now monitoring: ${channelLogin}`
-    });
+    });    setWsConnection(ws);
   };
 
   const handleDisconnected = async () => {
@@ -407,17 +383,8 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
     setUserLogin('');
     setBroadcasterId('');
     setBroadcasterLogin('');
-    setIsBroadcaster(false);
-    setSessionId('');
+    setIsBroadcaster(false);    setSessionId('');
     setStatusMessage(null);
-    setShowChannelSelector(false);
-  };
-
-  const handleImportComplete = () => {
-    setStatusMessage({
-      type: 'success',
-      message: 'Settings imported! Please restart the app to apply changes.'
-    });
   };
 
   return (
@@ -426,52 +393,15 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <h2>Restoring previous session...</h2>
           <p style={{ color: '#888' }}>Please wait</p>
-        </div>
-      ) : (
+        </div>      ) : (
         <Connection 
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
+          isConnected={!!accessToken}
+          connectedUserLogin={userLogin}
+          connectedUserId={userId}
         />
-      )}
-
-      {accessToken && broadcasterId && !showChannelSelector && (
-        <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-          <p>
-            <strong>Monitoring Channel:</strong> {broadcasterLogin} (ID: {broadcasterId})
-            {isBroadcaster && ' (Your Channel)'}
-          </p>
-          <button 
-            onClick={() => setShowChannelSelector(true)}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#9147ff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Change Channel
-          </button>
-        </div>
-      )}
-
-      {accessToken && showChannelSelector && (
-        <ChannelSelector
-          clientId={clientId}
-          accessToken={accessToken}
-          currentUserId={userId}
-          onChannelSelected={handleChannelSelected}
-        />
-      )}
-
-      {statusMessage && (
-        <div className={`status-message status-${statusMessage.type}`}>
-          {statusMessage.message}
-        </div>
-      )}
-
-      {accessToken && broadcasterId && sessionId && !showChannelSelector && (
+      )}{accessToken && broadcasterId && sessionId && (
         <EventSubscriptions
           clientId={clientId}
           accessToken={accessToken}
@@ -482,11 +412,6 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
           isBroadcaster={isBroadcaster}
         />
       )}
-
-      <ExportImport 
-        userId={userId}
-        onImportComplete={handleImportComplete}
-      />
     </div>
   );
 };

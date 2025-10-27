@@ -328,8 +328,7 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
                   return (
                     <label 
                       key={event}
-                      title={`${event}\n${displayInfo.description}`}
-                      style={{ 
+                      title={`${event}\n${displayInfo.description}`}                      style={{ 
                         display: 'flex', 
                         alignItems: 'center',
                         cursor: isDisabled ? 'not-allowed' : 'pointer',
@@ -337,8 +336,7 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
                         background: isMandatory ? '#2d3d2d' : '#2d2d2d',
                         borderRadius: '4px',
                         transition: 'background 0.2s',
-                        border: isMandatory ? '1px solid #4d7a45' : 'none',
-                        opacity: (isBroadcasterOnly && !isBroadcaster) ? 0.5 : 1
+                        border: isMandatory ? '1px solid #4d7a45' : 'none'
                       }}
                       onMouseEnter={(e) => {
                         if (!isDisabled) e.currentTarget.style.background = '#353535';
@@ -368,8 +366,7 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
                         gap: '6px',
                         flexWrap: 'wrap'
                       }}>
-                        <span>{displayInfo.name}</span>
-                        {isMandatory && (
+                        <span>{displayInfo.name}</span>                        {isMandatory && (
                           <span style={{ 
                             fontSize: '10px', 
                             color: '#6dff8e',
@@ -377,16 +374,6 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
                             whiteSpace: 'nowrap'
                           }}>
                             (REQUIRED)
-                          </span>
-                        )}
-                        {isBroadcasterOnly && (
-                          <span style={{ 
-                            fontSize: '10px', 
-                            color: isBroadcaster ? '#6dff8e' : '#ff6d6d',
-                            fontWeight: 'bold',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            (BROADCASTER)
                           </span>
                         )}
                       </span>
