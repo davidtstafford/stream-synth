@@ -11,6 +11,14 @@ export interface ExportData {
     version: string;
   };
   settings: Array<{ key: string; value: string }>;
+  tts_settings: Array<{ key: string; value: string }>;
+  viewers: Array<{
+    id: string;
+    username: string;
+    display_name?: string;
+    tts_voice_id?: string;
+    tts_enabled: boolean;
+  }>;
   event_profiles: Array<{
     user_id: string;
     user_login?: string;
@@ -32,8 +40,14 @@ export interface ExportData {
 export async function exportSettings(): Promise<string> {
   const db = getDatabase();
 
-  // Get all settings (excluding sensitive data)
-  const settings = db.prepare('SELECT key, value FROM app_settings WHERE key NOT LIKE \'%token%\'').all() as Array<{ key: string; value: string }>;
+  // Get all settings (excluding sensitive data and tokens)
+  const settings = db.prepare('SELECT key, value FROM app_settings WHERE key NOT LIKE \'%token%\' AND key NOT LIKE \'%api_key%\'').all() as Array<{ key: string; value: string }>;
+
+  // Get all TTS settings (excluding API keys)
+  const ttsSettings = db.prepare('SELECT key, value FROM tts_settings WHERE key NOT LIKE \'%api_key%\'').all() as Array<{ key: string; value: string }>;
+
+  // Get all viewer settings (TTS voice preferences)
+  const viewers = db.prepare('SELECT id, username, display_name, tts_voice_id, tts_enabled FROM viewers').all() as Array<any>;
 
   // Get all event subscriptions grouped by user/channel
   const eventSubs = db.prepare(`
@@ -83,6 +97,14 @@ export async function exportSettings(): Promise<string> {
       version: app.getVersion()
     },
     settings: settings.filter(s => !s.key.includes('password') && !s.key.includes('secret')),
+    tts_settings: ttsSettings,
+    viewers: viewers.map(v => ({
+      id: v.id,
+      username: v.username,
+      display_name: v.display_name,
+      tts_voice_id: v.tts_voice_id,
+      tts_enabled: v.tts_enabled === 1
+    })),
     event_profiles: Array.from(eventProfiles.values()),
     connection_history: sessions.map(s => ({
       user_login: s.user_login,
@@ -170,6 +192,46 @@ export async function importSettings(): Promise<{ success: boolean; message: str
       }
     });
 
+    // Import TTS settings
+    if (importData.tts_settings) {
+      const ttsStmt = db.prepare(`
+        INSERT INTO tts_settings (key, value, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET
+          value = excluded.value,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+
+      importData.tts_settings.forEach(setting => {
+        ttsStmt.run(setting.key, setting.value);
+        importedCount++;
+      });
+    }
+
+    // Import viewer TTS preferences
+    if (importData.viewers) {
+      const viewerStmt = db.prepare(`
+        INSERT INTO viewers (id, username, display_name, tts_voice_id, tts_enabled)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          display_name = excluded.display_name,
+          tts_voice_id = excluded.tts_voice_id,
+          tts_enabled = excluded.tts_enabled,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+
+      importData.viewers.forEach(viewer => {
+        viewerStmt.run(
+          viewer.id,
+          viewer.username,
+          viewer.display_name || null,
+          viewer.tts_voice_id || null,
+          viewer.tts_enabled ? 1 : 0
+        );
+        importedCount++;
+      });
+    }
+
     // Import event profiles
     const eventStmt = db.prepare(`
       INSERT INTO event_subscriptions (user_id, channel_id, event_type, is_enabled, updated_at)
@@ -198,6 +260,8 @@ export async function importSettings(): Promise<{ success: boolean; message: str
       message: `Successfully imported ${importedCount} items`,
       imported: {
         settings: importData.settings.length,
+        tts_settings: importData.tts_settings?.length || 0,
+        viewers: importData.viewers?.length || 0,
         event_profiles: importData.event_profiles.length,
         events: importData.event_profiles.reduce((sum, p) => sum + p.events.length, 0)
       }
@@ -212,7 +276,11 @@ export async function importSettings(): Promise<{ success: boolean; message: str
 export function getExportPreview(): ExportData {
   const db = getDatabase();
 
-  const settings = db.prepare('SELECT key, value FROM app_settings WHERE key NOT LIKE \'%token%\'').all() as Array<{ key: string; value: string }>;
+  const settings = db.prepare('SELECT key, value FROM app_settings WHERE key NOT LIKE \'%token%\' AND key NOT LIKE \'%api_key%\'').all() as Array<{ key: string; value: string }>;
+
+  const ttsSettings = db.prepare('SELECT key, value FROM tts_settings WHERE key NOT LIKE \'%api_key%\'').all() as Array<{ key: string; value: string }>;
+
+  const viewers = db.prepare('SELECT id, username, display_name, tts_voice_id, tts_enabled FROM viewers').all() as Array<any>;
 
   const eventSubs = db.prepare(`
     SELECT 
@@ -258,6 +326,14 @@ export function getExportPreview(): ExportData {
       version: app.getVersion()
     },
     settings: settings,
+    tts_settings: ttsSettings,
+    viewers: viewers.map(v => ({
+      id: v.id,
+      username: v.username,
+      display_name: v.display_name,
+      tts_voice_id: v.tts_voice_id,
+      tts_enabled: v.tts_enabled === 1
+    })),
     event_profiles: Array.from(eventProfiles.values()),
     connection_history: sessions.map(s => ({
       user_login: s.user_login,

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as db from '../services/database';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -7,6 +8,9 @@ const TWITCH_CLIENT_ID = 'ju6sit0u97ta9fbzxr8egs2v75k0ic';
 interface ConnectionProps {
   onConnected: (clientId: string, accessToken: string, userId: string, userLogin: string) => void;
   onDisconnected: () => void;
+  isConnected?: boolean;
+  connectedUserLogin?: string;
+  connectedUserId?: string;
 }
 
 interface StatusMessage {
@@ -14,7 +18,13 @@ interface StatusMessage {
   message: string;
 }
 
-export const Connection: React.FC<ConnectionProps> = ({ onConnected, onDisconnected }) => {
+export const Connection: React.FC<ConnectionProps> = ({ 
+  onConnected, 
+  onDisconnected,
+  isConnected = false,
+  connectedUserLogin = '',
+  connectedUserId = ''
+}) => {
   const [accessToken, setAccessToken] = useState<string>('');
   const [userLogin, setUserLogin] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
@@ -66,7 +76,6 @@ export const Connection: React.FC<ConnectionProps> = ({ onConnected, onDisconnec
       setIsConnecting(false);
     }
   };
-
   const handleDisconnect = () => {
     setAccessToken('');
     setUserId('');
@@ -75,11 +84,52 @@ export const Connection: React.FC<ConnectionProps> = ({ onConnected, onDisconnec
     onDisconnected();
   };
 
+  const handleForgetCredentials = async () => {
+    if (!confirm('Are you sure? This will delete all saved tokens and session information. You will need to log in again.')) {
+      return;
+    }
+    
+    try {
+      setStatusMessage({
+        type: 'info',
+        message: 'Removing credentials...'
+      });
+
+      const userIdToForget = userId || connectedUserId;
+      const savedToken = await db.getToken(userIdToForget);
+      
+      if (savedToken) {
+        await db.deleteToken(userIdToForget);
+      }
+      
+      // Clear saved settings
+      await db.setSetting('last_connected_user_id', '');
+      await db.setSetting('last_connected_channel_id', '');
+      await db.setSetting('last_connected_channel_login', '');
+      await db.setSetting('last_is_broadcaster', '');
+
+      setAccessToken('');
+      setUserId('');
+      setUserLogin('');
+      
+      setStatusMessage({
+        type: 'success',
+        message: 'Credentials removed. You are now logged out.'
+      });
+      
+      onDisconnected();
+    } catch (error: any) {
+      setStatusMessage({
+        type: 'error',
+        message: `Error: ${error.message}`
+      });
+    }
+  };
   return (
     <div>
       <h1 className="screen-title">Connection</h1>
       
-      {!accessToken ? (
+      {!accessToken && !isConnected ? (
         <button
           className="btn"
           onClick={handleConnect}
@@ -94,16 +144,28 @@ export const Connection: React.FC<ConnectionProps> = ({ onConnected, onDisconnec
               Connected as
             </label>
             <div className="form-input" style={{ opacity: 0.7 }}>
-              {userLogin} (ID: {userId})
+              {userLogin || connectedUserLogin} (ID: {userId || connectedUserId})
             </div>
           </div>
           
-          <button
-            className="btn"
-            onClick={handleDisconnect}
-          >
-            Disconnect
-          </button>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+            <button
+              className="btn"
+              onClick={handleDisconnect}
+              style={{ flex: 1 }}
+            >
+              Disconnect
+            </button>
+            <button
+              className="btn"
+              onClick={handleForgetCredentials}
+              style={{ flex: 1, backgroundColor: '#c14d3d' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#a13d2d'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#c14d3d'}
+            >
+              Forget Credentials
+            </button>
+          </div>
         </>
       )}
 
@@ -113,13 +175,13 @@ export const Connection: React.FC<ConnectionProps> = ({ onConnected, onDisconnec
         </div>
       )}
 
-      {accessToken && (
+      {(accessToken || isConnected) && (
         <div className="form-group" style={{ marginTop: '30px' }}>
           <label className="form-label">
             Access Token (truncated)
           </label>
           <div className="form-input" style={{ opacity: 0.7 }}>
-            {accessToken.substring(0, 20)}...
+            {(accessToken || '••••••••••••••••••••').substring(0, 20)}...
           </div>
         </div>
       )}

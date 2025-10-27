@@ -7,6 +7,7 @@ import { ChatScreen } from './screens/chat/chat';
 import { ViewersScreen } from './screens/viewers/viewers';
 import { TTS } from './screens/tts/tts';
 import { Discord } from './screens/discord/discord';
+import { AdvancedScreen } from './screens/advanced/advanced';
 import * as db from './services/database';
 import * as ttsService from './services/tts';
 
@@ -45,18 +46,16 @@ const App: React.FC = () => {
     const interval = setInterval(loadSession, 5000);
     return () => clearInterval(interval);
   }, []);
-
   // Note: TTS speak handler is registered in services/tts.ts to prevent duplicate listeners
-
   const menuItems = [
     { id: 'connection', label: 'Connection' },
     { id: 'events', label: 'Events' },
     { id: 'chat', label: 'Chat' },
     { id: 'viewers', label: 'Viewers' },
     { id: 'tts', label: 'TTS' },
-    { id: 'discord', label: 'Discord' }
+    { id: 'discord', label: 'Discord' },
+    { id: 'advanced', label: 'Advanced', isBottom: true }
   ];
-
   const renderScreen = () => {
     switch (activeScreen) {
       case 'connection':
@@ -71,6 +70,8 @@ const App: React.FC = () => {
         return <TTS />;
       case 'discord':
         return <Discord />;
+      case 'advanced':
+        return <AdvancedScreen />;
       default:
         return <ConnectionScreen />;
     }
