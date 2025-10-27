@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as ttsService from '../../../services/tts';
-import { AzureSetupGuide, WebSpeechSetupGuide } from './VoiceSettingGuides';
+import { AzureSetupGuide, WebSpeechSetupGuide, GoogleSetupGuide } from './VoiceSettingGuides';
 
 // VoiceGroup interface is defined in parent component, but we need to mirror it here
 // This is defined in tts.tsx as well - kept in sync for type safety
@@ -24,6 +24,7 @@ interface Props {
   testMessage: string;
   isSpeaking: boolean;
   rescanningProvider: string | null;
+  rescanMessages: { [key: string]: string };
   searchTerm: string;
   languageFilter: string;
   genderFilter: string;
@@ -37,8 +38,9 @@ interface Props {
   onSearchChange: (term: string) => void;
   onLanguageFilterChange: (filter: string) => void;
   onGenderFilterChange: (filter: string) => void;
-  onProviderFilterChange: (filter: string) => void;
-  getUniqueLanguages: () => string[];
+  onProviderFilterChange: (filter: string) => void;  getUniqueLanguages: () => string[];
+  getAvailableGenders: () => string[];
+  getAvailableProviders: () => Array<{ value: string; label: string }>;
   getFilteredGroups: () => VoiceGroup[];
   getVisibleVoiceCount: () => number;
   formatVoiceOption: (voice: VoiceGroup['voices'][0]) => string;
@@ -52,6 +54,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   testMessage,
   isSpeaking,
   rescanningProvider,
+  rescanMessages,
   searchTerm,
   languageFilter,
   genderFilter,
@@ -67,6 +70,8 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   onGenderFilterChange,
   onProviderFilterChange,
   getUniqueLanguages,
+  getAvailableGenders,
+  getAvailableProviders,
   getFilteredGroups,
   getVisibleVoiceCount,
   formatVoiceOption,
@@ -74,6 +79,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
 }) => {
   const [showAzureGuide, setShowAzureGuide] = useState(false);
   const [showWebSpeechGuide, setShowWebSpeechGuide] = useState(false);
+  const [showGoogleGuide, setShowGoogleGuide] = useState(false);
   
   const filteredGroups = getFilteredGroups();
   const visibleCount = getVisibleVoiceCount();
@@ -81,8 +87,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
 
   const handleAzureGuideClose = () => {
     setShowAzureGuide(false);
-  };
-  const handleAzureGuideComplete = async (apiKey: string, region: string) => {
+  };  const handleAzureGuideComplete = async (apiKey: string, region: string) => {
     // Save the Azure credentials and sync voices
     try {
       console.log('[VoiceSettingsTab] Azure setup complete, saving credentials and syncing voices...');
@@ -100,6 +105,26 @@ export const VoiceSettingsTab: React.FC<Props> = ({
       setShowAzureGuide(false);
     } catch (error) {
       console.error('[VoiceSettingsTab] Error saving Azure credentials:', error);
+    }
+  };
+
+  const handleGoogleGuideComplete = async (apiKey: string) => {
+    // Save the Google credentials and sync voices
+    try {
+      console.log('[VoiceSettingsTab] Google setup complete, saving credentials and syncing voices...');
+      await onSettingChange('googleApiKey', apiKey);
+      
+      // Sync Google voices to database before enabling
+      console.log('[VoiceSettingsTab] Syncing Google voices...');
+      const { ipcRenderer } = window.require('electron');
+      const syncResult = await ipcRenderer.invoke('google:sync-voices', { apiKey });
+      console.log('[VoiceSettingsTab] Sync result:', syncResult);
+      
+      // Enable Google provider
+      await onProviderToggle('google', true);
+      setShowGoogleGuide(false);
+    } catch (error) {
+      console.error('[VoiceSettingsTab] Error saving Google credentials:', error);
     }
   };
 
@@ -188,13 +213,26 @@ export const VoiceSettingsTab: React.FC<Props> = ({
               >
                 {rescanningProvider === 'webspeech' ? '⟳ Rescanning...' : '⟳ Rescan'}
               </button>
-            </div>
-          </div>
+            </div>          </div>
           <div style={{ marginLeft: '28px', color: '#888' }}>
             <div>✓ {providerCounts.webspeech} system voices available</div>
             <div>✓ No API key required</div>
             <div>✓ Works offline</div>
           </div>
+          {rescanMessages['webspeech'] && (
+            <div style={{
+              marginTop: '12px',
+              marginLeft: '28px',
+              padding: '8px 12px',
+              backgroundColor: rescanMessages['webspeech'].startsWith('✓') ? '#1a3a1a' : '#3a1a1a',
+              border: `1px solid ${rescanMessages['webspeech'].startsWith('✓') ? '#28a745' : '#dc3545'}`,
+              borderRadius: '4px',
+              fontSize: '0.9em',
+              color: rescanMessages['webspeech'].startsWith('✓') ? '#28a745' : '#dc3545'
+            }}>
+              {rescanMessages['webspeech']}
+            </div>
+          )}
         </div>        {/* Azure Provider Setup Button */}
         <div className="provider-toggle-section" style={{ padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
@@ -248,12 +286,25 @@ export const VoiceSettingsTab: React.FC<Props> = ({
                 </button>
               )}
             </div>
-          </div>
-          <div style={{ marginLeft: '28px', color: '#888', marginBottom: '12px' }}>
+          </div>          <div style={{ marginLeft: '28px', color: '#888', marginBottom: '12px' }}>
             <div>✓ 300+ high-quality neural voices</div>
             <div>✓ Multiple languages and regions</div>
             <div>✓ Free tier: 500K characters/month</div>
           </div>
+          {rescanMessages['azure'] && (
+            <div style={{
+              marginBottom: '12px',
+              marginLeft: '28px',
+              padding: '8px 12px',
+              backgroundColor: rescanMessages['azure'].startsWith('✓') ? '#1a3a1a' : '#3a1a1a',
+              border: `1px solid ${rescanMessages['azure'].startsWith('✓') ? '#28a745' : '#dc3545'}`,
+              borderRadius: '4px',
+              fontSize: '0.9em',
+              color: rescanMessages['azure'].startsWith('✓') ? '#28a745' : '#dc3545'
+            }}>
+              {rescanMessages['azure']}
+            </div>
+          )}
             {/* Best Practices Callout */}
           <div style={{
             marginTop: '12px',
@@ -273,8 +324,8 @@ export const VoiceSettingsTab: React.FC<Props> = ({
               <li>Test voices before using them to ensure quality</li>
             </ul>
           </div>
-        </div>        {/* Google Provider - Hidden for now */}
-        <div className="provider-toggle-section" style={{ display: 'none', marginTop: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
+        </div>        {/* Google Provider */}
+        <div className="provider-toggle-section" style={{ padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
             <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
               <input
@@ -283,34 +334,86 @@ export const VoiceSettingsTab: React.FC<Props> = ({
                 onChange={(e) => onProviderToggle('google', e.target.checked)}
               />
               <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
-                🌍 Google Cloud Text-to-Speech
+                🔵 Google Cloud Text-to-Speech (Premium)
               </span>
             </label>
-            {settings.googleEnabled && (
+            <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                onClick={() => onProviderRescan('google')}
-                disabled={rescanningProvider === 'google'}
+                onClick={() => setShowGoogleGuide(true)}
                 style={{
-                  padding: '6px 12px',
-                  fontSize: '0.9em',
-                  backgroundColor: rescanningProvider === 'google' ? '#555' : '#4a4a4a',
-                  border: '1px solid #666',
+                  padding: '10px 16px',
+                  fontSize: '0.95em',
+                  backgroundColor: '#0078d4',
+                  border: 'none',
                   borderRadius: '4px',
-                  cursor: rescanningProvider === 'google' ? 'not-allowed' : 'pointer',
+                  cursor: 'pointer',
                   color: '#fff',
-                  opacity: rescanningProvider === 'google' ? 0.7 : 1
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap'
                 }}
-                title={rescanningProvider === 'google' ? 'Rescanning...' : 'Click to rescan voices immediately'}
+                title={settings?.googleApiKey ? 'Click to edit Google setup' : 'Click to set up Google Cloud Text-to-Speech'}
               >
-                {rescanningProvider === 'google' ? '⏳ Rescanning...' : '🔄 Rescan'}
+                {settings?.googleApiKey ? '✏️ Edit Setup' : '⚙️ Setup'}
               </button>
-            )}
-          </div>
-          <div style={{ marginLeft: '28px', color: '#888' }}>
-            <div>✓ 400+ natural voices</div>
+              {settings?.googleApiKey && (
+                <button
+                  onClick={() => onProviderRescan('google')}
+                  disabled={rescanningProvider === 'google'}
+                  style={{
+                    padding: '10px 16px',
+                    fontSize: '0.95em',
+                    backgroundColor: rescanningProvider === 'google' ? '#555' : '#28a745',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: rescanningProvider === 'google' ? 'not-allowed' : 'pointer',
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap',
+                    opacity: rescanningProvider === 'google' ? 0.6 : 1
+                  }}
+                  title="Rescan Google voices for changes"
+                >
+                  {rescanningProvider === 'google' ? '⟳ Rescanning...' : '⟳ Rescan'}
+                </button>
+              )}
+            </div>
+          </div>          <div style={{ marginLeft: '28px', color: '#888', marginBottom: '12px' }}>
+            <div>✓ 400+ high-quality neural voices (Chirp 3: HD)</div>
             <div>✓ 100+ languages and variants</div>
-            <div>✓ Requires Google Cloud API key</div>
-            <div>✓ Pay-as-you-go pricing</div>
+            <div>✓ Free tier: 1M characters/month</div>
+          </div>
+          {rescanMessages['google'] && (
+            <div style={{
+              marginBottom: '12px',
+              marginLeft: '28px',
+              padding: '8px 12px',
+              backgroundColor: rescanMessages['google'].startsWith('✓') ? '#1a3a1a' : '#3a1a1a',
+              border: `1px solid ${rescanMessages['google'].startsWith('✓') ? '#28a745' : '#dc3545'}`,
+              borderRadius: '4px',
+              fontSize: '0.9em',
+              color: rescanMessages['google'].startsWith('✓') ? '#28a745' : '#dc3545'
+            }}>
+              {rescanMessages['google']}
+            </div>
+          )}
+          {/* Best Practices Callout */}
+          <div style={{
+            marginTop: '12px',
+            padding: '10px',
+            backgroundColor: '#1f3a5f',
+            borderLeft: '4px solid #4285f4',
+            borderRadius: '4px',
+            fontSize: '0.85em',
+            lineHeight: '1.5',
+            color: '#e0e0e0'
+          }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>💡 Best Practices:</div>
+            <ul style={{ margin: '0', paddingLeft: '20px' }}>
+              <li>Use Google voices for a global audience with diverse language needs</li>
+              <li>Combine with Azure voices for maximum quality and cost flexibility</li>
+              <li>Monitor your usage to stay within free tier (500K chars/month)</li>
+              <li>Test voices before using them to ensure quality</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -322,17 +425,15 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           value={searchTerm}
           onChange={(e) => onSearchChange(e.target.value)}
           className="search-input"
-        />
-
-        <select
+        />        <select
           value={providerFilter}
           onChange={(e) => onProviderFilterChange(e.target.value)}
           className="filter-select"
         >
           <option value="all">All Providers</option>
-          <option value="webspeech">🌐 WebSpeech</option>
-          <option value="azure">☁️ Azure</option>
-          <option value="google">🔵 Google</option>
+          {getAvailableProviders().map(provider => (
+            <option key={provider.value} value={provider.value}>{provider.label}</option>
+          ))}
         </select>
 
         <select
@@ -344,17 +445,17 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           {getUniqueLanguages().map(lang => (
             <option key={lang} value={lang}>{lang}</option>
           ))}
-        </select>
-
-        <select
+        </select>        <select
           value={genderFilter}
           onChange={(e) => onGenderFilterChange(e.target.value)}
           className="filter-select"
         >
           <option value="all">All Genders</option>
-          <option value="male">♂️ Male</option>
-          <option value="female">♀️ Female</option>
-          <option value="neutral">⚧ Neutral</option>
+          {getAvailableGenders().map(gender => (
+            <option key={gender} value={gender}>
+              {gender === 'male' ? '♂️ Male' : gender === 'female' ? '♀️ Female' : '⚧ Neutral'}
+            </option>
+          ))}
         </select>
       </div>      {/* Voice Selection with Grouped Dropdown */}
       <div className="setting-group">
@@ -497,12 +598,18 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           onClose={handleAzureGuideClose}
           onComplete={handleAzureGuideComplete}
         />
-      )}
-
-      {/* WebSpeech Setup Guide Modal */}
+      )}      {/* WebSpeech Setup Guide Modal */}
       {showWebSpeechGuide && (
         <WebSpeechSetupGuide
           onClose={() => setShowWebSpeechGuide(false)}
+        />
+      )}
+
+      {/* Google Setup Guide Modal */}
+      {showGoogleGuide && (
+        <GoogleSetupGuide
+          onClose={() => setShowGoogleGuide(false)}
+          onComplete={handleGoogleGuideComplete}
         />
       )}
     </>

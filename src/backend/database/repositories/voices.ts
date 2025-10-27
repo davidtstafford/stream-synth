@@ -1,8 +1,6 @@
 import { getDatabase } from '../connection';
 import { 
-  generateNumericVoiceId, 
   extractProviderFromId,
-  VoiceProvider,
   getProviderName 
 } from '../../services/tts/voice-id-generator';
 
@@ -43,36 +41,13 @@ export class VoicesRepository {
         return 'google_voices';
       default:
         throw new Error(`Unknown provider: ${provider}`);
-    }
-  }
-
-  // Get VoiceProvider enum from provider string
-  private getProviderEnum(provider: string): VoiceProvider {
-    switch (provider) {
-      case 'webspeech':
-        return VoiceProvider.WEBSPEECH;
-      case 'azure':
-        return VoiceProvider.AZURE;
-      case 'google':
-        return VoiceProvider.GOOGLE;
-      default:
-        throw new Error(`Unknown provider: ${provider}`);
-    }
-  }
+    }  }
 
   // Create or update a voice in the provider-specific table
   upsertVoice(voice: Omit<VoiceRecord, 'created_at' | 'numeric_id'>): string {
     const db = getDatabase();
     const now = new Date().toISOString();
     const table = this.getTableName(voice.provider);
-    
-    // Generate deterministic numeric ID
-    const numeric_id = generateNumericVoiceId(this.getProviderEnum(voice.provider), {
-      name: voice.name,
-      language: voice.name, // Use name as identifier for consistency
-      languageName: voice.language_name,
-      region: voice.region || undefined
-    });
     
     const existing = db.prepare(
       `SELECT voice_id FROM ${table} WHERE voice_id = ?`
@@ -95,13 +70,13 @@ export class VoicesRepository {
         voice.voice_id
       );
     } else {
-      // Insert new voice with deterministic numeric ID
+      // Insert new voice - let SQLite auto-assign numeric_id
+      // This eliminates hash collision issues entirely
       db.prepare(`
-        INSERT INTO ${table} (voice_id, numeric_id, name, language_name, region, gender, provider, metadata, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO ${table} (voice_id, name, language_name, region, gender, provider, metadata, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         voice.voice_id,
-        numeric_id,
         voice.name,
         voice.language_name,
         voice.region,

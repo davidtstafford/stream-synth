@@ -30,5 +30,10 @@ export function setMainWindow(mainWindow: BrowserWindow): void {
   setupEventStorageHandler(initializeTTS, mainWindow);
 }
 
+export function setupAllIpcHandlers(mainWindow: BrowserWindow): void {
+  setupIpcHandlers();
+  setMainWindow(mainWindow);
+}
+
 export { runStartupTasks } from './startup';
 

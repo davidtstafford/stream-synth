@@ -1,6 +1,29 @@
 import Database from 'better-sqlite3';
 
 export function runMigrations(db: Database.Database): void {
+  // Migration: Handle voice tables schema change (numeric_id as PRIMARY KEY AUTOINCREMENT)
+  // Check if webspeech_voices needs migration
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(webspeech_voices)").all() as any[];
+    const hasNumericIdPrimaryKey = tableInfo.some(col => col.name === 'numeric_id' && col.pk === 1);
+    
+    if (tableInfo.length > 0 && !hasNumericIdPrimaryKey) {
+      console.log('[Migration] Recreating voice tables with new schema...');
+      
+      // Drop old tables and recreate with new schema
+      db.exec(`
+        DROP TABLE IF EXISTS webspeech_voices;
+        DROP TABLE IF EXISTS azure_voices;
+        DROP TABLE IF EXISTS google_voices;
+        DROP VIEW IF EXISTS all_voices;
+      `);
+      
+      console.log('[Migration] Voice tables dropped, will be recreated');
+    }
+  } catch (error) {
+    console.log('[Migration] Checking voice table schema:', error);
+  }
+
   // Create app_settings table
   db.exec(`
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -136,12 +159,11 @@ export function runMigrations(db: Database.Database): void {
       ('max_repeated_chars', '3'),
       ('max_repeated_words', '2'),
       ('copypasta_filter_enabled', 'false')
-  `);
-  // Create WebSpeech voices table
+  `);  // Create WebSpeech voices table
   db.exec(`
     CREATE TABLE IF NOT EXISTS webspeech_voices (
-      voice_id TEXT PRIMARY KEY,
-      numeric_id INTEGER UNIQUE,
+      numeric_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      voice_id TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
       language_name TEXT NOT NULL,
       region TEXT,
@@ -159,12 +181,11 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_webspeech_voices_language ON webspeech_voices(language_name)
   `);
-
   // Create Azure voices table
   db.exec(`
     CREATE TABLE IF NOT EXISTS azure_voices (
-      voice_id TEXT PRIMARY KEY,
-      numeric_id INTEGER UNIQUE,
+      numeric_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      voice_id TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
       language_name TEXT NOT NULL,
       region TEXT,
@@ -182,12 +203,11 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_azure_voices_language ON azure_voices(language_name)
   `);
-
   // Create Google voices table
   db.exec(`
     CREATE TABLE IF NOT EXISTS google_voices (
-      voice_id TEXT PRIMARY KEY,
-      numeric_id INTEGER UNIQUE,
+      numeric_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      voice_id TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
       language_name TEXT NOT NULL,
       region TEXT,

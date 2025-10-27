@@ -1,6 +1,7 @@
 import { VoicesRepository } from '../../database/repositories/voices';
 import { VoiceParser } from './voice-parser';
 import { generateNumericVoiceId, VoiceProvider } from './voice-id-generator';
+import { LanguageService } from './language-service';
 
 export class VoiceSyncService {
   constructor(private voicesRepo: VoicesRepository) {}
@@ -14,22 +15,35 @@ export class VoiceSyncService {
       this.voicesRepo.updateProviderStatus('webspeech', true, 0);
       return 0;
     }
-    
-    // Purge existing voices for this provider (clean slate)
+      // Purge existing voices for this provider (clean slate)
     this.voicesRepo.purgeProvider('webspeech');
     
     const voiceIds: string[] = [];
-      // Upsert all voices with deterministic numeric IDs
+    // Upsert all voices with deterministic numeric IDs
     voices.forEach((voice, index) => {
       const parsed = VoiceParser.parseWebSpeechVoice(voice, index);
+        // Determine language and country using language service
+      const voiceLanguageInfo = LanguageService.normalizeVoiceLanguage(parsed);
+      const languageName = voiceLanguageInfo?.languageName || parsed.language_name || 'Unknown';
+      // Store full country name for UI display (e.g., "United States" not "US")
+      const region = voiceLanguageInfo?.countryName || voiceLanguageInfo?.countryCode || parsed.region || null;
+      
+      // Enhance metadata with language info
+      const enhancedMetadata = {
+        ...JSON.parse(parsed.metadata || '{}'),
+        languageCode: voiceLanguageInfo?.languageCode,
+        countryCode: voiceLanguageInfo?.countryCode,
+        countryName: voiceLanguageInfo?.countryName
+      };
+      
       this.voicesRepo.upsertVoice({
         voice_id: parsed.voice_id,
         provider: parsed.provider,
         name: parsed.name,
-        language_name: parsed.language_name,
-        region: parsed.region,
+        language_name: languageName,
+        region: region,
         gender: parsed.gender,
-        metadata: parsed.metadata
+        metadata: JSON.stringify(enhancedMetadata)
       });
       voiceIds.push(parsed.voice_id);
     });
@@ -50,26 +64,39 @@ export class VoiceSyncService {
       this.voicesRepo.updateProviderStatus('azure', true, 0);
       return 0;
     }
-    
-    // Purge existing voices for this provider (clean slate)
+      // Purge existing voices for this provider (clean slate)
     this.voicesRepo.purgeProvider('azure');
     
     const voiceIds: string[] = [];
     
     // Upsert all voices with deterministic numeric IDs
-    voices.forEach(voice => {
+    voices.forEach(voice => {      // Determine language and country using language service
+      const voiceLanguageInfo = LanguageService.normalizeVoiceLanguage({
+        languageName: voice.languageName,
+        language: voice.language
+      });
+      const languageName = voiceLanguageInfo?.languageName || voice.languageName || 'Unknown';
+      // Store full country name for UI display (e.g., "United States" not "US")
+      const region = voiceLanguageInfo?.countryName || voiceLanguageInfo?.countryCode || null;
+      
+      // Enhance metadata with language info
+      const enhancedMetadata = {
+        styles: voice.styles || [],
+        shortName: voice.shortName,
+        languageCode: voiceLanguageInfo?.languageCode,
+        countryCode: voiceLanguageInfo?.countryCode,
+        countryName: voiceLanguageInfo?.countryName
+      };
+      
       // TTSVoice uses 'id' property, already has azure_ prefix from provider
       this.voicesRepo.upsertVoice({
         voice_id: voice.id,
         provider: 'azure',
         name: voice.name,
-        language_name: voice.languageName,
-        region: voice.language,
+        language_name: languageName,
+        region: region,
         gender: voice.gender,
-        metadata: JSON.stringify({ 
-          styles: voice.styles || [],
-          shortName: voice.shortName
-        })
+        metadata: JSON.stringify(enhancedMetadata)
       });
       voiceIds.push(voice.id);
     });
@@ -144,11 +171,57 @@ export class VoiceSyncService {
       return this.syncWebSpeechVoices(voices);
     }
   }
-
   // Future: Sync Google voices
   async syncGoogleVoices(voices: any[]): Promise<number> {
-    // TODO: Implement when adding Google
-    return 0;
+    console.log(`[Voice Sync] Syncing ${voices.length} Google voices`);
+    
+    if (!voices || voices.length === 0) {
+      console.log('[Voice Sync] No Google voices available');
+      this.voicesRepo.updateProviderStatus('google', true, 0);
+      return 0;
+    }
+      // Purge existing voices for this provider (clean slate)
+    this.voicesRepo.purgeProvider('google');
+    
+    const voiceIds: string[] = [];
+    
+    // Upsert all voices with deterministic numeric IDs
+    voices.forEach(voice => {      // Determine language and country using language service
+      const voiceLanguageInfo = LanguageService.normalizeVoiceLanguage({
+        language: voice.language,
+        languageName: voice.languageName
+      });
+      const languageName = voiceLanguageInfo?.languageName || voice.languageName || voice.language || 'Unknown';
+      // Store full country name for UI display (e.g., "United States" not "US")
+      const region = voiceLanguageInfo?.countryName || voiceLanguageInfo?.countryCode || null;
+      
+      // Enhance metadata with language info
+      const enhancedMetadata = {
+        shortName: voice.shortName,
+        sampleRateHertz: voice.sampleRateHertz,
+        languageCode: voiceLanguageInfo?.languageCode,
+        countryCode: voiceLanguageInfo?.countryCode,
+        countryName: voiceLanguageInfo?.countryName
+      };
+      
+      // TTSVoice uses 'id' property, already has google_ prefix from provider
+      this.voicesRepo.upsertVoice({
+        voice_id: voice.id,
+        provider: 'google',
+        name: voice.name,
+        language_name: languageName,
+        region: region,
+        gender: voice.gender,
+        metadata: JSON.stringify(enhancedMetadata)
+      });
+      voiceIds.push(voice.id);
+    });
+
+    // Update provider status
+    this.voicesRepo.updateProviderStatus('google', true, voiceIds.length);
+    
+    console.log(`[Voice Sync] Synced ${voiceIds.length} Google voices`);
+    return voiceIds.length;
   }
 
   // Get stats

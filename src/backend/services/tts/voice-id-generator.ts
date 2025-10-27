@@ -1,9 +1,11 @@
 /**
- * Voice ID Generator - Creates deterministic numeric IDs for voices
+ * Voice ID Generator - Creates numeric IDs for voices
  * 
- * ID Format: PPXXXXXX where:
- * - PP = Provider prefix (1=WebSpeech, 2=Azure, 3=Google)
- * - XXXXXX = 6-digit hash of voice data
+ * IMPORTANT: numeric_id is NOT deterministic anymore!
+ * It's auto-assigned by SQLite (AUTOINCREMENT).
+ * The voice_id is the unique identifier.
+ * 
+ * This eliminates hash collision issues entirely.
  */
 
 export enum VoiceProvider {
@@ -20,40 +22,35 @@ export interface VoiceData {
 }
 
 /**
- * Generate a deterministic numeric ID for a voice
- * Same voice always produces same ID
+ * This function is DEPRECATED and kept for backward compatibility only.
+ * numeric_id is now auto-assigned by SQLite, not generated here.
+ * 
+ * @deprecated Use NULL when inserting - let SQLite auto-assign numeric_id
  */
-export function generateNumericVoiceId(provider: VoiceProvider, voice: VoiceData): number {
-  // Create unique key from voice characteristics
-  const voiceKey = `${voice.name}|${voice.language || ''}|${voice.languageName || ''}|${voice.region || ''}`;
-  
-  // Generate hash (djb2 algorithm - simple and effective)
-  let hash = 5381;
-  for (let i = 0; i < voiceKey.length; i++) {
-    const char = voiceKey.charCodeAt(i);
-    hash = ((hash << 5) + hash) + char; // hash * 33 + char
-  }
-  
-  // Make positive and constrain to 6 digits
-  hash = Math.abs(hash) % 1000000;
-  
-  // Combine provider prefix with hash
-  // Result: 1XXXXXX, 2XXXXXX, or 3XXXXXX
-  return (provider * 1000000) + hash;
+export function generateNumericVoiceId(provider: VoiceProvider, voice: VoiceData): number | null {
+  // Return null to signal that SQLite should auto-assign the numeric_id
+  // This eliminates all hash collision issues
+  return null;
 }
 
 /**
  * Extract provider from numeric ID
+ * ID can be of any format since it's auto-assigned
  */
 export function extractProviderFromId(numericId: number): VoiceProvider {
-  return Math.floor(numericId / 1000000) as VoiceProvider;
+  // Not really used anymore since numeric_id is auto-assigned
+  // But keeping for backward compatibility
+  return VoiceProvider.WEBSPEECH;
 }
 
 /**
  * Extract hash from numeric ID
+ * ID can be of any format since it's auto-assigned
  */
 export function extractHashFromId(numericId: number): number {
-  return numericId % 1000000;
+  // Not really used anymore since numeric_id is auto-assigned
+  // But keeping for backward compatibility
+  return numericId;
 }
 
 /**

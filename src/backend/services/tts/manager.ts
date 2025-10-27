@@ -1,5 +1,6 @@
 import { TTSProvider, TTSVoice, TTSSettings, TTSOptions } from './base';
 import { AzureTTSProvider } from './azure-provider';
+import { GoogleTTSProvider } from './google-provider';
 import { TTSRepository } from '../../database/repositories/tts';
 import { ViewerRulesRepository } from '../../database/viewer-rules-repository';
 import { VoicesRepository } from '../../database/repositories/voices';
@@ -44,7 +45,6 @@ export class TTSManager {
     'pogchamp',
     // Add common copypastas here
   ]);
-
   constructor(db: Database.Database) {
     this.repository = new TTSRepository(db);
     this.viewerRulesRepo = new ViewerRulesRepository(db);
@@ -54,8 +54,8 @@ export class TTSManager {
     // Register Azure provider
     this.providers.set('azure', new AzureTTSProvider());
     
-    // TODO Phase 2: Register Google provider
-    // this.providers.set('google', new GoogleTTSProvider());
+    // Register Google provider
+    this.providers.set('google', new GoogleTTSProvider());
   }
 
   /**
@@ -274,9 +274,7 @@ export class TTSManager {
       volume: options?.volume ?? this.settings.volume,
       rate: options?.rate ?? this.settings.rate,
       pitch: options?.pitch ?? this.settings.pitch
-    };
-
-    console.log('[TTS Manager] testVoice() - Calling currentProvider.test()');
+    };    console.log('[TTS Manager] testVoice() - Calling currentProvider.test()');
     await this.currentProvider.test(actualVoiceId, ttsOptions, message);
     console.log('[TTS Manager] testVoice() - Provider test completed');
     
@@ -302,6 +300,31 @@ export class TTSManager {
         }
       } else {
         console.error('[TTS Manager] testVoice() - Azure provider not found!');
+      }
+    }
+
+    // For Google voices, retrieve audio data and send to renderer
+    if (voiceId.startsWith('google_')) {
+      console.log('[TTS Manager] testVoice() - Google voice, retrieving audio data');
+      const googleProvider = this.providers.get('google');
+      if (googleProvider) {
+        const audioData = (googleProvider as any).getLastAudioData();
+        console.log('[TTS Manager] testVoice() - Audio data retrieved:', audioData ? audioData.length + ' bytes' : 'null');
+        if (audioData && this.mainWindow) {
+          console.log('[TTS Manager] testVoice() - Sending audio to renderer');
+          this.mainWindow.webContents.send('tts:play-audio', {
+            audioData: audioData.toString('base64'), // Convert Buffer to base64 for IPC
+            volume: ttsOptions.volume,
+            rate: ttsOptions.rate,
+            pitch: ttsOptions.pitch
+          });
+        } else if (!audioData) {
+          console.error('[TTS Manager] testVoice() - No audio data available!');
+        } else if (!this.mainWindow) {
+          console.error('[TTS Manager] testVoice() - mainWindow is null!');
+        }
+      } else {
+        console.error('[TTS Manager] testVoice() - Google provider not found!');
       }
     }
   }
@@ -924,8 +947,7 @@ export class TTSManager {
             }
           } else {
             console.error('[TTS] Azure provider not available for voice:', voiceId);
-          }
-        } else if (voiceId.startsWith('google_')) {
+          }        } else if (voiceId.startsWith('google_')) {
           // Use Google provider
           const googleProvider = this.providers.get('google');
           if (googleProvider) {
@@ -934,6 +956,21 @@ export class TTSManager {
               rate: item.rate ?? this.settings?.rate,
               pitch: item.pitch ?? this.settings?.pitch
             });
+            
+            // Get audio data and send to renderer for playback (OBS-compatible)
+            const audioData = (googleProvider as any).getLastAudioData();
+            if (audioData && this.mainWindow) {
+              this.mainWindow.webContents.send('tts:play-audio', {
+                audioData: audioData.toString('base64'), // Convert Buffer to base64 for IPC
+                volume: this.settings?.volume,
+                rate: item.rate ?? this.settings?.rate,
+                pitch: item.pitch ?? this.settings?.pitch
+              });
+              
+              // Wait for frontend to confirm audio playback is complete
+              console.log('[TTS] Waiting for Google audio playback to finish...');
+              await this.waitForAudioFinished();
+            }
           } else {
             console.error('[TTS] Google provider not available for voice:', voiceId);
           }

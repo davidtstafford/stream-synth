@@ -29,9 +29,9 @@ export const TTS: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState('Hello! This is a test of the text to speech system.');
   const [isSpeaking, setIsSpeaking] = useState(false);
-
   // Rescan state
   const [rescanningProvider, setRescanningProvider] = useState<string | null>(null);
+  const [rescanMessages, setRescanMessages] = useState<{ [key: string]: string }>({});
   // Voice filtering state
   const [searchTerm, setSearchTerm] = useState('');
   const [languageFilter, setLanguageFilter] = useState('all');
@@ -133,11 +133,10 @@ export const TTS: React.FC = () => {
       setError(err.message);
       console.error(`[TTS] Error toggling ${provider} provider:`, err);
     }
-  };  // Handle provider rescan - immediate, with loading spinner
-  const handleProviderRescan = async (provider: 'webspeech' | 'azure' | 'google') => {
+  };  const handleProviderRescan = async (provider: 'webspeech' | 'azure' | 'google') => {
     try {
       setRescanningProvider(provider);
-      setError(null);
+      setRescanMessages(prev => ({ ...prev, [provider]: 'Rescanning...' }));
 
       console.log(`[TTS] Rescanning ${provider} voices immediately...`);
 
@@ -163,12 +162,35 @@ export const TTS: React.FC = () => {
           await syncAndLoadVoices();
           await loadVoiceStats();
 
-          setError(`✓ Azure rescanned: ${result.voiceCount} voices found`);
+          setRescanMessages(prev => ({ ...prev, [provider]: `✓ Azure rescanned: ${result.voiceCount} voices found` }));
         } else {
           throw new Error(result.error || 'Azure rescan failed');
         }
+      } else if (provider === 'google') {
+        // For Google: use sync-voices handler with stored credentials
+        const currentSettings = await ttsService.getSettings();
+        if (!currentSettings?.googleApiKey) {
+          throw new Error('Google not configured. Please set up Google Cloud first.');
+        }
+        
+        console.log(`[TTS] Rescanning Google with stored credentials`);
+        const result = await ipcRenderer.invoke('google:sync-voices', {
+          apiKey: currentSettings.googleApiKey
+        });
+
+        if (result.success) {
+          console.log(`[TTS] Google rescan complete: ${result.voiceCount} voices found`);
+          
+          // Reload voice list from database
+          await syncAndLoadVoices();
+          await loadVoiceStats();
+
+          setRescanMessages(prev => ({ ...prev, [provider]: `✓ Google rescanned: ${result.voiceCount} voices found` }));
+        } else {
+          throw new Error(result.error || 'Google rescan failed');
+        }
       } else {
-        // For WebSpeech and other providers: get voices and rescan
+        // For WebSpeech: get voices and rescan
         let currentVoices: any[] = [];
         if (provider === 'webspeech') {
           if (!window.speechSynthesis) {
@@ -203,16 +225,24 @@ export const TTS: React.FC = () => {
           await syncAndLoadVoices();
           await loadVoiceStats();
 
-          setError(`✓ ${provider} rescanned: ${result.count} voices found`);
+          setRescanMessages(prev => ({ ...prev, [provider]: `✓ ${provider} rescanned: ${result.count} voices found` }));
         } else {
           throw new Error(result.error || 'Rescan failed');
         }
       }
     } catch (err: any) {
-      setError(`Error rescanning ${provider}: ${err.message}`);
       console.error(`[TTS] Error rescanning ${provider}:`, err);
+      setRescanMessages(prev => ({ ...prev, [provider]: `❌ Error: ${err.message}` }));
     } finally {
       setRescanningProvider(null);
+      // Clear message after 5 seconds
+      setTimeout(() => {
+        setRescanMessages(prev => {
+          const newMessages = { ...prev };
+          delete newMessages[provider];
+          return newMessages;
+        });
+      }, 5000);
     }
   };
 
@@ -264,17 +294,85 @@ export const TTS: React.FC = () => {
       setError(err.message);
     }
   };
-
-  // Get unique languages from voice groups
+  // Get unique languages from voice groups, filtered by provider and enabled status
   const getUniqueLanguages = (): string[] => {
+    if (!settings) return [];
+
     const languages = new Set<string>();
     voiceGroups.forEach(group => {
       group.voices.forEach(voice => {
+        // Check if provider is enabled
+        const voiceIdStr = voice.voice_id || '';
+        const isWebSpeech = !voiceIdStr.startsWith('azure_') && !voiceIdStr.startsWith('google_');
+        const isAzure = voiceIdStr.startsWith('azure_');
+        const isGoogle = voiceIdStr.startsWith('google_');
+
+        // Only include voices from enabled providers
+        if (isWebSpeech && !(settings.webspeechEnabled ?? true)) return;
+        if (isAzure && !(settings.azureEnabled ?? false)) return;
+        if (isGoogle && !(settings.googleEnabled ?? false)) return;
+
+        // Only include voices from selected provider filter
+        if (providerFilter !== 'all' && voice.provider !== providerFilter) return;
+
         languages.add(voice.language_name);
       });
     });
     return Array.from(languages).sort();
-  };  // Filter voices based on search and filters
+  };
+
+  // Get available genders for current filters
+  const getAvailableGenders = (): string[] => {
+    if (!settings) return [];
+
+    const genders = new Set<string>();
+    voiceGroups.forEach(group => {
+      group.voices.forEach(voice => {
+        // Check if provider is enabled
+        const voiceIdStr = voice.voice_id || '';
+        const isWebSpeech = !voiceIdStr.startsWith('azure_') && !voiceIdStr.startsWith('google_');
+        const isAzure = voiceIdStr.startsWith('azure_');
+        const isGoogle = voiceIdStr.startsWith('google_');
+
+        // Only include voices from enabled providers
+        if (isWebSpeech && !(settings.webspeechEnabled ?? true)) return;
+        if (isAzure && !(settings.azureEnabled ?? false)) return;
+        if (isGoogle && !(settings.googleEnabled ?? false)) return;
+
+        // Only include voices from selected provider filter
+        if (providerFilter !== 'all' && voice.provider !== providerFilter) return;
+
+        // Only include voices from selected language filter
+        if (languageFilter !== 'all' && voice.language_name !== languageFilter) return;
+
+        if (voice.gender) {
+          genders.add(voice.gender);
+        }
+      });
+    });
+    return Array.from(genders).sort();
+  };
+
+  // Get available providers based on enabled settings
+  const getAvailableProviders = (): Array<{ value: string; label: string }> => {
+    if (!settings) return [];
+
+    const providers: Array<{ value: string; label: string }> = [];
+    
+    if (settings.webspeechEnabled ?? true) {
+      providers.push({ value: 'webspeech', label: '🌐 WebSpeech' });
+    }
+    if (settings.azureEnabled ?? false) {
+      providers.push({ value: 'azure', label: '☁️ Azure' });
+    }
+    if (settings.googleEnabled ?? false) {
+      providers.push({ value: 'google', label: '🔵 Google' });
+    }
+    
+    return providers;
+  };
+
+  // Filter voices based on search and filters
   const getFilteredGroups = (): VoiceGroup[] => {
     if (!settings) return [];
 
@@ -641,14 +739,14 @@ export const TTS: React.FC = () => {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'settings' && (        <div className="tab-content">
-          <VoiceSettingsTab
+      {activeTab === 'settings' && (        <div className="tab-content">          <VoiceSettingsTab
             settings={settings}
             voiceGroups={voiceGroups}
             voiceStats={voiceStats}
             testMessage={testMessage}
             isSpeaking={isSpeaking}
             rescanningProvider={rescanningProvider}
+            rescanMessages={rescanMessages}
             searchTerm={searchTerm}
             languageFilter={languageFilter}
             genderFilter={genderFilter}
@@ -661,9 +759,10 @@ export const TTS: React.FC = () => {
             onProviderRescan={handleProviderRescan}
             onSearchChange={setSearchTerm}
             onLanguageFilterChange={setLanguageFilter}
-            onGenderFilterChange={setGenderFilter}
-            onProviderFilterChange={setProviderFilter}
+            onGenderFilterChange={setGenderFilter}            onProviderFilterChange={setProviderFilter}
             getUniqueLanguages={getUniqueLanguages}
+            getAvailableGenders={getAvailableGenders}
+            getAvailableProviders={getAvailableProviders}
             getFilteredGroups={getFilteredGroups}
             getVisibleVoiceCount={getVisibleVoiceCount}
             formatVoiceOption={formatVoiceOption}

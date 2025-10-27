@@ -463,6 +463,129 @@ export function setupTTSHandlers(): void {
     }
   });
 
+  // TTS: Google - Test Connection
+  ipcMain.handle('google:test-connection', async (event, credentials: { apiKey: string }) => {
+    try {
+      console.log('[Google] Testing connection with API key');
+
+      const { apiKey } = credentials;
+
+      // Basic validation
+      if (!apiKey || apiKey.trim().length === 0) {
+        return {
+          success: false,
+          error: 'API key is required.'
+        };
+      }
+
+      console.log('[Google] Starting connection test with apiKey length:', apiKey.length);
+
+      // Initialize Google provider and test connection with timeout
+      const testPromise = (async () => {
+        try {
+          console.log('[Google] [1/5] Initializing TTS manager...');
+          const manager = await initializeTTS();
+          console.log('[Google] [2/5] Getting Google provider from manager...');
+          const googleProvider = manager['providers'].get('google');
+
+          if (!googleProvider) {
+            throw new Error('Google provider not available');
+          }
+          console.log('[Google] [3/5] Initializing Google provider with credentials...');
+
+          // Initialize provider with credentials
+          await googleProvider.initialize({ apiKey });
+          console.log('[Google] [4/5] Calling getVoices()...');
+
+          // Get voices to verify connection
+          const voices = await googleProvider.getVoices();
+          console.log('[Google] [5/5] Got voices, preparing preview...');
+
+          // Get preview voices (first 10)
+          const previewVoices = voices.slice(0, 10).map((v: any) => ({
+            name: v.name,
+            language: v.language,
+            gender: v.gender
+          }));
+
+          console.log('[Google] Connection test successful, found', voices.length, 'voices');
+
+          return {
+            success: true,
+            voiceCount: voices.length,
+            previewVoices
+          };
+        } catch (err) {
+          console.error('[Google] Error in testPromise:', err);
+          throw err;
+        }
+      })();
+
+      console.log('[Google] Waiting for connection test to complete (15s fetch timeout + buffer)...');
+
+      // Directly await the test promise - don't use Promise.race
+      // The fetch already has a 15s timeout with AbortController
+      const result = await testPromise;
+      console.log('[Google] Test completed successfully, returning result to frontend');
+      return result;
+
+    } catch (error: any) {
+      console.error('[Google] Error testing connection:', error);
+      const errorMessage = error.message || 'Failed to connect to Google Cloud Text-to-Speech';
+      console.error('[Google] Full error:', error);
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  });
+
+  // TTS: Google - Sync Voices
+  ipcMain.handle('google:sync-voices', async (event, credentials: { apiKey: string }) => {
+    try {
+      console.log('[Google] Syncing voices to database...');
+
+      const { apiKey } = credentials;
+
+      // Initialize Google provider and fetch voices
+      const manager = await initializeTTS();
+      const googleProvider = manager['providers'].get('google');
+
+      if (!googleProvider) {
+        return {
+          success: false,
+          error: 'Google provider not available'
+        };
+      }
+
+      // Initialize provider with credentials
+      await googleProvider.initialize({ apiKey });
+
+      // Get voices from Google
+      const voices = await googleProvider.getVoices();
+
+      console.log(`[Google] Fetched ${voices.length} voices from Google`);
+
+      // Sync to database
+      if (voiceSyncService) {
+        await voiceSyncService.syncGoogleVoices(voices);
+      }
+
+      console.log('[Google] Voice sync complete');
+
+      return {
+        success: true,
+        voiceCount: voices.length
+      };
+    } catch (error: any) {
+      console.error('[Google] Error syncing voices:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to sync Google voices'
+      };
+    }
+  });
+
   // TTS: Provider - Toggle
   ipcMain.handle('provider:toggle', async (event, payload: { provider: string; enabled: boolean }) => {
     try {
