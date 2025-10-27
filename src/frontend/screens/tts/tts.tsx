@@ -44,11 +44,11 @@ export const TTS: React.FC = () => {
   const [viewerSearchResults, setViewerSearchResults] = useState<Array<{ id: string; username: string; display_name?: string }>>([]);
   const [selectedViewer, setSelectedViewer] = useState<string | null>(null);
   const [viewerRule, setViewerRule] = useState<ttsService.ViewerTTSRule | null>(null);
-
   // Viewer voice filters
   const [viewerVoiceSearch, setViewerVoiceSearch] = useState('');
   const [viewerLanguageFilter, setViewerLanguageFilter] = useState('all');
   const [viewerGenderFilter, setViewerGenderFilter] = useState('all');
+  const [viewerProviderFilter, setViewerProviderFilter] = useState('all');
 
   // Load initial data
   useEffect(() => {
@@ -274,14 +274,23 @@ export const TTS: React.FC = () => {
       });
     });
     return Array.from(languages).sort();
-  };
-  // Filter voices based on search and filters
+  };  // Filter voices based on search and filters
   const getFilteredGroups = (): VoiceGroup[] => {
+    if (!settings) return [];
+
     return voiceGroups.map(group => ({
       ...group,
       voices: group.voices.filter(voice => {
-        // Only show available voices (no prefix checking needed)
-        // The database handles availability based on provider enable state
+        // Check if provider is enabled
+        const voiceIdStr = voice.voice_id || '';
+        const isWebSpeech = !voiceIdStr.startsWith('azure_') && !voiceIdStr.startsWith('google_');
+        const isAzure = voiceIdStr.startsWith('azure_');
+        const isGoogle = voiceIdStr.startsWith('google_');
+
+        // Only show voices from enabled providers
+        if (isWebSpeech && !(settings.webspeechEnabled ?? true)) return false;
+        if (isAzure && !(settings.azureEnabled ?? false)) return false;
+        if (isGoogle && !(settings.googleEnabled ?? false)) return false;
 
         // Search filter
         const searchLower = searchTerm.toLowerCase();
@@ -529,7 +538,6 @@ export const TTS: React.FC = () => {
     if (!selectedViewer) return;
     await handleUpdateRule({ customVoiceId: null });
   };
-
   // Get filtered voice groups for viewer voice picker
   const getViewerFilteredGroups = () => {
     if (!voiceGroups.length || !settings) return [];
@@ -538,17 +546,27 @@ export const TTS: React.FC = () => {
       .map(group => ({
         ...group,
         voices: group.voices.filter(voice => {
-          // Only show available voices from ENABLED providers (WebSpeech only)
+          // Only show available voices from ENABLED providers
           const voiceId = voice.voice_id || '';
 
-          // Skip Google voices (Google provider is disabled)
-          if (voiceId.startsWith('google_')) {
-            return false;
-          }
+          // Check if voice provider is enabled
+          const isWebSpeech = !voiceId.startsWith('azure_') && !voiceId.startsWith('google_');
+          const isAzure = voiceId.startsWith('azure_');
+          const isGoogle = voiceId.startsWith('google_');
 
-          // All other voices must be from WebSpeech
-          const webspeechEnabled = settings.webspeechEnabled ?? false;
-          if (!webspeechEnabled) return false;
+          // Skip based on provider enable state
+          if (isGoogle) return false; // Google always disabled
+          if (isAzure && !(settings.azureEnabled ?? false)) return false;
+          if (isWebSpeech && !(settings.webspeechEnabled ?? false)) return false;
+
+          // Provider filter dropdown
+          const matchesProvider = 
+            viewerProviderFilter === 'all' ||
+            (viewerProviderFilter === 'webspeech' && isWebSpeech) ||
+            (viewerProviderFilter === 'azure' && isAzure) ||
+            (viewerProviderFilter === 'google' && isGoogle);
+
+          if (!matchesProvider) return false;
 
           const matchesSearch = !viewerVoiceSearch ||
             voice.name.toLowerCase().includes(viewerVoiceSearch.toLowerCase()) ||
@@ -661,9 +679,7 @@ export const TTS: React.FC = () => {
             onSettingChange={handleSettingChange}
           />
         </div>
-      )}
-
-      {activeTab === 'viewers' && (
+      )}      {activeTab === 'viewers' && (
         <div className="tab-content">
           <ViewersTab
             settings={settings}
@@ -676,6 +692,7 @@ export const TTS: React.FC = () => {
             viewerVoiceSearch={viewerVoiceSearch}
             viewerLanguageFilter={viewerLanguageFilter}
             viewerGenderFilter={viewerGenderFilter}
+            viewerProviderFilter={viewerProviderFilter}
             onViewerSearch={handleViewerSearch}
             onSelectViewer={handleSelectViewer}
             onCreateRule={handleCreateRule}
@@ -688,8 +705,8 @@ export const TTS: React.FC = () => {
             onCooldownDurationChange={handleCooldownDurationChange}
             getCooldownDurationMinutes={getCooldownDurationMinutes}
             onViewerVoiceSearchChange={setViewerVoiceSearch}
-            onViewerLanguageFilterChange={setViewerLanguageFilter}
-            onViewerGenderFilterChange={setViewerGenderFilter}
+            onViewerLanguageFilterChange={setViewerLanguageFilter}            onViewerGenderFilterChange={setViewerGenderFilter}
+            onViewerProviderFilterChange={setViewerProviderFilter}
             onResetVoice={handleResetVoice}
             getUniqueLanguages={getUniqueLanguages}
             getViewerFilteredGroups={getViewerFilteredGroups}

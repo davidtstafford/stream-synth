@@ -176,16 +176,18 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           </div>
         </div>        {/* Azure Provider Setup Button */}
         <div className="provider-toggle-section" style={{ padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: '1.1em', fontWeight: 'bold', marginBottom: '8px' }}>🔷 Azure Neural Voices (Premium)</div>
-              <div style={{ marginLeft: '0px', color: '#888', fontSize: '0.9em' }}>
-                <div>✓ 300+ high-quality neural voices</div>
-                <div>✓ Multiple languages and regions</div>
-                <div>✓ Free tier: 500K characters/month</div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={settings.azureEnabled ?? false}
+                onChange={(e) => onProviderToggle('azure', e.target.checked)}
+              />
+              <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
+                🔷 Azure Neural Voices (Premium)
+              </span>
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 onClick={() => setShowAzureGuide(true)}
                 style={{
@@ -225,6 +227,69 @@ export const VoiceSettingsTab: React.FC<Props> = ({
                 </button>
               )}
             </div>
+          </div>
+          <div style={{ marginLeft: '28px', color: '#888', marginBottom: '12px' }}>
+            <div>✓ 300+ high-quality neural voices</div>
+            <div>✓ Multiple languages and regions</div>
+            <div>✓ Free tier: 500K characters/month</div>
+          </div>
+            {/* Best Practices Callout */}
+          <div style={{
+            marginTop: '12px',
+            padding: '10px',
+            backgroundColor: '#1f3a5f',
+            borderLeft: '4px solid #0078d4',
+            borderRadius: '4px',
+            fontSize: '0.85em',
+            lineHeight: '1.5',
+            color: '#e0e0e0'
+          }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>💡 Best Practices:</div>
+            <ul style={{ margin: '0', paddingLeft: '20px' }}>
+              <li>Use premium Azure voices for regular viewers who appreciate quality</li>
+              <li>Keep the global voice as Web Speech API for cost efficiency</li>
+              <li>Override per-viewer in the Viewers tab to customize per user</li>
+              <li>Test voices before using them to ensure quality</li>
+            </ul>
+          </div>
+        </div>        {/* Google Provider - Hidden for now */}
+        <div className="provider-toggle-section" style={{ display: 'none', marginTop: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={settings.googleEnabled ?? false}
+                onChange={(e) => onProviderToggle('google', e.target.checked)}
+              />
+              <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
+                🌍 Google Cloud Text-to-Speech
+              </span>
+            </label>
+            {settings.googleEnabled && (
+              <button
+                onClick={() => onProviderRescan('google')}
+                disabled={rescanningProvider === 'google'}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '0.9em',
+                  backgroundColor: rescanningProvider === 'google' ? '#555' : '#4a4a4a',
+                  border: '1px solid #666',
+                  borderRadius: '4px',
+                  cursor: rescanningProvider === 'google' ? 'not-allowed' : 'pointer',
+                  color: '#fff',
+                  opacity: rescanningProvider === 'google' ? 0.7 : 1
+                }}
+                title={rescanningProvider === 'google' ? 'Rescanning...' : 'Click to rescan voices immediately'}
+              >
+                {rescanningProvider === 'google' ? '⏳ Rescanning...' : '🔄 Rescan'}
+              </button>
+            )}
+          </div>
+          <div style={{ marginLeft: '28px', color: '#888' }}>
+            <div>✓ 400+ natural voices</div>
+            <div>✓ 100+ languages and variants</div>
+            <div>✓ Requires Google Cloud API key</div>
+            <div>✓ Pay-as-you-go pricing</div>
           </div>
         </div>
       </div>
@@ -270,13 +335,49 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           <option value="female">♀️ Female</option>
           <option value="neutral">⚧ Neutral</option>
         </select>
-      </div>
-
-      {/* Voice Selection with Grouped Dropdown */}
+      </div>      {/* Voice Selection with Grouped Dropdown */}
       <div className="setting-group">
         <label className="setting-label">
           Voice ({visibleCount} of {voiceStats.available} available)
         </label>
+
+        {/* Warning if current voice provider is disabled */}
+        {settings.voiceId && (() => {
+          const voiceIdStr = settings.voiceId;
+          const isAzure = voiceIdStr.startsWith('azure_');
+          const isGoogle = voiceIdStr.startsWith('google_');
+          
+          if (isAzure && !(settings.azureEnabled ?? false)) {
+            return (
+              <div style={{
+                padding: '10px',
+                marginBottom: '10px',
+                backgroundColor: '#ffa500',
+                color: 'white',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}>
+                ⚠️ Current voice is from Azure, which is disabled. Enable Azure or select a different voice.
+              </div>
+            );
+          }
+          if (isGoogle && !(settings.googleEnabled ?? false)) {
+            return (
+              <div style={{
+                padding: '10px',
+                marginBottom: '10px',
+                backgroundColor: '#ffa500',
+                color: 'white',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}>
+                ⚠️ Current voice is from Google, which is disabled. Enable Google or select a different voice.
+              </div>
+            );
+          }
+          return null;
+        })()}
+
         <select
           value={settings.voiceId || ''}
           onChange={(e) => onSettingChange('voiceId', e.target.value)}

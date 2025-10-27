@@ -30,9 +30,11 @@ interface Props {
   viewerVoiceSearch: string;
   viewerLanguageFilter: string;
   viewerGenderFilter: string;
+  viewerProviderFilter: string;
   onViewerVoiceSearchChange: (term: string) => void;
   onViewerLanguageFilterChange: (filter: string) => void;
   onViewerGenderFilterChange: (filter: string) => void;
+  onViewerProviderFilterChange: (filter: string) => void;
   getUniqueLanguages: () => string[];
   getViewerFilteredGroups: () => VoiceGroup[];
   getViewerVisibleVoiceCount: () => number;
@@ -41,8 +43,7 @@ interface Props {
   getCooldownDurationMinutes: () => number;
   onMuteChange: (muted: boolean) => Promise<void>;
   onMuteDurationChange: (minutes: number) => Promise<void>;
-  onCooldownChange: (enabled: boolean) => Promise<void>;
-  onCooldownDurationChange: (minutes: number) => Promise<void>;
+  onCooldownChange: (enabled: boolean) => Promise<void>;  onCooldownDurationChange: (minutes: number) => Promise<void>;
   onResetVoice: () => Promise<void>;
 }
 
@@ -62,9 +63,11 @@ export const ViewersTab: React.FC<Props> = ({
   viewerVoiceSearch,
   viewerLanguageFilter,
   viewerGenderFilter,
+  viewerProviderFilter,
   onViewerVoiceSearchChange,
   onViewerLanguageFilterChange,
   onViewerGenderFilterChange,
+  onViewerProviderFilterChange,
   getUniqueLanguages,
   getViewerFilteredGroups,
   getViewerVisibleVoiceCount,
@@ -73,13 +76,11 @@ export const ViewersTab: React.FC<Props> = ({
   getCooldownDurationMinutes,
   onMuteChange,
   onMuteDurationChange,
-  onCooldownChange,
-  onCooldownDurationChange,
+  onCooldownChange,  onCooldownDurationChange,
   onResetVoice,
 }) => {
   const viewerFilteredGroups = getViewerFilteredGroups();
   const viewerVisibleCount = getViewerVisibleVoiceCount();
-
   // Get voice info helpers
   const getVoiceInfoById = (voiceId: number | null) => {
     if (voiceId === null) return { name: null, voice: null, available: true };
@@ -89,6 +90,10 @@ export const ViewersTab: React.FC<Props> = ({
         const voiceIdStr = voice.voice_id || '';
         if (voiceIdStr.startsWith('google_')) {
           return { name: voice.name, voice, available: false };
+        }
+        if (voiceIdStr.startsWith('azure_')) {
+          const azureEnabled = settings.azureEnabled ?? false;
+          return { name: voice.name, voice, available: azureEnabled };
         }
         const webspeechEnabled = settings.webspeechEnabled ?? false;
         return { name: voice.name, voice, available: webspeechEnabled };
@@ -105,18 +110,22 @@ export const ViewersTab: React.FC<Props> = ({
         if (voiceIdStr.startsWith('google_')) {
           return { name: voice.name, voice, available: false };
         }
+        if (voiceIdStr.startsWith('azure_')) {
+          const azureEnabled = settings.azureEnabled ?? false;
+          return { name: voice.name, voice, available: azureEnabled };
+        }
         const webspeechEnabled = settings.webspeechEnabled ?? false;
         return { name: voice.name, voice, available: webspeechEnabled };
       }
     }
     return { name: voiceIdStr, voice: null, available: false };
   };
-
   const customVoiceInfo = viewerRule ? getVoiceInfoById(viewerRule.customVoiceId) : null;
   const globalVoiceInfo = getVoiceInfoByVoiceId(settings.voiceId);
 
   const enabledProviders: string[] = [];
   if (settings.webspeechEnabled) enabledProviders.push('Web Speech');
+  if (settings.azureEnabled) enabledProviders.push('Azure');
   const providersText = enabledProviders.length > 0 ? enabledProviders.join(', ') : 'None';
 
   return (
@@ -166,9 +175,7 @@ export const ViewersTab: React.FC<Props> = ({
                 Create Rules
               </button>
             </div>
-          )}
-
-          {viewerRule && (
+          )}          {viewerRule && (
             <ViewerRuleEditor
               viewerRule={viewerRule}
               settings={settings}
@@ -182,9 +189,11 @@ export const ViewersTab: React.FC<Props> = ({
               viewerVoiceSearch={viewerVoiceSearch}
               viewerLanguageFilter={viewerLanguageFilter}
               viewerGenderFilter={viewerGenderFilter}
+              viewerProviderFilter={viewerProviderFilter}
               onViewerVoiceSearchChange={onViewerVoiceSearchChange}
               onViewerLanguageFilterChange={onViewerLanguageFilterChange}
               onViewerGenderFilterChange={onViewerGenderFilterChange}
+              onViewerProviderFilterChange={onViewerProviderFilterChange}
               getUniqueLanguages={getUniqueLanguages}
               formatVoiceOption={formatVoiceOption}
               getMuteDurationMinutes={getMuteDurationMinutes}
@@ -192,8 +201,7 @@ export const ViewersTab: React.FC<Props> = ({
               onUpdateRule={onUpdateRule}
               onMuteChange={onMuteChange}
               onMuteDurationChange={onMuteDurationChange}
-              onCooldownChange={onCooldownChange}
-              onCooldownDurationChange={onCooldownDurationChange}
+              onCooldownChange={onCooldownChange}              onCooldownDurationChange={onCooldownDurationChange}
               onResetVoice={onResetVoice}
             />
           )}
@@ -217,17 +225,18 @@ const ViewerRuleEditor: React.FC<any> = ({
   viewerVoiceSearch,
   viewerLanguageFilter,
   viewerGenderFilter,
+  viewerProviderFilter,
   onViewerVoiceSearchChange,
   onViewerLanguageFilterChange,
   onViewerGenderFilterChange,
+  onViewerProviderFilterChange,
   getUniqueLanguages,
   formatVoiceOption,
   getMuteDurationMinutes,
   getCooldownDurationMinutes,
   onUpdateRule,
   onMuteChange,
-  onMuteDurationChange,
-  onCooldownChange,
+  onMuteDurationChange,  onCooldownChange,
   onCooldownDurationChange,
   onResetVoice,
 }) => {
@@ -242,9 +251,7 @@ const ViewerRuleEditor: React.FC<any> = ({
         <p className="setting-hint" style={{ fontSize: '12px', marginTop: '5px', color: '#888' }}>
           Only voices from enabled providers are shown. Toggle providers in the Settings tab.
         </p>
-      </div>
-
-      {/* Voice Search and Filters */}
+      </div>      {/* Voice Search and Filters */}
       <div className="voice-filters">
         <input
           type="text"
@@ -252,7 +259,21 @@ const ViewerRuleEditor: React.FC<any> = ({
           value={viewerVoiceSearch}
           onChange={(e) => onViewerVoiceSearchChange(e.target.value)}
           className="search-input"
-        />        <select
+        />
+
+        {/* Provider Filter Dropdown */}
+        <select
+          value={viewerProviderFilter}
+          onChange={(e) => onViewerProviderFilterChange(e.target.value)}
+          className="filter-select"
+        >
+          <option value="all">All Providers</option>
+          <option value="webspeech">🌐 Web Speech</option>
+          <option value="azure">🔷 Azure</option>
+          <option value="google">🌍 Google</option>
+        </select>
+
+        <select
           value={viewerLanguageFilter}
           onChange={(e) => onViewerLanguageFilterChange(e.target.value)}
           className="filter-select"
