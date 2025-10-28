@@ -1,7 +1,7 @@
 /**
  * Database IPC Handlers
  * 
- * Handles all database operations via IPC:
+ * Handles all database operations via IPC using centralized IPC Framework:
  * - Settings
  * - Sessions
  * - Event Subscriptions
@@ -9,9 +9,12 @@
  * - Viewers
  * - Events
  * - Subscriptions
+ * 
+ * Phase 3: Migrated to use IPCRegistry for consistent error handling
  */
 
 import { ipcMain } from 'electron';
+import { ipcRegistry } from '../ipc/ipc-framework';
 import { SettingsRepository } from '../../database/repositories/settings';
 import { SessionsRepository } from '../../database/repositories/sessions';
 import { EventsRepository } from '../../database/repositories/events';
@@ -30,243 +33,369 @@ const subscriptionsRepo = new SubscriptionsRepository();
 const twitchSubsService = new TwitchSubscriptionsService();
 
 export function setupDatabaseHandlers(): void {
-  // Database: Settings
-  ipcMain.handle('db:get-setting', async (event, key: string) => {
-    return settingsRepo.get(key);
-  });
+  // ===== Database: Settings =====
+  ipcRegistry.register<string, string | null>(
+    'db:get-setting',
+    {
+      validate: (key) => key ? null : 'Setting key is required',
+      execute: async (key) => settingsRepo.get(key)
+    }
+  );
 
-  ipcMain.handle('db:set-setting', async (event, key: string, value: string) => {
-    settingsRepo.set(key, value);
-    return { success: true };
-  });
-
-  ipcMain.handle('db:get-all-settings', async () => {
-    return settingsRepo.getAll();
-  });
-
-  // Database: Sessions
-  ipcMain.handle('db:create-session', async (event, session: any) => {
-    const id = sessionsRepo.create(session);
-    return { success: true, id };
-  });
-
-  ipcMain.handle('db:get-current-session', async () => {
-    return sessionsRepo.getCurrentSession();
-  });
-
-  ipcMain.handle('db:end-current-session', async () => {
-    sessionsRepo.endCurrentSession();
-    return { success: true };
-  });
-
-  ipcMain.handle('db:get-recent-sessions', async (event, limit: number = 10) => {
-    return sessionsRepo.getRecentSessions(limit);
-  });
-
-  // Database: Event Subscriptions
-  ipcMain.handle('db:save-subscription', async (event, userId: string, channelId: string, eventType: string, isEnabled: boolean) => {
-    eventsRepo.saveSubscription(userId, channelId, eventType, isEnabled);
-    return { success: true };
-  });
-
-  ipcMain.handle('db:get-subscriptions', async (event, userId: string, channelId: string) => {
-    return eventsRepo.getSubscriptions(userId, channelId);
-  });
-
-  ipcMain.handle('db:get-enabled-events', async (event, userId: string, channelId: string) => {
-    return eventsRepo.getEnabledEvents(userId, channelId);
-  });
-
-  ipcMain.handle('db:clear-subscriptions', async (event, userId: string, channelId: string) => {
-    eventsRepo.clearSubscriptions(userId, channelId);
-    return { success: true };
-  });
-
-  // Database: OAuth Tokens
-  ipcMain.handle('db:save-token', async (event, token: any) => {
-    tokensRepo.save(token);
-    return { success: true };
-  });
-
-  ipcMain.handle('db:get-token', async (event, userId: string) => {
-    return tokensRepo.get(userId);
-  });
-
-  ipcMain.handle('db:invalidate-token', async (event, userId: string) => {
-    tokensRepo.invalidate(userId);
-    return { success: true };
-  });
-
-  ipcMain.handle('db:delete-token', async (event, userId: string) => {
-    tokensRepo.delete(userId);
-    return { success: true };
-  });
-
-  // Database: Viewers - Get or Create
-  ipcMain.handle('db:get-or-create-viewer', async (event, id: string, username: string, displayName?: string) => {
-    try {
-      const viewer = viewersRepo.getOrCreate(id, username, displayName);
-      if (!viewer) {
-        return { success: false, error: 'Viewer not created: numeric ID required' };
+  ipcRegistry.register<{ key: string; value: string }, { success: boolean }>(
+    'db:set-setting',
+    {
+      validate: (input) => {
+        if (!input.key) return 'Setting key is required';
+        if (input.value === undefined || input.value === null) return 'Setting value is required';
+        return null;
+      },
+      execute: async (input) => {
+        settingsRepo.set(input.key, input.value);
+        return { success: true };
       }
-      return { success: true, viewer };
-    } catch (error: any) {
-      return { success: false, error: error.message };
     }
-  });
-  // Database: Get Viewer by ID
-  ipcMain.handle('db:get-viewer', async (event, id: string) => {
-    try {
-      const viewer = viewersRepo.getViewerById(id);
-      return { success: true, viewer };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  );
+  ipcRegistry.register<void, any[]>(
+    'db:get-all-settings',
+    {
+      execute: async () => settingsRepo.getAll()
     }
-  });
-  // Database: Get All Viewers
-  ipcMain.handle('db:get-all-viewers', async (event, limit?: number, offset?: number) => {
-    try {
-      const viewers = viewersRepo.getAllViewers(limit, offset);
-      return { success: true, viewers };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
+  );
 
-  // Database: Search Viewers
-  ipcMain.handle('db:search-viewers', async (event, query: string, limit?: number) => {
-    try {
-      const viewers = viewersRepo.search(query, limit);
-      return { success: true, viewers };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  // ===== Database: Sessions =====
+  ipcRegistry.register<any, { success: boolean; id: number }>(
+    'db:create-session',
+    {
+      validate: (session) => {
+        if (!session) return 'Session data is required';
+        if (!session.user_id) return 'User ID is required';
+        return null;
+      },
+      execute: async (session) => {
+        const id = sessionsRepo.create(session);
+        return { success: true, id };
+      }
     }
-  });
-  // Database: Delete Viewer
-  ipcMain.handle('db:delete-viewer', async (event, id: string) => {
-    try {
-      viewersRepo.deleteViewer(id);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-  // Database: Delete All Viewers
-  ipcMain.handle('db:delete-all-viewers', async () => {
-    try {
-      viewersRepo.deleteAllViewers();
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
+  );
 
-  // Database: Get Viewer Count
-  ipcMain.handle('db:get-viewer-count', async () => {
-    try {
-      const count = viewersRepo.getCount();
-      return { success: true, count };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  ipcRegistry.register<void, any>(
+    'db:get-current-session',
+    {
+      execute: async () => sessionsRepo.getCurrentSession()
     }
-  });
+  );
 
-  // Database: Get Events
-  ipcMain.handle('db:get-events', async (event, filters: any) => {
-    try {
-      const events = eventsRepo.getEvents(filters);
-      return { success: true, events };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  ipcRegistry.register<void, { success: boolean }>(
+    'db:end-current-session',
+    {
+      execute: async () => {
+        sessionsRepo.endCurrentSession();
+        return { success: true };
+      }
     }
-  });
+  );
 
-  // Database: Get Chat Events
-  ipcMain.handle('db:get-chat-events', async (event, channelId: string, limit?: number) => {
-    try {
-      const events = eventsRepo.getChatEvents(channelId, limit);
-      return { success: true, events };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  ipcRegistry.register<number, any[]>(
+    'db:get-recent-sessions',
+    {
+      execute: async (limit = 10) => sessionsRepo.getRecentSessions(limit)
     }
-  });
-  // Database: Get Event Count
-  ipcMain.handle('db:get-event-count', async (event, channelId?: string, eventType?: string) => {
-    try {
-      const count = eventsRepo.getEventCount(channelId, eventType);
-      return { success: true, count };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
+  );
 
-  // Database: Upsert Subscription
-  ipcMain.handle('db:upsert-subscription', async (event, subscription: any) => {
-    try {
-      subscriptionsRepo.upsert(subscription);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  // ===== Database: Event Subscriptions =====
+  ipcRegistry.register<{ userId: string; channelId: string; eventType: string; isEnabled: boolean }, { success: boolean }>(
+    'db:save-subscription',
+    {
+      validate: (input) => {
+        if (!input.userId) return 'User ID is required';
+        if (!input.channelId) return 'Channel ID is required';
+        if (!input.eventType) return 'Event type is required';
+        return null;
+      },
+      execute: async (input) => {
+        eventsRepo.saveSubscription(input.userId, input.channelId, input.eventType, input.isEnabled);
+        return { success: true };
+      }
     }
-  });
+  );
 
-  // Database: Get Subscription by Viewer ID
-  ipcMain.handle('db:get-subscription', async (event, viewerId: string) => {
-    try {
-      const subscription = subscriptionsRepo.getByViewerId(viewerId);
-      return { success: true, subscription };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  ipcRegistry.register<{ userId: string; channelId: string }, any[]>(
+    'db:get-subscriptions',
+    {
+      validate: (input) => {
+        if (!input.userId) return 'User ID is required';
+        if (!input.channelId) return 'Channel ID is required';
+        return null;
+      },
+      execute: async (input) => eventsRepo.getSubscriptions(input.userId, input.channelId)
     }
-  });
+  );
 
-  // Database: Get All Viewers with Subscription Status
-  ipcMain.handle('db:get-all-viewers-with-status', async (event, limit?: number, offset?: number) => {
-    try {
-      const viewers = subscriptionsRepo.getAllViewersWithStatus(limit, offset);
-      return { success: true, viewers };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  ipcRegistry.register<{ userId: string; channelId: string }, string[]>(
+    'db:get-enabled-events',
+    {
+      validate: (input) => {
+        if (!input.userId) return 'User ID is required';
+        if (!input.channelId) return 'Channel ID is required';
+        return null;
+      },
+      execute: async (input) => eventsRepo.getEnabledEvents(input.userId, input.channelId)
     }
-  });
+  );
 
-  // Database: Search Viewers with Subscription Status
-  ipcMain.handle('db:search-viewers-with-status', async (event, query: string, limit?: number) => {
-    try {
-      const viewers = subscriptionsRepo.searchViewersWithStatus(query, limit);
-      return { success: true, viewers };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  ipcRegistry.register<{ userId: string; channelId: string }, { success: boolean }>(
+    'db:clear-subscriptions',
+    {
+      validate: (input) => {
+        if (!input.userId) return 'User ID is required';
+        if (!input.channelId) return 'Channel ID is required';
+        return null;
+      },
+      execute: async (input) => {
+        eventsRepo.clearSubscriptions(input.userId, input.channelId);
+        return { success: true };
+      }
     }
-  });
-  // Database: Delete Subscription
-  ipcMain.handle('db:delete-subscription', async (event, viewerId: string) => {
-    try {
-      subscriptionsRepo.deleteByViewerId(viewerId);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
+  );
 
-  // Database: Sync Subscriptions from Twitch
-  ipcMain.handle('db:sync-subscriptions', async (event, broadcasterId: string, userId: string) => {
-    try {
-      const result = await twitchSubsService.syncSubscriptionsFromTwitch(broadcasterId, userId);
-      return result;
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  // ===== Database: OAuth Tokens =====
+  ipcRegistry.register<any, { success: boolean }>(
+    'db:save-token',
+    {
+      validate: (token) => {
+        if (!token) return 'Token data is required';
+        if (!token.userId) return 'User ID is required';
+        return null;
+      },
+      execute: async (token) => {
+        tokensRepo.save(token);
+        return { success: true };
+      }
     }
-  });
-  // Database: Check Subscription Status
-  ipcMain.handle('db:check-subscription-status', async (event, viewerId: string) => {
-    try {
-      const result = await twitchSubsService.checkSubscriptionStatus(viewerId);
-      return { success: true, ...result };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  );
+
+  ipcRegistry.register<string, any>(
+    'db:get-token',
+    {
+      validate: (userId) => userId ? null : 'User ID is required',
+      execute: async (userId) => tokensRepo.get(userId)
     }
-  });
+  );
+
+  ipcRegistry.register<string, { success: boolean }>(
+    'db:invalidate-token',
+    {
+      validate: (userId) => userId ? null : 'User ID is required',
+      execute: async (userId) => {
+        tokensRepo.invalidate(userId);
+        return { success: true };
+      }
+    }
+  );
+
+  ipcRegistry.register<string, { success: boolean }>(
+    'db:delete-token',
+    {
+      validate: (userId) => userId ? null : 'User ID is required',
+      execute: async (userId) => {
+        tokensRepo.delete(userId);
+        return { success: true };
+      }
+    }
+  );
+  // ===== Database: Viewers =====
+  ipcRegistry.register<{ id: string; username: string; displayName?: string }, { success: boolean; viewer: any }>(
+    'db:get-or-create-viewer',
+    {
+      validate: (input) => {
+        if (!input.id) return 'Viewer ID is required';
+        if (!input.username) return 'Username is required';
+        return null;
+      },
+      execute: async (input) => {
+        const viewer = viewersRepo.getOrCreate(input.id, input.username, input.displayName);
+        if (!viewer) {
+          throw new Error('Viewer not created: numeric ID required');
+        }
+        return { success: true, viewer };
+      }
+    }
+  );
+
+  ipcRegistry.register<string, { success: boolean; viewer: any }>(
+    'db:get-viewer',
+    {
+      validate: (id) => id ? null : 'Viewer ID is required',
+      execute: async (id) => {
+        const viewer = viewersRepo.getViewerById(id);
+        return { success: true, viewer };
+      }
+    }
+  );
+
+  ipcRegistry.register<{ limit?: number; offset?: number }, { success: boolean; viewers: any[] }>(
+    'db:get-all-viewers',
+    {
+      execute: async (input) => {
+        const viewers = viewersRepo.getAllViewers(input.limit, input.offset);
+        return { success: true, viewers };
+      }
+    }
+  );
+
+  ipcRegistry.register<{ query: string; limit?: number }, { success: boolean; viewers: any[] }>(
+    'db:search-viewers',
+    {
+      validate: (input) => input.query ? null : 'Search query is required',
+      execute: async (input) => {
+        const viewers = viewersRepo.search(input.query, input.limit);
+        return { success: true, viewers };
+      }
+    }
+  );
+
+  ipcRegistry.register<string, { success: boolean }>(
+    'db:delete-viewer',
+    {
+      validate: (id) => id ? null : 'Viewer ID is required',
+      execute: async (id) => {
+        viewersRepo.deleteViewer(id);
+        return { success: true };
+      }
+    }
+  );
+
+  ipcRegistry.register<void, { success: boolean }>(
+    'db:delete-all-viewers',
+    {
+      execute: async () => {
+        viewersRepo.deleteAllViewers();
+        return { success: true };
+      }
+    }
+  );
+
+  ipcRegistry.register<void, { success: boolean; count: number }>(
+    'db:get-viewer-count',
+    {
+      execute: async () => {
+        const count = viewersRepo.getCount();
+        return { success: true, count };
+      }
+    }
+  );
+  // ===== Database: Events =====
+  ipcRegistry.register<any, { success: boolean; events: any[] }>(
+    'db:get-events',
+    {
+      execute: async (filters) => {
+        const events = eventsRepo.getEvents(filters);
+        return { success: true, events };
+      }
+    }
+  );
+
+  ipcRegistry.register<{ channelId: string; limit?: number }, { success: boolean; events: any[] }>(
+    'db:get-chat-events',
+    {
+      validate: (input) => input.channelId ? null : 'Channel ID is required',
+      execute: async (input) => {
+        const events = eventsRepo.getChatEvents(input.channelId, input.limit);
+        return { success: true, events };
+      }
+    }
+  );
+
+  ipcRegistry.register<{ channelId?: string; eventType?: string }, { success: boolean; count: number }>(
+    'db:get-event-count',
+    {
+      execute: async (input) => {
+        const count = eventsRepo.getEventCount(input.channelId, input.eventType);
+        return { success: true, count };
+      }
+    }
+  );
+
+  // ===== Database: Subscriptions =====
+  ipcRegistry.register<any, { success: boolean }>(
+    'db:upsert-subscription',
+    {
+      validate: (subscription) => subscription ? null : 'Subscription data is required',
+      execute: async (subscription) => {
+        subscriptionsRepo.upsert(subscription);
+        return { success: true };
+      }
+    }
+  );
+
+  ipcRegistry.register<string, { success: boolean; subscription: any }>(
+    'db:get-subscription',
+    {
+      validate: (viewerId) => viewerId ? null : 'Viewer ID is required',
+      execute: async (viewerId) => {
+        const subscription = subscriptionsRepo.getByViewerId(viewerId);
+        return { success: true, subscription };
+      }
+    }
+  );
+
+  ipcRegistry.register<{ limit?: number; offset?: number }, { success: boolean; viewers: any[] }>(
+    'db:get-all-viewers-with-status',
+    {
+      execute: async (input) => {
+        const viewers = subscriptionsRepo.getAllViewersWithStatus(input.limit, input.offset);
+        return { success: true, viewers };
+      }
+    }
+  );
+
+  ipcRegistry.register<{ query: string; limit?: number }, { success: boolean; viewers: any[] }>(
+    'db:search-viewers-with-status',
+    {
+      validate: (input) => input.query ? null : 'Search query is required',
+      execute: async (input) => {
+        const viewers = subscriptionsRepo.searchViewersWithStatus(input.query, input.limit);
+        return { success: true, viewers };
+      }
+    }
+  );
+
+  ipcRegistry.register<string, { success: boolean }>(
+    'db:delete-subscription',
+    {
+      validate: (viewerId) => viewerId ? null : 'Viewer ID is required',
+      execute: async (viewerId) => {
+        subscriptionsRepo.deleteByViewerId(viewerId);
+        return { success: true };
+      }
+    }
+  );
+
+  ipcRegistry.register<{ broadcasterId: string; userId: string }, any>(
+    'db:sync-subscriptions',
+    {
+      validate: (input) => {
+        if (!input.broadcasterId) return 'Broadcaster ID is required';
+        if (!input.userId) return 'User ID is required';
+        return null;
+      },
+      execute: async (input) => {
+        return await twitchSubsService.syncSubscriptionsFromTwitch(input.broadcasterId, input.userId);
+      }
+    }
+  );
+
+  ipcRegistry.register<string, any>(
+    'db:check-subscription-status',
+    {
+      validate: (viewerId) => viewerId ? null : 'Viewer ID is required',
+      execute: async (viewerId) => {
+        const result = await twitchSubsService.checkSubscriptionStatus(viewerId);
+        return { success: true, ...result };
+      }
+    }
+  );
 
   }
 
