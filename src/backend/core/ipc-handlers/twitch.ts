@@ -1,13 +1,17 @@
 /**
  * Twitch IPC Handlers
  * 
- * Handles Twitch-related operations via IPC:
+ * Handles Twitch-related operations via IPC using centralized IPC Framework:
  * - OAuth authentication
  * - WebSocket connection
  * - Export/Import settings
+ * - Subscription syncing
+ * 
+ * Phase 3: Migrated to use IPCRegistry for consistent error handling
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
+import { ipcRegistry } from '../ipc/ipc-framework';
 import { authenticateWithTwitch } from '../../auth/twitch-oauth';
 import { exportSettings, importSettings, getExportPreview } from '../../services/export-import';
 import { TwitchSubscriptionsService } from '../../services/twitch-subscriptions';
@@ -20,71 +24,79 @@ export function setMainWindowForTwitch(window: BrowserWindow | null): void {
 }
 
 export function setupTwitchHandlers(): void {
-  // Handle Twitch OAuth
-  ipcMain.handle('twitch-oauth', async (event, clientId: string) => {
-    try {
-      const result = await authenticateWithTwitch(clientId, mainWindow);
-      return result;
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  // Handle WebSocket connection
-  ipcMain.handle('connect-websocket', async (event, token: string) => {
-    // This will be used to establish WebSocket connection
-    return { success: true, message: 'WebSocket connection initiated' };
-  });
-
-  // Export/Import
-  ipcMain.handle('export-settings', async () => {
-    try {
-      const filePath = await exportSettings();
-      return { success: true, filePath };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('import-settings', async () => {
-    try {
-      const result = await importSettings();
-      return result;
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-  ipcMain.handle('get-export-preview', async () => {
-    try {
-      const preview = getExportPreview();
-      return { success: true, preview };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  // Sync Subscriptions from Twitch
-  ipcMain.handle('twitch:sync-subscriptions-from-twitch', async () => {
-    try {
-      console.log('[Twitch] Syncing subscriptions from Twitch API...');
-      const db = getDatabase();
-      const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
-      const session = new sessionsRepo().getCurrentSession();
-
-      if (!session) {
-        return { success: false, error: 'Not connected to Twitch. Please connect first.' };
+  // ===== OAuth & Connection =====
+  ipcRegistry.register<string, any>(
+    'twitch-oauth',
+    {
+      validate: (clientId) => clientId ? null : 'Client ID is required',
+      execute: async (clientId) => {
+        return await authenticateWithTwitch(clientId, mainWindow);
       }
-
-      const subscriptionService = new TwitchSubscriptionsService();
-      const result = await subscriptionService.syncSubscriptionsFromTwitch(
-        session.channel_id,
-        session.user_id
-      );
-
-      return result;
-    } catch (error: any) {
-      console.error('[Twitch] Error syncing subscriptions:', error);
-      return { success: false, error: error.message };
     }
-  });
+  );
+
+  ipcRegistry.register<string, void>(
+    'connect-websocket',
+    {
+      validate: (token) => token ? null : 'Token is required',
+      execute: async (token) => {
+        // WebSocket connection will be initiated with the token
+        console.log('[Twitch] WebSocket connection initiated');
+      }
+    }
+  );
+  // ===== Export/Import =====
+  ipcRegistry.register<void, string>(
+    'export-settings',
+    {
+      execute: async () => {
+        console.log('[Twitch] Exporting settings...');
+        const filePath = await exportSettings();
+        return filePath;
+      }
+    }
+  );
+
+  ipcRegistry.register<void, any>(
+    'import-settings',
+    {
+      execute: async () => {
+        console.log('[Twitch] Importing settings...');
+        return await importSettings();
+      }
+    }
+  );
+
+  ipcRegistry.register<void, any>(
+    'get-export-preview',
+    {
+      execute: async () => {
+        console.log('[Twitch] Getting export preview...');
+        return getExportPreview();
+      }
+    }
+  );
+
+  // ===== Subscriptions =====
+  ipcRegistry.register<void, any>(
+    'twitch:sync-subscriptions-from-twitch',
+    {
+      execute: async () => {
+        console.log('[Twitch] Syncing subscriptions from Twitch API...');
+        const db = getDatabase();
+        const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
+        const session = new sessionsRepo().getCurrentSession();
+
+        if (!session) {
+          throw new Error('Not connected to Twitch. Please connect first.');
+        }
+
+        const subscriptionService = new TwitchSubscriptionsService();
+        return await subscriptionService.syncSubscriptionsFromTwitch(
+          session.channel_id,
+          session.user_id
+        );
+      }
+    }
+  );
 }

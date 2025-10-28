@@ -93,15 +93,31 @@ export async function deleteToken(userId: string): Promise<void> {
 
 // Export/Import
 export async function exportSettings(): Promise<{ success: boolean; filePath?: string; error?: string }> {
-  return await ipcRenderer.invoke('export-settings');
+  const response = await ipcRenderer.invoke('export-settings');
+  if (response.success && response.data) {
+    return { success: true, filePath: response.data };
+  }
+  return { success: response.success, error: response.error };
 }
 
 export async function importSettings(): Promise<{ success: boolean; message?: string; error?: string; imported?: any }> {
-  return await ipcRenderer.invoke('import-settings');
+  const response = await ipcRenderer.invoke('import-settings');
+  if (response.success && response.data) {
+    return { 
+      success: true, 
+      message: response.data.message, 
+      imported: response.data.imported 
+    };
+  }
+  return { success: response.success, error: response.error };
 }
 
 export async function getExportPreview(): Promise<{ success: boolean; preview?: any; error?: string }> {
-  return await ipcRenderer.invoke('get-export-preview');
+  const response = await ipcRenderer.invoke('get-export-preview');
+  if (response.success && response.data) {
+    return { success: true, preview: response.data };
+  }
+  return { success: response.success, error: response.error };
 }
 
 // Events Storage
@@ -229,11 +245,19 @@ export async function getSubscription(viewerId: string): Promise<{ success: bool
 }
 
 export async function getAllViewersWithStatus(limit?: number, offset?: number): Promise<{ success: boolean; viewers?: ViewerWithSubscription[]; error?: string }> {
-  return await ipcRenderer.invoke('db:get-all-viewers-with-status', { limit, offset });
+  const response = await ipcRenderer.invoke('db:get-all-viewers-with-status', { limit, offset });
+  if (response.success && response.data) {
+    return { success: true, viewers: response.data };
+  }
+  return { success: response.success, error: response.error };
 }
 
 export async function searchViewersWithStatus(query: string, limit?: number): Promise<{ success: boolean; viewers?: ViewerWithSubscription[]; error?: string }> {
-  return await ipcRenderer.invoke('db:search-viewers-with-status', { query, limit });
+  const response = await ipcRenderer.invoke('db:search-viewers-with-status', { query, limit });
+  if (response.success && response.data) {
+    return { success: true, viewers: response.data };
+  }
+  return { success: response.success, error: response.error };
 }
 
 export async function deleteSubscription(viewerId: string): Promise<{ success: boolean; error?: string }> {

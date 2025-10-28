@@ -339,9 +339,8 @@ export const ExportImport: React.FC<ExportImportProps> = ({ userId, onImportComp
                       📺 Monitoring: <strong>{profile.channel_login || 'Unknown Channel'}</strong>
                     </p>
                     <div style={{ fontSize: '12px' }}>
-                      <p style={{ margin: '0 0 4px 0', color: '#888' }}>Events Configured: {profile.events.length}</p>
-                      <div style={{ marginLeft: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        {profile.events.slice(0, 5).map((event: string, eventIdx: number) => (
+                      <p style={{ margin: '0 0 4px 0', color: '#888' }}>Events Configured: {profile.events.length}</p>                      <div style={{ marginLeft: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {profile.events.slice(0, 5).map((event: any, eventIdx: number) => (
                           <span 
                             key={eventIdx}
                             style={{ 
@@ -350,10 +349,10 @@ export const ExportImport: React.FC<ExportImportProps> = ({ userId, onImportComp
                               backgroundColor: '#1a1a1a',
                               borderRadius: '3px',
                               border: '1px solid #444',
-                              color: '#6dff8e'
+                              color: event.is_enabled ? '#6dff8e' : '#999'
                             }}
                           >
-                            {event}
+                            {event.event_type}
                           </span>
                         ))}
                         {profile.events.length > 5 && (

@@ -66,21 +66,20 @@ export const Discord: React.FC = () => {
     setSettings(newSettings);
     await databaseService.setSetting('discord_settings', JSON.stringify(newSettings));
   };
-
   const generateCataloguePreview = async () => {
     try {
       setLoading(true);
       setError(null);
       setSuccess(null);
       
-      const result = await ipcRenderer.invoke('discord:generate-voice-catalogue');
-      console.log('[Discord Preview] Result:', result);
+      const response = await ipcRenderer.invoke('discord:generate-voice-catalogue');
+      console.log('[Discord Preview] Response:', response);
       
-      if (result.success) {
-        setCataloguePreview(result.catalogue);
+      if (response.success) {
+        setCataloguePreview(response.data.catalogue);
         setSuccess('Preview generated! Review before posting.');
       } else {
-        setError(result.error || 'Failed to generate preview');
+        setError(response.error || 'Failed to generate preview');
       }
     } catch (err: any) {
       setError(err.message);
@@ -89,7 +88,6 @@ export const Discord: React.FC = () => {
       setLoading(false);
     }
   };
-
   const postVoiceCatalogue = async () => {
     if (!settings.webhookUrl) {
       setError('Please configure webhook URL first');
@@ -102,13 +100,13 @@ export const Discord: React.FC = () => {
       setSuccess(null);
 
       console.log('[Discord Post] Sending to webhook:', settings.webhookUrl);
-      const result = await ipcRenderer.invoke('discord:post-voice-catalogue', settings.webhookUrl);
-      console.log('[Discord Post] Result:', result);
+      const response = await ipcRenderer.invoke('discord:post-voice-catalogue', settings.webhookUrl);
+      console.log('[Discord Post] Response:', response);
       
-      if (result.success) {
+      if (response.success) {
         setSuccess('✅ Voice catalogue posted to Discord successfully!');
       } else {
-        setError(result.error || 'Failed to post to Discord');
+        setError(response.error || 'Failed to post to Discord');
       }
     } catch (err: any) {
       setError(err.message);
@@ -117,17 +115,16 @@ export const Discord: React.FC = () => {
       setPosting(false);
     }
   };
-
   const testWebhook = async (webhookUrl: string) => {
     try {
       setError(null);
       setSuccess(null);
-      const result = await ipcRenderer.invoke('discord:test-webhook', webhookUrl);
+      const response = await ipcRenderer.invoke('discord:test-webhook', webhookUrl);
       
-      if (result.success) {
+      if (response.success) {
         setSuccess('✅ Webhook test successful!');
       } else {
-        setError(result.error || 'Webhook test failed');
+        setError(response.error || 'Webhook test failed');
       }
     } catch (err: any) {
       setError(err.message);

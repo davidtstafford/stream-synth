@@ -339,24 +339,21 @@ export function setupDatabaseHandlers(): void {
       }
     }
   );
-
-  ipcRegistry.register<{ limit?: number; offset?: number }, { success: boolean; viewers: any[] }>(
+  ipcRegistry.register<{ limit?: number; offset?: number }, any[]>(
     'db:get-all-viewers-with-status',
     {
       execute: async (input) => {
-        const viewers = subscriptionsRepo.getAllViewersWithStatus(input.limit, input.offset);
-        return { success: true, viewers };
+        return subscriptionsRepo.getAllViewersWithStatus(input.limit, input.offset);
       }
     }
   );
 
-  ipcRegistry.register<{ query: string; limit?: number }, { success: boolean; viewers: any[] }>(
+  ipcRegistry.register<{ query: string; limit?: number }, any[]>(
     'db:search-viewers-with-status',
     {
       validate: (input) => input.query ? null : 'Search query is required',
       execute: async (input) => {
-        const viewers = subscriptionsRepo.searchViewersWithStatus(input.query, input.limit);
-        return { success: true, viewers };
+        return subscriptionsRepo.searchViewersWithStatus(input.query, input.limit);
       }
     }
   );

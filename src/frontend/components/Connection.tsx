@@ -30,7 +30,6 @@ export const Connection: React.FC<ConnectionProps> = ({
   const [userId, setUserId] = useState<string>('');
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null);
-
   const handleConnect = async () => {
     setIsConnecting(true);
     setStatusMessage({
@@ -39,34 +38,44 @@ export const Connection: React.FC<ConnectionProps> = ({
     });
 
     try {
-      const result: any = await ipcRenderer.invoke('twitch-oauth', TWITCH_CLIENT_ID);
+      const response: any = await ipcRenderer.invoke('twitch-oauth', TWITCH_CLIENT_ID);
       
-      if (result.success && result.accessToken) {
-        setAccessToken(result.accessToken);
-        
-        // Fetch user info to get their ID and username
-        const userResponse = await fetch('https://api.twitch.tv/helix/users', {
-          headers: {
-            'Authorization': `Bearer ${result.accessToken}`,
-            'Client-Id': TWITCH_CLIENT_ID
-          }
-        });
-        
-        const userData = await userResponse.json();
-        const user = userData.data[0];
-        
-        setUserId(user.id);
-        setUserLogin(user.login);
-        
-        setStatusMessage({
-          type: 'success',
-          message: `Successfully authenticated as ${user.display_name}!`
-        });
-        
-        onConnected(TWITCH_CLIENT_ID, result.accessToken, user.id, user.login);
-      } else {
-        throw new Error(result.error || 'Authentication failed');
+      if (!response.success) {
+        throw new Error(response.error || 'Authentication failed');
       }
+
+      const accessToken = response.data; // IPC Framework wraps return value in { success, data }
+
+      if (!accessToken) {
+        throw new Error('No access token returned');
+      }
+
+      setAccessToken(accessToken);
+      
+      // Fetch user info to get their ID and username
+      const userResponse = await fetch('https://api.twitch.tv/helix/users', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Client-Id': TWITCH_CLIENT_ID
+        }
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error(`Failed to fetch user info: ${userResponse.statusText}`);
+      }
+
+      const userData = await userResponse.json();
+      const user = userData.data[0];
+      
+      setUserId(user.id);
+      setUserLogin(user.login);
+      
+      setStatusMessage({
+        type: 'success',
+        message: `Successfully authenticated as ${user.display_name}!`
+      });
+      
+      onConnected(TWITCH_CLIENT_ID, accessToken, user.id, user.login);
     } catch (error: any) {
       setStatusMessage({
         type: 'error',
