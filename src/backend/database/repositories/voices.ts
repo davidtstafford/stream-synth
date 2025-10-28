@@ -1,4 +1,4 @@
-import { getDatabase } from '../connection';
+import { BaseRepository } from '../base-repository';
 import { 
   extractProviderFromId,
   getProviderName 
@@ -29,8 +29,14 @@ export interface ProviderStatus {
   updated_at: string;
 }
 
-export class VoicesRepository {
-  // Get provider table name from provider string
+export class VoicesRepository extends BaseRepository<VoiceRecord> {
+  get tableName(): string {
+    return 'all_voices';
+  }
+
+  /**
+   * Get provider-specific table name
+   */
   private getTableName(provider: string): string {
     switch (provider) {
       case 'webspeech':
@@ -41,11 +47,14 @@ export class VoicesRepository {
         return 'google_voices';
       default:
         throw new Error(`Unknown provider: ${provider}`);
-    }  }
+    }
+  }
 
-  // Create or update a voice in the provider-specific table
+  /**
+   * Create or update a voice in the provider-specific table
+   */
   upsertVoice(voice: Omit<VoiceRecord, 'created_at' | 'numeric_id'>): string {
-    const db = getDatabase();
+    const db = this.getDatabase();
     const now = new Date().toISOString();
     const table = this.getTableName(voice.provider);
     
@@ -71,7 +80,6 @@ export class VoicesRepository {
       );
     } else {
       // Insert new voice - let SQLite auto-assign numeric_id
-      // This eliminates hash collision issues entirely
       db.prepare(`
         INSERT INTO ${table} (voice_id, name, language_name, region, gender, provider, metadata, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -90,60 +98,69 @@ export class VoicesRepository {
     return voice.voice_id;
   }
 
-  // Purge all voices for a provider (truncate provider-specific table)
+  /**
+   * Purge all voices for a provider
+   */
   purgeProvider(provider: string): void {
-    const db = getDatabase();
+    const db = this.getDatabase();
     const table = this.getTableName(provider);
-    
     const result = db.prepare(`DELETE FROM ${table}`).run();
-    
     console.log(`[Voices] Purged all ${provider} voices from ${table} (${result.changes} rows)`);
   }
 
-  // Assign numeric IDs using deterministic hashing (no sequential IDs)
-  // This is now a no-op since numeric IDs are assigned during upsertVoice
+  /**
+   * Assign numeric IDs (legacy - now a no-op)
+   */
   assignNumericIds(provider: string): void {
-    // With deterministic hashing, numeric IDs are already assigned during upsert
-    // This method is kept for backward compatibility but does nothing
     console.log(`[Voices] Numeric IDs already assigned via hashing for ${provider}`);
   }
-  // Get all voices for a provider
+
+  /**
+   * Get all voices for a provider
+   */
   getVoicesByProvider(provider: string): VoiceWithNumericId[] {
-    const db = getDatabase();
+    const db = this.getDatabase();
     const table = this.getTableName(provider);
-    
     return db.prepare(`
       SELECT * FROM ${table}
       ORDER BY numeric_id, name
     `).all() as VoiceWithNumericId[];
   }
 
-  // Get all available voices across all providers with numeric IDs
+  /**
+   * Get all available voices across all providers
+   */
   getAvailableVoices(): VoiceWithNumericId[] {
-    const db = getDatabase();
+    const db = this.getDatabase();
     return db.prepare(`
       SELECT * FROM all_voices
       ORDER BY provider, language_name, name
     `).all() as VoiceWithNumericId[];
   }
 
-  // Get voice by numeric ID (searches across all provider tables)
+  /**
+   * Get voice by numeric ID
+   */
   getVoiceByNumericId(numericId: number): VoiceWithNumericId | undefined {
-    const db = getDatabase();
+    const db = this.getDatabase();
     return db.prepare(`
       SELECT * FROM all_voices WHERE numeric_id = ?
     `).get(numericId) as VoiceWithNumericId | undefined;
   }
 
-  // Get voice by voice_id (searches across all provider tables)
+  /**
+   * Get voice by voice_id
+   */
   getVoiceById(voiceId: string): VoiceWithNumericId | undefined {
-    const db = getDatabase();
+    const db = this.getDatabase();
     return db.prepare(`
       SELECT * FROM all_voices WHERE voice_id = ?
     `).get(voiceId) as VoiceWithNumericId | undefined;
   }
 
-  // Get grouped voices for dropdown/display
+  /**
+   * Get grouped voices for display
+   */
   getGroupedVoices(): Map<string, VoiceWithNumericId[]> {
     const voices = this.getAvailableVoices();
     const grouped = new Map<string, VoiceWithNumericId[]>();
@@ -159,24 +176,32 @@ export class VoicesRepository {
     return grouped;
   }
 
+  /**
+   * Get group key for a voice
+   */
   private getGroupKey(voice: VoiceRecord): string {
     const parts = [voice.provider];
     parts.push(voice.language_name);
     if (voice.region) parts.push(voice.region);
     return parts.join(' - ');
   }
-  // Provider status methods
+
+  /**
+   * Get provider status
+   */
   getProviderStatus(provider: string): ProviderStatus | undefined {
-    const db = getDatabase();
+    const db = this.getDatabase();
     return db.prepare(
       'SELECT * FROM tts_provider_status WHERE provider = ?'
     ).get(provider) as ProviderStatus | undefined;
   }
 
+  /**
+   * Update provider status
+   */
   updateProviderStatus(provider: string, isEnabled: boolean, voiceCount: number): void {
-    const db = getDatabase();
+    const db = this.getDatabase();
     const now = new Date().toISOString();
-    
     const existing = this.getProviderStatus(provider);
     
     if (existing) {
@@ -195,22 +220,25 @@ export class VoicesRepository {
     console.log(`[Voices] Updated provider status: ${provider} (enabled=${isEnabled}, voices=${voiceCount})`);
   }
 
+  /**
+   * Clear provider sync status
+   */
   clearProviderSyncStatus(provider: string): void {
-    const db = getDatabase();
+    const db = this.getDatabase();
     const now = new Date().toISOString();
-    
     db.prepare(`
       UPDATE tts_provider_status 
       SET last_synced_at = NULL, updated_at = ?
       WHERE provider = ?
     `).run(now, provider);
-    
     console.log(`[Voices] Cleared sync status for ${provider}`);
   }
 
-  // Stats for display
+  /**
+   * Get statistics
+   */
   getStats(): { total: number; available: number; byProvider: Record<string, number> } {
-    const db = getDatabase();
+    const db = this.getDatabase();
     const total = db.prepare('SELECT COUNT(*) as count FROM all_voices').get() as { count: number };
     const byProvider = db.prepare(`
       SELECT provider, COUNT(*) as count 

@@ -114,21 +114,19 @@ export function setupDatabaseHandlers(): void {
       return { success: false, error: error.message };
     }
   });
-
   // Database: Get Viewer by ID
   ipcMain.handle('db:get-viewer', async (event, id: string) => {
     try {
-      const viewer = viewersRepo.getById(id);
+      const viewer = viewersRepo.getViewerById(id);
       return { success: true, viewer };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
   });
-
   // Database: Get All Viewers
   ipcMain.handle('db:get-all-viewers', async (event, limit?: number, offset?: number) => {
     try {
-      const viewers = viewersRepo.getAll(limit, offset);
+      const viewers = viewersRepo.getAllViewers(limit, offset);
       return { success: true, viewers };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -144,21 +142,19 @@ export function setupDatabaseHandlers(): void {
       return { success: false, error: error.message };
     }
   });
-
   // Database: Delete Viewer
   ipcMain.handle('db:delete-viewer', async (event, id: string) => {
     try {
-      viewersRepo.delete(id);
+      viewersRepo.deleteViewer(id);
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
   });
-
   // Database: Delete All Viewers
   ipcMain.handle('db:delete-all-viewers', async () => {
     try {
-      viewersRepo.deleteAll();
+      viewersRepo.deleteAllViewers();
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -291,11 +287,9 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
         channel_id: channelId,
         viewer_id: viewerId,
         created_at: new Date().toISOString()
-      };
-
-      // Add viewer info if available
+      };      // Add viewer info if available
       if (viewerId) {
-        const viewer = viewersRepo.getById(viewerId);
+        const viewer = viewersRepo.getViewerById(viewerId);
         if (viewer) {
           (storedEvent as any).viewer_username = viewer.username;
           (storedEvent as any).viewer_display_name = viewer.display_name;

@@ -1,4 +1,4 @@
-import { getDatabase } from '../connection';
+import { BaseRepository } from '../base-repository';
 
 export interface ConnectionSession {
   id: number;
@@ -12,20 +12,26 @@ export interface ConnectionSession {
   is_current: boolean;
 }
 
-export class SessionsRepository {
+export class SessionsRepository extends BaseRepository<ConnectionSession> {
+  get tableName(): string {
+    return 'connection_sessions';
+  }
+
+  /**
+   * Create a new session and mark it as current
+   * Automatically marks all other sessions as not current
+   */
   create(session: Omit<ConnectionSession, 'id' | 'connected_at' | 'disconnected_at'>): number {
-    const db = getDatabase();
+    const db = this.getDatabase();
     
-    // First, mark all existing sessions as not current
+    // Mark all existing sessions as not current
     db.prepare('UPDATE connection_sessions SET is_current = 0').run();
     
     // Insert new session
-    const stmt = db.prepare(`
+    const result = db.prepare(`
       INSERT INTO connection_sessions (user_id, user_login, channel_id, channel_login, is_broadcaster, is_current)
       VALUES (?, ?, ?, ?, ?, 1)
-    `);
-    
-    const result = stmt.run(
+    `).run(
       session.user_id,
       session.user_login,
       session.channel_id,
@@ -36,29 +42,35 @@ export class SessionsRepository {
     return result.lastInsertRowid as number;
   }
 
+  /**
+   * Get the currently active session
+   */
   getCurrentSession(): ConnectionSession | null {
-    const db = getDatabase();
-    const stmt = db.prepare('SELECT * FROM connection_sessions WHERE is_current = 1 LIMIT 1');
-    return stmt.get() as ConnectionSession | null;
+    const db = this.getDatabase();
+    return db.prepare('SELECT * FROM connection_sessions WHERE is_current = 1 LIMIT 1').get() as ConnectionSession | null;
   }
 
+  /**
+   * End the current session and mark it as disconnected
+   */
   endCurrentSession(): void {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    db.prepare(`
       UPDATE connection_sessions 
       SET disconnected_at = CURRENT_TIMESTAMP, is_current = 0
       WHERE is_current = 1
-    `);
-    stmt.run();
+    `).run();
   }
 
+  /**
+   * Get recent sessions with optional limit
+   */
   getRecentSessions(limit: number = 10): ConnectionSession[] {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    return db.prepare(`
       SELECT * FROM connection_sessions 
       ORDER BY connected_at DESC 
       LIMIT ?
-    `);
-    return stmt.all(limit) as ConnectionSession[];
+    `).all(limit) as ConnectionSession[];
   }
 }

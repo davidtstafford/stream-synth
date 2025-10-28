@@ -1,4 +1,4 @@
-import { getDatabase } from '../connection';
+import { BaseRepository } from '../base-repository';
 
 export interface EventSubscription {
   id: number;
@@ -30,59 +30,70 @@ export interface EventFilters {
   offset?: number;
 }
 
-export class EventsRepository {
+export class EventsRepository extends BaseRepository<StoredEvent> {
+  get tableName(): string {
+    return 'events';
+  }
+
+  /**
+   * Save or update an event subscription
+   */
   saveSubscription(userId: string, channelId: string, eventType: string, isEnabled: boolean): void {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    db.prepare(`
       INSERT INTO event_subscriptions (user_id, channel_id, event_type, is_enabled, updated_at)
       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(user_id, channel_id, event_type) DO UPDATE SET
         is_enabled = excluded.is_enabled,
         updated_at = CURRENT_TIMESTAMP
-    `);
-    stmt.run(userId, channelId, eventType, isEnabled ? 1 : 0);
+    `).run(userId, channelId, eventType, isEnabled ? 1 : 0);
   }
 
+  /**
+   * Get all subscriptions for a user/channel
+   */
   getSubscriptions(userId: string, channelId: string): EventSubscription[] {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    return db.prepare(`
       SELECT * FROM event_subscriptions 
       WHERE user_id = ? AND channel_id = ?
       ORDER BY event_type
-    `);
-    return stmt.all(userId, channelId) as EventSubscription[];
+    `).all(userId, channelId) as EventSubscription[];
   }
 
+  /**
+   * Get enabled event types
+   */
   getEnabledEvents(userId: string, channelId: string): string[] {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    const rows = db.prepare(`
       SELECT event_type FROM event_subscriptions 
       WHERE user_id = ? AND channel_id = ? AND is_enabled = 1
       ORDER BY event_type
-    `);
-    const rows = stmt.all(userId, channelId) as { event_type: string }[];
+    `).all(userId, channelId) as { event_type: string }[];
     return rows.map(row => row.event_type);
   }
 
+  /**
+   * Clear all subscriptions for a user/channel
+   */
   clearSubscriptions(userId: string, channelId: string): void {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    db.prepare(`
       DELETE FROM event_subscriptions 
       WHERE user_id = ? AND channel_id = ?
-    `);
-    stmt.run(userId, channelId);
+    `).run(userId, channelId);
   }
 
   /**
    * Store an event in the database
    */
   storeEvent(eventType: string, eventData: any, channelId: string, viewerId?: string): number {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    const result = db.prepare(`
       INSERT INTO events (event_type, event_data, channel_id, viewer_id)
       VALUES (?, ?, ?, ?)
-    `);
-    const result = stmt.run(
+    `).run(
       eventType,
       JSON.stringify(eventData),
       channelId,
@@ -95,7 +106,7 @@ export class EventsRepository {
    * Get events with optional filters
    */
   getEvents(filters: EventFilters): StoredEvent[] {
-    const db = getDatabase();
+    const db = this.getDatabase();
     let query = `
       SELECT e.*, v.username as viewer_username, v.display_name as viewer_display_name
       FROM events e
@@ -147,8 +158,7 @@ export class EventsRepository {
       params.push(filters.offset);
     }
 
-    const stmt = db.prepare(query);
-    return stmt.all(...params) as StoredEvent[];
+    return db.prepare(query).all(...params) as StoredEvent[];
   }
 
   /**
@@ -167,7 +177,7 @@ export class EventsRepository {
    * Get count of events
    */
   getEventCount(channelId?: string, eventType?: string): number {
-    const db = getDatabase();
+    const db = this.getDatabase();
     let query = `SELECT COUNT(*) as count FROM events WHERE 1=1`;
     const params: any[] = [];
 
@@ -181,8 +191,7 @@ export class EventsRepository {
       params.push(eventType);
     }
 
-    const stmt = db.prepare(query);
-    const result = stmt.get(...params) as { count: number };
+    const result = db.prepare(query).get(...params) as { count: number };
     return result.count;
   }
 }

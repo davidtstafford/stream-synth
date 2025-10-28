@@ -42,9 +42,8 @@ export class TTSManager {
   private copypastaList: Set<string> = new Set([
     'kappa123',
     'pogchamp',
-  ]);
-  constructor(db: Database.Database) {
-    this.repository = new TTSRepository(db);
+  ]);  constructor(db: Database.Database) {
+    this.repository = new TTSRepository();
     this.voicesRepo = new VoicesRepository();
     this.providers = new Map();
     

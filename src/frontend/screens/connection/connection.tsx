@@ -165,12 +165,10 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
                 console.log('👥 Creating/updating viewer:', viewerUsername);
                 const viewerResult = await db.getOrCreateViewer(viewerId, viewerUsername, viewerDisplayName);
                 console.log('👥 Viewer result:', viewerResult);
-              }
-              
-              // Store the event
-              const channelId = lastChannelId || user.id;
-              console.log('💾 Storing event for channel:', channelId);
-              const result = await db.storeEvent(eventType, eventPayload, channelId, viewerId);
+              }          // Store the event using broadcaster_user_id from the event
+          const eventChannelId = eventPayload.broadcaster_user_id || lastChannelId || user.id;
+          console.log('💾 Storing event for channel:', eventChannelId);
+          const result = await db.storeEvent(eventType, eventPayload, eventChannelId, viewerId);
               console.log('💾 Store result:', result);
               if (result.success) {
                 console.log('✅ Event stored with ID:', result.id);
@@ -322,17 +320,17 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
             viewerDisplayName = eventPayload.from_broadcaster_user_name;
             console.log('🎯 Raid from:', viewerUsername, '(ID:', viewerId, ')');
           }
-          
-          // Create or update viewer if we have their info
+            // Create or update viewer if we have their info
           if (viewerId && viewerUsername) {
             console.log('👥 Creating/updating viewer:', viewerUsername);
             const viewerResult = await db.getOrCreateViewer(viewerId, viewerUsername, viewerDisplayName);
             console.log('👥 Viewer result:', viewerResult);
           }
           
-          // Store the event
-          console.log('💾 Storing event for channel:', broadcasterId);
-          const result = await db.storeEvent(eventType, eventPayload, broadcasterId, viewerId);
+          // Store the event - use broadcaster_user_id from event, fallback to userIdValue
+          const eventChannelId = eventPayload.broadcaster_user_id || userIdValue;
+          console.log('💾 Storing event for channel:', eventChannelId);
+          const result = await db.storeEvent(eventType, eventPayload, eventChannelId, viewerId);
           console.log('💾 Store result:', result);
           if (result.success) {
             console.log('✅ Event stored with ID:', result.id);

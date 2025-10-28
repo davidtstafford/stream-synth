@@ -1,4 +1,4 @@
-import { getDatabase } from '../connection';
+import { BaseRepository } from '../base-repository';
 
 export interface ViewerSubscription {
   id: string;
@@ -25,7 +25,11 @@ export interface ViewerWithSubscription {
   subscription_status: string;
 }
 
-export class SubscriptionsRepository {
+export class SubscriptionsRepository extends BaseRepository<ViewerSubscription> {
+  get tableName(): string {
+    return 'viewer_subscriptions';
+  }
+
   /**
    * Upsert a subscription for a viewer
    */
@@ -37,8 +41,8 @@ export class SubscriptionsRepository {
     start_date: string;
     end_date?: string | null;
   }): void {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    db.prepare(`
       INSERT INTO viewer_subscriptions (id, viewer_id, tier, is_gift, start_date, end_date, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(id) DO UPDATE SET
@@ -47,8 +51,7 @@ export class SubscriptionsRepository {
         start_date = excluded.start_date,
         end_date = excluded.end_date,
         updated_at = CURRENT_TIMESTAMP
-    `);
-    stmt.run(
+    `).run(
       subscription.id,
       subscription.viewer_id,
       subscription.tier,
@@ -62,38 +65,25 @@ export class SubscriptionsRepository {
    * Get subscription by viewer ID
    */
   getByViewerId(viewerId: string): ViewerSubscription | null {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    return db.prepare(`
       SELECT * FROM viewer_subscriptions WHERE viewer_id = ?
-    `);
-    return stmt.get(viewerId) as ViewerSubscription | null;
-  }
-
-  /**
-   * Get subscription by ID
-   */
-  getById(id: string): ViewerSubscription | null {
-    const db = getDatabase();
-    const stmt = db.prepare(`
-      SELECT * FROM viewer_subscriptions WHERE id = ?
-    `);
-    return stmt.get(id) as ViewerSubscription | null;
+    `).get(viewerId) as ViewerSubscription | null;
   }
 
   /**
    * Delete subscription by viewer ID
    */
   deleteByViewerId(viewerId: string): void {
-    const db = getDatabase();
-    const stmt = db.prepare(`DELETE FROM viewer_subscriptions WHERE viewer_id = ?`);
-    stmt.run(viewerId);
+    const db = this.getDatabase();
+    db.prepare(`DELETE FROM viewer_subscriptions WHERE viewer_id = ?`).run(viewerId);
   }
 
   /**
    * Get all viewers with subscription status
    */
   getAllViewersWithStatus(limit?: number, offset?: number): ViewerWithSubscription[] {
-    const db = getDatabase();
+    const db = this.getDatabase();
     let query = `SELECT * FROM viewer_subscription_status ORDER BY display_name`;
     
     if (limit) {
@@ -103,8 +93,7 @@ export class SubscriptionsRepository {
       query += ` OFFSET ${offset}`;
     }
 
-    const stmt = db.prepare(query);
-    return stmt.all() as ViewerWithSubscription[];
+    return db.prepare(query).all() as ViewerWithSubscription[];
   }
 
   /**
@@ -114,27 +103,25 @@ export class SubscriptionsRepository {
     query: string,
     limit: number = 50
   ): ViewerWithSubscription[] {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    const searchParam = `%${query}%`;
+    return db.prepare(`
       SELECT * FROM viewer_subscription_status 
       WHERE display_name LIKE ?
       ORDER BY display_name
       LIMIT ?
-    `);
-    const searchParam = `%${query}%`;
-    return stmt.all(searchParam, limit) as ViewerWithSubscription[];
+    `).all(searchParam, limit) as ViewerWithSubscription[];
   }
 
   /**
    * Get all active subscribers
    */
   getActiveSubscribers(): ViewerWithSubscription[] {
-    const db = getDatabase();
-    const stmt = db.prepare(`
+    const db = this.getDatabase();
+    return db.prepare(`
       SELECT * FROM viewer_subscription_status 
       WHERE tier IS NOT NULL
       ORDER BY display_name
-    `);
-    return stmt.all() as ViewerWithSubscription[];
+    `).all() as ViewerWithSubscription[];
   }
 }
