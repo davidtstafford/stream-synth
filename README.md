@@ -471,6 +471,5 @@ The IPC Framework automatically wraps returns in `{ success, data }`. Don't manu
 
 ## 📚 Further Reading
 
-- **Phase 3 Documentation**: See `PHASE_3_COMPLETE.md`
 - **IPC Framework Details**: See `src/backend/core/ipc/ipc-framework.ts`
 - **Handler Examples**: See `src/backend/core/ipc-handlers/*.ts`
