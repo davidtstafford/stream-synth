@@ -60,64 +60,37 @@ export interface TTSOptions {
   pitch?: number;
 }
 
-// Auto-sync WebSpeech voices to database
-export async function autoSyncWebSpeechVoices(): Promise<number> {
+/**
+ * Sync WebSpeech voices to database
+ * @param checkIfNeeded - If true, check with backend if sync is needed (for startup)
+ *                        If false, always sync (for manual refresh)
+ * @returns Promise with success status and voice count
+ */
+export async function syncWebSpeechVoices(checkIfNeeded: boolean = false): Promise<{ success: boolean; count: number }> {
   try {
-    if (!window.speechSynthesis) {
-      console.warn('[TTS] Web Speech API not available');
-      return 0;
-    }
-
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length === 0) {
-      console.log('[TTS] No WebSpeech voices to sync');
-      return 0;
-    }
-
-    console.log(`[TTS] Auto-syncing ${voices.length} WebSpeech voices...`);
-
-    // Convert browser voices to TTSVoice format
-    const ttsVoices = mapWebSpeechVoices();
-    
-    // Send to backend for syncing
-    const result = await ipcRenderer.invoke('tts:sync-voices', 'webspeech', ttsVoices);
-    
-    if (result.success) {
-      console.log(`[TTS] Auto-synced ${result.count} WebSpeech voices`);
-      return result.count;
-    } else {
-      console.error('[TTS] Failed to sync WebSpeech voices:', result.error);
-      return 0;
-    }
-  } catch (error) {
-    console.error('[TTS] Error in autoSyncWebSpeechVoices:', error);
-    return 0;
-  }
-}
-
-// Initialize voice syncing on app startup (one-time per provider)
-export async function initializeVoiceSync(): Promise<{ success: boolean; count: number }> {
-  try {
-    console.log('[TTS] Checking if voice sync is needed...');
+    console.log(`[TTS] ${checkIfNeeded ? 'Checking' : 'Starting'} WebSpeech voice sync...`);
     
     if (!window.speechSynthesis) {
       console.warn('[TTS] Web Speech API not available');
       return { success: true, count: 0 };
     }
 
-    // Check with backend if WebSpeech voices need syncing
-    const syncNeeded = await ipcRenderer.invoke('provider:check-sync-needed', 'webspeech');
-    
-    if (!syncNeeded) {
-      console.log('[TTS] WebSpeech voices already synced, skipping');
-      return { success: true, count: 0 };
-    }    console.log('[TTS] WebSpeech voices need syncing, performing sync...');
-    
+    // If checking is enabled, verify sync is needed
+    if (checkIfNeeded) {
+      const syncNeeded = await ipcRenderer.invoke('provider:check-sync-needed', 'webspeech');
+      if (!syncNeeded) {
+        console.log('[TTS] WebSpeech voices already synced, skipping');
+        return { success: true, count: 0 };
+      }
+    }
+
     const rawVoices = window.speechSynthesis.getVoices();
     if (rawVoices.length === 0) {
-      console.log('[TTS] No WebSpeech voices available to sync');
+      console.log('[TTS] No WebSpeech voices available');
       return { success: true, count: 0 };
     }
+
+    console.log(`[TTS] Found ${rawVoices.length} WebSpeech voices, sending to backend...`);
 
     // Convert SpeechSynthesisVoice objects to plain objects for IPC serialization
     const serializedVoices = rawVoices.map(v => ({
@@ -131,16 +104,33 @@ export async function initializeVoiceSync(): Promise<{ success: boolean; count: 
     const result = await ipcRenderer.invoke('tts:sync-voices', 'webspeech', serializedVoices);
     
     if (result.success) {
-      console.log(`[TTS] Synced ${result.count} WebSpeech voices on startup`);
+      console.log(`[TTS] Successfully synced ${result.count} WebSpeech voices`);
       return { success: true, count: result.count };
     } else {
       console.error('[TTS] Failed to sync WebSpeech voices:', result.error);
       return { success: false, count: 0 };
     }
   } catch (error: any) {
-    console.error('[TTS] Error in initializeVoiceSync:', error);
+    console.error('[TTS] Error syncing WebSpeech voices:', error);
     return { success: false, count: 0 };
   }
+}
+
+/**
+ * Auto-sync WebSpeech voices (convenience wrapper)
+ * @deprecated Use syncWebSpeechVoices(false) instead
+ */
+export async function autoSyncWebSpeechVoices(): Promise<number> {
+  const result = await syncWebSpeechVoices(false);
+  return result.count;
+}
+
+/**
+ * Initialize voice syncing on app startup (convenience wrapper)
+ * @deprecated Use syncWebSpeechVoices(true) instead
+ */
+export async function initializeVoiceSync(): Promise<{ success: boolean; count: number }> {
+  return syncWebSpeechVoices(true);
 }
 
 // Web Speech API - Renderer Process Only
@@ -273,6 +263,7 @@ function mapWebSpeechVoices(): TTSVoice[] {
 function guessGender(voiceName: string): 'male' | 'female' | 'neutral' {
   const name = voiceName.toLowerCase();
   
+  // NOTE: Keep in sync with GENDER_INDICATORS in backend/services/tts/language-config.ts
   // Female indicators
   const femaleNames = ['female', 'woman', 'samantha', 'victoria', 'karen', 'moira', 'tessa', 'fiona', 'kate', 'anna', 'alice', 'emma', 'sophia'];
   if (femaleNames.some(n => name.includes(n))) return 'female';
@@ -285,6 +276,7 @@ function guessGender(voiceName: string): 'male' | 'female' | 'neutral' {
 }
 
 function getLanguageName(langCode: string): string {
+  // NOTE: Keep in sync with LANGUAGE_MAP in backend/services/tts/language-config.ts
   const langMap: Record<string, string> = {
     'en-US': 'English (United States)',
     'en-GB': 'English (United Kingdom)',

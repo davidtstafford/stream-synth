@@ -43,20 +43,20 @@ async function initializeTTS() {
   return ttsManager;
 }
 
-export function setupTTSHandlers(): void {
-  // TTS: Test Voice
+export function setupTTSHandlers(): void {  // TTS: Test Voice
   ipcMain.handle('tts:test-voice', async (event, voiceId: string, options?: any, message?: string) => {
     try {
       console.log('[IPC] tts:test-voice called with voiceId:', voiceId, 'options:', options, 'message:', message);
       const manager = await initializeTTS();
 
-      // Check voice ID prefix to determine provider (not the global settings.provider)
-      if (voiceId.startsWith('webspeech_')) {
+      // Use centralized provider routing logic
+      const provider = manager.determineProviderFromVoiceId(voiceId);
+      if (provider === 'webspeech') {
         console.log('[IPC] tts:test-voice - Web Speech voice, handled in renderer');
         return { success: true };
       }
 
-      console.log('[IPC] tts:test-voice - Calling manager.testVoice() for Azure/Google voice');
+      console.log('[IPC] tts:test-voice - Calling manager.testVoice() for', provider, 'voice');
       await manager.testVoice(voiceId, options, message);
       console.log('[IPC] tts:test-voice - Completed successfully');
       return { success: true };
