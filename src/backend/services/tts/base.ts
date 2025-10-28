@@ -57,12 +57,16 @@ export interface TTSSettings {
   // Emote/Emoji Limits
   maxEmotesPerMessage?: number;
   maxEmojisPerMessage?: number;
-  stripExcessiveEmotes?: boolean;
-  // Character Repetition
+  stripExcessiveEmotes?: boolean;  // Character Repetition
   maxRepeatedChars?: number;
   maxRepeatedWords?: number;
   // Content Filters
   copypastaFilterEnabled?: boolean;
+  blockedWords?: string[];
+  // Premium Voice Restrictions
+  premiumVoicesLocked?: boolean;
+  premiumVoicesRequireSubscription?: boolean;
+  premiumVoicesAllowGifts?: boolean;
 }
 
 export interface TTSProvider {

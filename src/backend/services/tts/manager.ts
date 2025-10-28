@@ -127,11 +127,15 @@ export class TTSManager {
       maxEmotesPerMessage: dbSettings.max_emotes_per_message !== undefined ? dbSettings.max_emotes_per_message as number : 5,
       maxEmojisPerMessage: dbSettings.max_emojis_per_message !== undefined ? dbSettings.max_emojis_per_message as number : 3,
       stripExcessiveEmotes: dbSettings.strip_excessive_emotes !== undefined ? dbSettings.strip_excessive_emotes as boolean : true,
-      // Character repetition
-      maxRepeatedChars: dbSettings.max_repeated_chars !== undefined ? dbSettings.max_repeated_chars as number : 3,
+      // Character repetition      maxRepeatedChars: dbSettings.max_repeated_chars !== undefined ? dbSettings.max_repeated_chars as number : 3,
       maxRepeatedWords: dbSettings.max_repeated_words !== undefined ? dbSettings.max_repeated_words as number : 2,
       // Content filters
       copypastaFilterEnabled: dbSettings.copypasta_filter_enabled !== undefined ? dbSettings.copypasta_filter_enabled as boolean : false,
+      blockedWords: dbSettings.blocked_words !== undefined ? JSON.parse(dbSettings.blocked_words as string) : [],
+      // Premium voice restrictions
+      premiumVoicesLocked: dbSettings.premium_voices_locked !== undefined ? dbSettings.premium_voices_locked as boolean : false,
+      premiumVoicesRequireSubscription: dbSettings.premium_voices_require_subscription !== undefined ? dbSettings.premium_voices_require_subscription as boolean : false,
+      premiumVoicesAllowGifts: dbSettings.premium_voices_allow_gifts !== undefined ? dbSettings.premium_voices_allow_gifts as boolean : false,
     };
   }
 
@@ -368,13 +372,16 @@ export class TTSManager {
     // Emote/Emoji limits
     if (settings.maxEmotesPerMessage !== undefined) dbSettings.max_emotes_per_message = settings.maxEmotesPerMessage;
     if (settings.maxEmojisPerMessage !== undefined) dbSettings.max_emojis_per_message = settings.maxEmojisPerMessage;
-    if (settings.stripExcessiveEmotes !== undefined) dbSettings.strip_excessive_emotes = settings.stripExcessiveEmotes;
-    // Character repetition
+    if (settings.stripExcessiveEmotes !== undefined) dbSettings.strip_excessive_emotes = settings.stripExcessiveEmotes;    // Character repetition
     if (settings.maxRepeatedChars !== undefined) dbSettings.max_repeated_chars = settings.maxRepeatedChars;
     if (settings.maxRepeatedWords !== undefined) dbSettings.max_repeated_words = settings.maxRepeatedWords;
     // Content filters
     if (settings.copypastaFilterEnabled !== undefined) dbSettings.copypasta_filter_enabled = settings.copypastaFilterEnabled;
-
+    if (settings.blockedWords !== undefined) dbSettings.blocked_words = JSON.stringify(settings.blockedWords);
+    // Premium voice restrictions
+    if (settings.premiumVoicesLocked !== undefined) dbSettings.premium_voices_locked = settings.premiumVoicesLocked;
+    if (settings.premiumVoicesRequireSubscription !== undefined) dbSettings.premium_voices_require_subscription = settings.premiumVoicesRequireSubscription;
+    if (settings.premiumVoicesAllowGifts !== undefined) dbSettings.premium_voices_allow_gifts = settings.premiumVoicesAllowGifts;
 
     this.repository.saveSettings(dbSettings);
     
@@ -607,8 +614,7 @@ export class TTSManager {
 
   /**
    * Filter and clean message before speaking
-   */
-  private filterMessage(message: string): string | null {
+   */  private filterMessage(message: string): string | null {
     // Skip empty messages
     if (!message || message.trim().length === 0) {
       return null;
@@ -625,6 +631,11 @@ export class TTSManager {
     // Remove URLs if filter enabled
     if (this.settings?.filterUrls) {
       filtered = filtered.replace(/https?:\/\/\S+/gi, '');
+    }
+
+    // Remove blocked words
+    if (this.settings?.blockedWords && this.settings.blockedWords.length > 0) {
+      filtered = this.removeBlockedWords(filtered);
     }
 
     // Check message length limits
@@ -653,6 +664,39 @@ export class TTSManager {
   private isBot(username: string): boolean {
     const botNames = ['nightbot', 'streamelements', 'streamlabs', 'moobot', 'fossabot', 'wizebot'];
     return botNames.includes(username.toLowerCase());
+  }
+
+  /**
+   * Check if a voice ID is a premium voice (Azure or Google)
+   */
+  private isPremiumVoice(voiceId: string): boolean {
+    return voiceId.startsWith('azure_') || voiceId.startsWith('google_');
+  }
+
+  /**
+   * Remove blocked words from message
+   */
+  private removeBlockedWords(message: string): string {
+    if (!this.settings?.blockedWords || this.settings.blockedWords.length === 0) {
+      return message;
+    }
+
+    let filtered = message;
+
+    // Remove each blocked word (case-insensitive, as whole words)
+    for (const blockedWord of this.settings.blockedWords) {
+      if (!blockedWord.trim()) continue;
+      
+      // Create a regex that matches the word as a whole word (with word boundaries)
+      // Use case-insensitive flag
+      const regex = new RegExp(`\\b${blockedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+      filtered = filtered.replace(regex, '');
+    }
+
+    // Clean up extra whitespace
+    filtered = filtered.replace(/\s+/g, ' ').trim();
+
+    return filtered;
   }
 
   /**
@@ -964,7 +1008,7 @@ export class TTSManager {
                 audioData: audioData.toString('base64'), // Convert Buffer to base64 for IPC
                 volume: this.settings?.volume,
                 rate: item.rate ?? this.settings?.rate,
-                pitch: item.pitch ?? this.settings?.pitch
+                pitch: this.settings?.pitch
               });
               
               // Wait for frontend to confirm audio playback is complete

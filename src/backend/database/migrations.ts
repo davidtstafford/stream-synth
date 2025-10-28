@@ -86,10 +86,55 @@ export function runMigrations(db: Database.Database): void {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-
   // Create index on username for faster lookups
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_viewers_username ON viewers(username)
+  `);
+
+  // Create viewer_subscriptions table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_subscriptions (
+      id TEXT PRIMARY KEY,
+      viewer_id TEXT NOT NULL,
+      tier TEXT NOT NULL,
+      is_gift INTEGER DEFAULT 0,
+      start_date DATETIME NOT NULL,
+      end_date DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id)
+    )
+  `);
+
+  // Create index on viewer_id for faster lookups
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_viewer ON viewer_subscriptions(viewer_id)
+  `);
+
+  // Create view combining viewer info with subscription status
+  db.exec(`
+    CREATE VIEW IF NOT EXISTS viewer_subscription_status AS
+    SELECT 
+      v.id,
+      v.display_name,
+      v.tts_voice_id,
+      v.tts_enabled,
+      v.created_at,
+      v.updated_at,
+      vs.tier,
+      vs.is_gift,
+      vs.start_date,
+      vs.end_date,
+      CASE 
+        WHEN vs.id IS NOT NULL THEN 
+          CASE 
+            WHEN vs.is_gift = 1 THEN vs.tier || ' (Gift)'
+            ELSE vs.tier || ' Subscriber'
+          END
+        ELSE 'Not Subscribed'
+      END AS subscription_status
+    FROM viewers v
+    LEFT JOIN viewer_subscriptions vs ON v.id = vs.viewer_id
   `);
 
   // Create events table
@@ -155,10 +200,13 @@ export function runMigrations(db: Database.Database): void {
       ('max_queue_size', '20'),
       ('max_emotes_per_message', '5'),
       ('max_emojis_per_message', '3'),
-      ('strip_excessive_emotes', 'true'),
-      ('max_repeated_chars', '3'),
+      ('strip_excessive_emotes', 'true'),      ('max_repeated_chars', '3'),
       ('max_repeated_words', '2'),
-      ('copypasta_filter_enabled', 'false')
+      ('copypasta_filter_enabled', 'false'),
+      ('blocked_words', '[]'),
+      ('premium_voices_locked', 'false'),
+      ('premium_voices_require_subscription', 'false'),
+      ('premium_voices_allow_gifts', 'false')
   `);  // Create WebSpeech voices table
   db.exec(`
     CREATE TABLE IF NOT EXISTS webspeech_voices (

@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import * as db from '../../services/database';
 
 export const ViewersScreen: React.FC = () => {
-  const [viewers, setViewers] = useState<db.Viewer[]>([]);
+  const [viewers, setViewers] = useState<db.ViewerWithSubscription[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [totalCount, setTotalCount] = useState<number>(0);
-
   const loadViewers = async () => {
     setLoading(true);
     setError(null);
@@ -15,9 +14,9 @@ export const ViewersScreen: React.FC = () => {
     try {
       let result;
       if (searchQuery.trim()) {
-        result = await db.searchViewers(searchQuery, 100);
+        result = await db.searchViewersWithStatus(searchQuery, 100);
       } else {
-        result = await db.getAllViewers(100, 0);
+        result = await db.getAllViewersWithStatus(100, 0);
       }
 
       if (result.success && result.viewers) {
@@ -171,17 +170,14 @@ export const ViewersScreen: React.FC = () => {
         <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
           No viewers found matching "{searchQuery}"
         </div>
-      )}
-
-      {/* Viewers Table */}
+      )}      {/* Viewers Table */}
       {!loading && viewers.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#2a2a2a' }}>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Username</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Display Name</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>ID</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Subscription Status</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>First Seen</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Last Updated</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Actions</th>
@@ -197,14 +193,16 @@ export const ViewersScreen: React.FC = () => {
                 >
                   <td style={{ padding: '10px' }}>
                     <span style={{ color: '#9147ff', fontWeight: 'bold' }}>
-                      {viewer.username}
+                      {viewer.display_name || 'Unknown'}
                     </span>
                   </td>
                   <td style={{ padding: '10px' }}>
-                    {viewer.display_name || '-'}
-                  </td>
-                  <td style={{ padding: '10px', fontSize: '0.85em', color: '#888' }}>
-                    {viewer.id}
+                    <span style={{
+                      color: viewer.tier ? '#ffd700' : '#888',
+                      fontWeight: viewer.tier ? 'bold' : 'normal'
+                    }}>
+                      {viewer.subscription_status}
+                    </span>
                   </td>
                   <td style={{ padding: '10px', fontSize: '0.9em' }}>
                     {formatDate(viewer.created_at)}

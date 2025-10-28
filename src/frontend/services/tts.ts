@@ -48,9 +48,13 @@ export interface TTSSettings {
   stripExcessiveEmotes?: boolean;
   // Character Repetition
   maxRepeatedChars?: number;
-  maxRepeatedWords?: number;
-  // Content Filters
+  maxRepeatedWords?: number;  // Content Filters
   copypastaFilterEnabled?: boolean;
+  blockedWords?: string[];
+  // Premium Voice Restrictions
+  premiumVoicesLocked?: boolean;
+  premiumVoicesRequireSubscription?: boolean;
+  premiumVoicesAllowGifts?: boolean;
 }
 
 export interface TTSOptions {

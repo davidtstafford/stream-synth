@@ -12,10 +12,12 @@ import { VoicesRepository } from '../../database/repositories/voices';
 import { SessionsRepository } from '../../database/repositories/sessions';
 import { initializeTTS } from './tts';
 import { VoiceSyncService } from '../../services/tts/voice-sync';
+import { TwitchSubscriptionsService } from '../../services/twitch-subscriptions';
 
 const settingsRepo = new SettingsRepository();
 const voicesRepo = new VoicesRepository();
 const sessionsRepo = new SessionsRepository();
+const twitchSubsService = new TwitchSubscriptionsService();
 
 export async function runStartupTasks(): Promise<void> {
   try {
@@ -43,6 +45,27 @@ export async function runStartupTasks(): Promise<void> {
       // Azure sync happens when user enables it and provides credentials
     } else {
       console.log('[Startup] Azure voices already synced or not enabled');
+    }
+
+    // Sync Twitch subscriptions
+    console.log('[Startup] Syncing Twitch subscriptions...');
+    try {
+      const currentSession = sessionsRepo.getCurrentSession();
+      if (currentSession) {
+        const result = await twitchSubsService.syncSubscriptionsFromTwitch(
+          currentSession.channel_id,
+          currentSession.user_id
+        );
+        if (result.success) {
+          console.log('[Startup] Synced', result.count, 'subscriptions from Twitch');
+        } else {
+          console.warn('[Startup] Failed to sync subscriptions:', result.error);
+        }
+      } else {
+        console.log('[Startup] No active session found, skipping subscription sync');
+      }
+    } catch (err: any) {
+      console.error('[Startup] Error syncing subscriptions:', err);
     }
 
     // Check if Discord auto-post is enabled

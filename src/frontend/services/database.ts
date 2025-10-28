@@ -181,3 +181,68 @@ export async function deleteAllViewers(): Promise<{ success: boolean; error?: st
 export async function getViewerCount(): Promise<{ success: boolean; count?: number; error?: string }> {
   return await ipcRenderer.invoke('db:get-viewer-count');
 }
+
+// Subscriptions
+export interface ViewerSubscription {
+  id: string;
+  viewer_id: string;
+  tier: string;
+  is_gift: number;
+  start_date: string;
+  end_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ViewerWithSubscription {
+  id: string;
+  display_name: string | null;
+  tts_voice_id: string | null;
+  tts_enabled: number;
+  created_at: string;
+  updated_at: string;
+  tier: string | null;
+  is_gift: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  subscription_status: string;
+}
+
+export async function upsertSubscription(
+  subscription: Partial<ViewerSubscription>
+): Promise<{ success: boolean; error?: string }> {
+  return await ipcRenderer.invoke('db:upsert-subscription', subscription);
+}
+
+export async function getSubscription(viewerId: string): Promise<{ success: boolean; subscription?: ViewerSubscription | null; error?: string }> {
+  return await ipcRenderer.invoke('db:get-subscription', viewerId);
+}
+
+export async function getAllViewersWithStatus(limit?: number, offset?: number): Promise<{ success: boolean; viewers?: ViewerWithSubscription[]; error?: string }> {
+  return await ipcRenderer.invoke('db:get-all-viewers-with-status', limit, offset);
+}
+
+export async function searchViewersWithStatus(query: string, limit?: number): Promise<{ success: boolean; viewers?: ViewerWithSubscription[]; error?: string }> {
+  return await ipcRenderer.invoke('db:search-viewers-with-status', query, limit);
+}
+
+export async function deleteSubscription(viewerId: string): Promise<{ success: boolean; error?: string }> {
+  return await ipcRenderer.invoke('db:delete-subscription', viewerId);
+}
+
+export async function syncSubscriptionsFromTwitch(broadcasterId: string, userId: string): Promise<{ success: boolean; count?: number; error?: string }> {
+  return await ipcRenderer.invoke('db:sync-subscriptions', broadcasterId, userId);
+}
+
+export async function checkSubscriptionStatus(viewerId: string): Promise<{ success: boolean; isSubscribed?: boolean; status?: string; error?: string }> {
+  return await ipcRenderer.invoke('db:check-subscription-status', viewerId);
+}
+
+export async function checkPremiumVoiceAccess(
+  broadcasterId: string,
+  userId: string,
+  viewerId: string,
+  ttsPremiumSettings: { premiumVoicesLocked?: boolean; premiumVoicesRequireSubscription?: boolean; premiumVoicesAllowGifts?: boolean }
+): Promise<{ success: boolean; canUse?: boolean; reason?: string; error?: string }> {
+  return await ipcRenderer.invoke('db:check-premium-voice-access', broadcasterId, userId, viewerId, ttsPremiumSettings);
+}

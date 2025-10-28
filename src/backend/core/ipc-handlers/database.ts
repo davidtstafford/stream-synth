@@ -8,6 +8,7 @@
  * - OAuth Tokens
  * - Viewers
  * - Events
+ * - Subscriptions
  */
 
 import { ipcMain } from 'electron';
@@ -16,6 +17,8 @@ import { SessionsRepository } from '../../database/repositories/sessions';
 import { EventsRepository } from '../../database/repositories/events';
 import { TokensRepository } from '../../database/repositories/tokens';
 import { ViewersRepository } from '../../database/repositories/viewers';
+import { SubscriptionsRepository } from '../../database/repositories/subscriptions';
+import { TwitchSubscriptionsService } from '../../services/twitch-subscriptions';
 
 // Initialize repositories
 const settingsRepo = new SettingsRepository();
@@ -23,6 +26,8 @@ const sessionsRepo = new SessionsRepository();
 const eventsRepo = new EventsRepository();
 const tokensRepo = new TokensRepository();
 const viewersRepo = new ViewersRepository();
+const subscriptionsRepo = new SubscriptionsRepository();
+const twitchSubsService = new TwitchSubscriptionsService();
 
 export function setupDatabaseHandlers(): void {
   // Database: Settings
@@ -189,7 +194,6 @@ export function setupDatabaseHandlers(): void {
       return { success: false, error: error.message };
     }
   });
-
   // Database: Get Event Count
   ipcMain.handle('db:get-event-count', async (event, channelId?: string, eventType?: string) => {
     try {
@@ -199,9 +203,87 @@ export function setupDatabaseHandlers(): void {
       return { success: false, error: error.message };
     }
   });
+
+  // Database: Upsert Subscription
+  ipcMain.handle('db:upsert-subscription', async (event, subscription: any) => {
+    try {
+      subscriptionsRepo.upsert(subscription);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Database: Get Subscription by Viewer ID
+  ipcMain.handle('db:get-subscription', async (event, viewerId: string) => {
+    try {
+      const subscription = subscriptionsRepo.getByViewerId(viewerId);
+      return { success: true, subscription };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Database: Get All Viewers with Subscription Status
+  ipcMain.handle('db:get-all-viewers-with-status', async (event, limit?: number, offset?: number) => {
+    try {
+      const viewers = subscriptionsRepo.getAllViewersWithStatus(limit, offset);
+      return { success: true, viewers };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Database: Search Viewers with Subscription Status
+  ipcMain.handle('db:search-viewers-with-status', async (event, query: string, limit?: number) => {
+    try {
+      const viewers = subscriptionsRepo.searchViewersWithStatus(query, limit);
+      return { success: true, viewers };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+  // Database: Delete Subscription
+  ipcMain.handle('db:delete-subscription', async (event, viewerId: string) => {
+    try {
+      subscriptionsRepo.deleteByViewerId(viewerId);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Database: Sync Subscriptions from Twitch
+  ipcMain.handle('db:sync-subscriptions', async (event, broadcasterId: string, userId: string) => {
+    try {
+      const result = await twitchSubsService.syncSubscriptionsFromTwitch(broadcasterId, userId);
+      return result;
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+  // Database: Check Subscription Status
+  ipcMain.handle('db:check-subscription-status', async (event, viewerId: string) => {
+    try {
+      const result = await twitchSubsService.checkSubscriptionStatus(viewerId);
+      return { success: true, ...result };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Database: Check Premium Voice Access
+  ipcMain.handle('db:check-premium-voice-access', async (event, broadcasterId: string, userId: string, viewerId: string, ttsPremiumSettings: any) => {
+    try {
+      const result = await twitchSubsService.canUsePremiumVoice(broadcasterId, userId, viewerId, ttsPremiumSettings);
+      return { success: true, ...result };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
 }
 
-export { settingsRepo, sessionsRepo, eventsRepo, tokensRepo, viewersRepo };
+export { settingsRepo, sessionsRepo, eventsRepo, tokensRepo, viewersRepo, subscriptionsRepo };
 
 // Database: Store Event (special handler that also forwards to TTS)
 // This needs to be defined here because it needs access to the TTS manager
