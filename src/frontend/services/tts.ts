@@ -99,15 +99,14 @@ export async function syncWebSpeechVoices(checkIfNeeded: boolean = false): Promi
       voiceURI: v.voiceURI,
       localService: v.localService,
       default: v.default
-    }));
+    }));    const response = await ipcRenderer.invoke('tts:sync-voices', { provider: 'webspeech', voices: serializedVoices });
     
-    const result = await ipcRenderer.invoke('tts:sync-voices', 'webspeech', serializedVoices);
-    
-    if (result.success) {
-      console.log(`[TTS] Successfully synced ${result.count} WebSpeech voices`);
-      return { success: true, count: result.count };
+    if (response.success) {
+      const data = response.data;
+      console.log(`[TTS] Successfully synced ${data.count} WebSpeech voices`);
+      return { success: true, count: data.count };
     } else {
-      console.error('[TTS] Failed to sync WebSpeech voices:', result.error);
+      console.error('[TTS] Failed to sync WebSpeech voices:', response.error);
       return { success: false, count: 0 };
     }
   } catch (error: any) {
@@ -316,14 +315,13 @@ async function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions
   const utterance = new SpeechSynthesisUtterance(text);
   
   let voice: SpeechSynthesisVoice | undefined;
-  
-  // Try to get voiceURI from database metadata
+    // Try to get voiceURI from database metadata
   try {
-    const metaResult = await ipcRenderer.invoke('tts:get-voice-metadata', voiceId);
-    if (metaResult.success && metaResult.voiceURI) {
-      console.log('[TTS] webSpeechSpeak() - Got voiceURI from database:', metaResult.voiceURI);
+    const metaResponse = await ipcRenderer.invoke('tts:get-voice-metadata', voiceId);
+    if (metaResponse.success && metaResponse.data && metaResponse.data.voiceURI) {
+      console.log('[TTS] webSpeechSpeak() - Got voiceURI from database:', metaResponse.data.voiceURI);
       // Find voice by voiceURI
-      voice = webSpeechVoices.find(v => v.voiceURI === metaResult.voiceURI);
+      voice = webSpeechVoices.find(v => v.voiceURI === metaResponse.data.voiceURI);
       if (voice) {
         console.log('[TTS] webSpeechSpeak() - Found voice by voiceURI:', voice.name, voice.lang);
       }
@@ -409,11 +407,11 @@ export async function getVoices(): Promise<TTSVoice[]> {
   }
   
   // For Azure/Google, call backend
-  const result = await ipcRenderer.invoke('tts:get-voices');
-  if (!result.success) {
-    throw new Error(result.error);
+  const response = await ipcRenderer.invoke('tts:get-voices');
+  if (!response.success) {
+    throw new Error(response.error || 'Failed to get voices');
   }
-  return result.voices;
+  return response.data;
 }
 
 export async function testVoice(voiceId: string, options?: TTSOptions, message?: string): Promise<void> {
@@ -429,11 +427,8 @@ export async function testVoice(voiceId: string, options?: TTSOptions, message?:
     return;
   }
   
-  // For Azure/Google, call backend
-  const result = await ipcRenderer.invoke('tts:test-voice', voiceId, options, message);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
+  // For Azure/Google, call backend with object parameter
+  await ipcRenderer.invoke('tts:test-voice', { voiceId, options, message });
 }
 
 export async function speak(text: string, options?: TTSOptions): Promise<void> {
@@ -450,12 +445,9 @@ export async function speak(text: string, options?: TTSOptions): Promise<void> {
     return;
   }
   
-  // For Azure/Google, call backend
+  // For Azure/Google, call backend with object parameter
   console.log('[TTS Service] speak() - Using backend provider for voiceId:', voiceId, 'options:', options);
-  const result = await ipcRenderer.invoke('tts:speak', text, options);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
+  await ipcRenderer.invoke('tts:speak', { text, options });
 }
 
 export async function stop(): Promise<void> {
@@ -467,65 +459,47 @@ export async function stop(): Promise<void> {
   }
   
   // For Azure/Google, call backend
-  const result = await ipcRenderer.invoke('tts:stop');
-  if (!result.success) {
-    throw new Error(result.error);
-  }
+  await ipcRenderer.invoke('tts:stop');
 }
 
 export async function getSettings(): Promise<TTSSettings> {
-  const result = await ipcRenderer.invoke('tts:get-settings');
-  if (!result.success) {
-    throw new Error(result.error);
+  const response = await ipcRenderer.invoke('tts:get-settings');
+  if (!response.success) {
+    throw new Error(response.error || 'Failed to load TTS settings');
   }
-  return result.settings;
+  return response.data;
 }
 
 export async function saveSettings(settings: Partial<TTSSettings>): Promise<void> {
-  const result = await ipcRenderer.invoke('tts:save-settings', settings);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
+  await ipcRenderer.invoke('tts:save-settings', settings);
 }
 
 export async function getProviders(): Promise<string[]> {
-  const result = await ipcRenderer.invoke('tts:get-providers');
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.providers;
+  const response = await ipcRenderer.invoke('tts:get-providers');
+  return response.success ? response.data : [];
 }
 
 export async function syncVoices(provider: string, voices: any[]): Promise<{ success: boolean; count: number; stats: any }> {
-  const result = await ipcRenderer.invoke('tts:sync-voices', provider, voices);
-  if (!result.success) {
-    throw new Error(result.error);
+  const response = await ipcRenderer.invoke('tts:sync-voices', { provider, voices });
+  if (!response.success) {
+    throw new Error(response.error);
   }
-  return result;
+  return { success: true, ...response.data };
 }
 
 export async function getGroupedVoices(): Promise<Record<string, any[]>> {
-  const result = await ipcRenderer.invoke('tts:get-grouped-voices');
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.grouped;
+  const response = await ipcRenderer.invoke('tts:get-grouped-voices');
+  return response.success ? response.data : {};
 }
 
 export async function getVoiceStats(): Promise<any> {
-  const result = await ipcRenderer.invoke('tts:get-voice-stats');
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.stats;
+  const response = await ipcRenderer.invoke('tts:get-voice-stats');
+  return response.success ? response.data : null;
 }
 
 export async function getVoiceByNumericId(numericId: number): Promise<any> {
-  const result = await ipcRenderer.invoke('tts:get-voice-by-id', numericId);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.voice;
+  const response = await ipcRenderer.invoke('tts:get-voice-by-id', numericId);
+  return response.success ? response.data : null;
 }
 
 // Web Audio API for Azure/Google TTS (OBS-compatible)

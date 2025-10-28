@@ -128,20 +128,20 @@ export const TTS: React.FC = () => {
         if (!currentSettings?.azureApiKey || !currentSettings?.azureRegion) {
           throw new Error('Azure not configured. Please set up Azure first.');
         }
-        
-        console.log(`[TTS] Rescanning Azure with stored credentials for region: ${currentSettings.azureRegion}`);
+          console.log(`[TTS] Rescanning Azure with stored credentials for region: ${currentSettings.azureRegion}`);
         const result = await ipcRenderer.invoke('azure:sync-voices', {
           apiKey: currentSettings.azureApiKey,
           region: currentSettings.azureRegion
         });
 
         if (result.success) {
-          console.log(`[TTS] Azure rescan complete: ${result.voiceCount} voices found`);
+          const data = result.data;
+          console.log(`[TTS] Azure rescan complete: ${data.voiceCount} voices found`);
           
           await syncAndLoadVoices();
           await loadVoiceStats();
 
-          setRescanMessages(prev => ({ ...prev, [provider]: `✓ Azure rescanned: ${result.voiceCount} voices found` }));
+          setRescanMessages(prev => ({ ...prev, [provider]: `✓ Azure rescanned: ${data.voiceCount} voices found` }));
         } else {
           throw new Error(result.error || 'Azure rescan failed');
         }
@@ -150,19 +150,19 @@ export const TTS: React.FC = () => {
         if (!currentSettings?.googleApiKey) {
           throw new Error('Google not configured. Please set up Google Cloud first.');
         }
-        
-        console.log(`[TTS] Rescanning Google with stored credentials`);
+          console.log(`[TTS] Rescanning Google with stored credentials`);
         const result = await ipcRenderer.invoke('google:sync-voices', {
           apiKey: currentSettings.googleApiKey
         });
 
         if (result.success) {
-          console.log(`[TTS] Google rescan complete: ${result.voiceCount} voices found`);
+          const data = result.data;
+          console.log(`[TTS] Google rescan complete: ${data.voiceCount} voices found`);
           
           await syncAndLoadVoices();
           await loadVoiceStats();
 
-          setRescanMessages(prev => ({ ...prev, [provider]: `✓ Google rescanned: ${result.voiceCount} voices found` }));
+          setRescanMessages(prev => ({ ...prev, [provider]: `✓ Google rescanned: ${data.voiceCount} voices found` }));
         } else {
           throw new Error(result.error || 'Google rescan failed');
         }
@@ -184,23 +184,22 @@ export const TTS: React.FC = () => {
           }));
 
           console.log(`[TTS] Serialized voices for IPC:`, currentVoices[0]);
-        }
-
-        if (currentVoices.length === 0) {
+        }        if (currentVoices.length === 0) {
           throw new Error(`No ${provider} voices available to rescan`);
         }
 
-        const result = await ipcRenderer.invoke('provider:rescan-immediate', provider, currentVoices);
+        const response = await ipcRenderer.invoke('provider:rescan-immediate', { provider, voices: currentVoices });
 
-        if (result.success) {
-          console.log(`[TTS] Rescan complete: ${result.count} voices found`);
+        if (response.success) {
+          const data = response.data;
+          console.log(`[TTS] Rescan complete: ${data.count} voices found`);
 
           await syncAndLoadVoices();
           await loadVoiceStats();
 
-          setRescanMessages(prev => ({ ...prev, [provider]: `✓ ${provider} rescanned: ${result.count} voices found` }));
+          setRescanMessages(prev => ({ ...prev, [provider]: `✓ ${provider} rescanned: ${data.count} voices found` }));
         } else {
-          throw new Error(result.error || 'Rescan failed');
+          throw new Error(response.error || 'Rescan failed');
         }
       }
     } catch (err: any) {
