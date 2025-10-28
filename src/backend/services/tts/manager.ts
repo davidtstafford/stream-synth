@@ -2,7 +2,6 @@ import { TTSProvider, TTSVoice, TTSSettings, TTSOptions } from './base';
 import { AzureTTSProvider } from './azure-provider';
 import { GoogleTTSProvider } from './google-provider';
 import { TTSRepository } from '../../database/repositories/tts';
-import { ViewerRulesRepository } from '../../database/viewer-rules-repository';
 import { VoicesRepository } from '../../database/repositories/voices';
 import Database from 'better-sqlite3';
 
@@ -28,7 +27,6 @@ export class TTSManager {
   private providers: Map<string, TTSProvider>;
   private currentProvider: TTSProvider | null = null;
   private repository: TTSRepository;
-  private viewerRulesRepo: ViewerRulesRepository;
   private voicesRepo: VoicesRepository;
   private settings: TTSSettings | null = null;
   private messageQueue: TTSQueueItem[] = [];
@@ -43,11 +41,9 @@ export class TTSManager {
   private copypastaList: Set<string> = new Set([
     'kappa123',
     'pogchamp',
-    // Add common copypastas here
   ]);
   constructor(db: Database.Database) {
     this.repository = new TTSRepository(db);
-    this.viewerRulesRepo = new ViewerRulesRepository(db);
     this.voicesRepo = new VoicesRepository();
     this.providers = new Map();
     
@@ -450,85 +446,14 @@ export class TTSManager {
   async handleChatMessage(username: string, message: string, userId?: string): Promise<void> {
     if (!this.settings || !this.settings.enabled) {
       return; // TTS disabled
-    }
-
-    // Check viewer-specific rules first
-    const viewerRule = this.viewerRulesRepo.getByUsername(username);
-    
-    // Check if viewer is muted
-    if (viewerRule?.isMuted) {
-      // Check if mute is temporary
-      if (viewerRule.mutedUntil) {
-        const mutedUntilTime = new Date(viewerRule.mutedUntil).getTime();
-        const now = Date.now();
-        
-        if (now < mutedUntilTime) {
-          console.log('[TTS] Viewer is temporarily muted:', username);
-          return;
-        } else {
-          // Mute expired, unmute the viewer
-          console.log('[TTS] Viewer mute expired, unmuting:', username);
-          this.viewerRulesRepo.update(username, { isMuted: false, mutedUntil: null });
-        }
-      } else {
-        // Permanent mute
-        console.log('[TTS] Viewer is permanently muted:', username);
-        return;
-      }
-    }
-
-    // Check if bot (if filter enabled)
+    }    // Check if bot (if filter enabled)
     if (this.settings.filterBots && this.isBot(username)) {
       console.log('[TTS] Skipping bot:', username);
       return;
-    }
-
-    // Check viewer-specific cooldown if enabled
-    if (viewerRule?.cooldownEnabled) {
-      // Check if cooldown is temporary and has expired
-      if (viewerRule.cooldownUntil) {
-        const cooldownUntilTime = new Date(viewerRule.cooldownUntil).getTime();
-        const now = Date.now();
-        
-        if (now >= cooldownUntilTime) {
-          // Cooldown expired, disable it
-          console.log('[TTS] Viewer cooldown expired, disabling:', username);
-          this.viewerRulesRepo.update(username, { cooldownEnabled: false, cooldownUntil: null });
-          // Don't return, continue with normal processing
-        } else {
-          // Cooldown still active
-          // Calculate effective cooldown (max of global and viewer-specific)
-          let effectiveCooldownSeconds = this.settings.userCooldownSeconds || 30;
-          if (viewerRule.cooldownSeconds !== null && viewerRule.cooldownSeconds !== undefined) {
-            effectiveCooldownSeconds = Math.max(effectiveCooldownSeconds, viewerRule.cooldownSeconds);
-          }
-
-          // Check user cooldown with effective cooldown
-          if (this.settings.userCooldownEnabled && !this.checkUserCooldownWithSeconds(username, effectiveCooldownSeconds)) {
-            console.log('[TTS] User on viewer-specific cooldown:', username, `(${effectiveCooldownSeconds}s)`);
-            return;
-          }
-        }
-      } else {
-        // Permanent viewer cooldown
-        // Calculate effective cooldown (max of global and viewer-specific)
-        let effectiveCooldownSeconds = this.settings.userCooldownSeconds || 30;
-        if (viewerRule.cooldownSeconds !== null && viewerRule.cooldownSeconds !== undefined) {
-          effectiveCooldownSeconds = Math.max(effectiveCooldownSeconds, viewerRule.cooldownSeconds);
-        }
-
-        // Check user cooldown with effective cooldown
-        if (this.settings.userCooldownEnabled && !this.checkUserCooldownWithSeconds(username, effectiveCooldownSeconds)) {
-          console.log('[TTS] User on permanent viewer cooldown:', username, `(${effectiveCooldownSeconds}s)`);
-          return;
-        }
-      }
-    } else {
-      // No viewer-specific cooldown, use normal global cooldown check
-      if (this.settings.userCooldownEnabled && !this.checkUserCooldown(username)) {
-        console.log('[TTS] User on cooldown:', username);
-        return;
-      }
+    }    // Check user cooldown
+    if (this.settings.userCooldownEnabled && !this.checkUserCooldown(username)) {
+      console.log('[TTS] User on cooldown:', username);
+      return;
     }
 
     // Check global cooldown
@@ -572,33 +497,12 @@ export class TTSManager {
     // Update global cooldown
     if (this.settings.globalCooldownEnabled) {
       this.updateGlobalCooldown();
-    }
-
-    // Get viewer's custom voice/pitch/rate if they have them
+    }    // Get global voice settings
     let voiceId = this.settings.voiceId;
     let pitch = this.settings.pitch;
     let rate = this.settings.rate;
-    
-    if (viewerRule) {
-      if (viewerRule.customVoiceId !== null) {
-        // Look up the actual voice_id string from the numeric ID
-        const voice = this.voicesRepo.getVoiceByNumericId(viewerRule.customVoiceId);
-        if (voice) {
-          voiceId = voice.voice_id;
-          console.log(`[TTS] Using custom voice for ${username}: ${voice.name} (${voice.voice_id})`);
-        } else {
-          console.warn(`[TTS] Custom voice ID ${viewerRule.customVoiceId} not found for ${username}, using global`);
-        }
-      }
-      if (viewerRule.pitchOverride !== null) {
-        pitch = viewerRule.pitchOverride;
-      }
-      if (viewerRule.rateOverride !== null) {
-        rate = viewerRule.rateOverride;
-      }
-    }
 
-    // Add to queue with viewer overrides
+    // Add to queue
     this.messageQueue.push({
       username,
       message: filteredMessage,

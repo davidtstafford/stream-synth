@@ -8,7 +8,6 @@ import { BrowserWindow } from 'electron';
 import { setupDatabaseHandlers, setupEventStorageHandler } from './database';
 import { setupTwitchHandlers, setMainWindowForTwitch } from './twitch';
 import { setupTTSHandlers, setMainWindowForTTS, initializeTTS } from './tts';
-import { setupViewerRulesHandlers } from './viewer-rules';
 import { setupDiscordHandlers } from './discord';
 import { setupIRCHandlers, setMainWindowForIRC } from './irc';
 
@@ -16,7 +15,6 @@ export function setupIpcHandlers(): void {
   setupDatabaseHandlers();
   setupTwitchHandlers();
   setupTTSHandlers();
-  setupViewerRulesHandlers();
   setupDiscordHandlers();
   setupIRCHandlers();
 }
