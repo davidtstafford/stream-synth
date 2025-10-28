@@ -238,11 +238,4 @@ export async function checkSubscriptionStatus(viewerId: string): Promise<{ succe
   return await ipcRenderer.invoke('db:check-subscription-status', viewerId);
 }
 
-export async function checkPremiumVoiceAccess(
-  broadcasterId: string,
-  userId: string,
-  viewerId: string,
-  ttsPremiumSettings: { premiumVoicesLocked?: boolean; premiumVoicesRequireSubscription?: boolean; premiumVoicesAllowGifts?: boolean }
-): Promise<{ success: boolean; canUse?: boolean; reason?: string; error?: string }> {
-  return await ipcRenderer.invoke('db:check-premium-voice-access', broadcasterId, userId, viewerId, ttsPremiumSettings);
-}
+

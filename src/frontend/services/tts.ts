@@ -40,21 +40,17 @@ export interface TTSSettings {
   userCooldownEnabled?: boolean;
   userCooldownSeconds?: number;
   globalCooldownEnabled?: boolean;
-  globalCooldownSeconds?: number;
-  maxQueueSize?: number;
+  globalCooldownSeconds?: number;  maxQueueSize?: number;
   // Emote/Emoji Limits
   maxEmotesPerMessage?: number;
   maxEmojisPerMessage?: number;
   stripExcessiveEmotes?: boolean;
   // Character Repetition
   maxRepeatedChars?: number;
-  maxRepeatedWords?: number;  // Content Filters
+  maxRepeatedWords?: number;
+  // Content Filters
   copypastaFilterEnabled?: boolean;
   blockedWords?: string[];
-  // Premium Voice Restrictions
-  premiumVoicesLocked?: boolean;
-  premiumVoicesRequireSubscription?: boolean;
-  premiumVoicesAllowGifts?: boolean;
 }
 
 export interface TTSOptions {

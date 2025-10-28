@@ -367,51 +367,6 @@ export const TTSRulesTab: React.FC<Props> = ({ settings, onSettingChange }) => {
         </p>
 
         <BlockedWordsEditor settings={settings} onSettingChange={onSettingChange} />
-      </div>      {/* Premium Voice Restrictions */}
-      <div className="rules-section">
-        <h4>💎 Premium Voice Restrictions</h4>
-        <p className="section-description">
-          Restrict premium voices (Azure & Google) to subscribed users only. Uncheck to allow all users.
-        </p>        <div className="setting-group">
-          <label className="checkbox-label">            <input
-              type="checkbox"
-              checked={settings.premiumVoicesRequireSubscription ?? false}
-              onChange={(e) => onSettingChange('premiumVoicesRequireSubscription', e.target.checked)}
-            />
-            <span className="checkbox-text">
-              Require Active Subscription
-              <span className="setting-hint">Users must have an active Twitch subscription to use premium voices (Azure/Google)</span>
-            </span>
-          </label>
-        </div>
-
-        {settings.premiumVoicesRequireSubscription && (
-          <div className="setting-group" style={{ marginLeft: '28px' }}>
-            <label className="checkbox-label">              <input
-                type="checkbox"
-                checked={settings.premiumVoicesAllowGifts ?? false}
-                onChange={(e) => onSettingChange('premiumVoicesAllowGifts', e.target.checked)}
-              />
-              <span className="checkbox-text">
-                Allow Gift Subscriptions
-                <span className="setting-hint">Gift subscriptions also qualify for premium voice access</span>
-              </span>
-            </label>
-          </div>
-        )}
-
-        {settings.premiumVoicesRequireSubscription && (
-          <div className="example-box">
-            <strong>Current Behavior:</strong>
-            <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
-              <li>✅ Non-subscribers: Can use Web Speech voices</li>
-              <li>✅ Non-subscribers: Cannot use Azure or Google voices</li>
-              <li>✅ Subscribers: Can use all voice types</li>
-              {settings.premiumVoicesAllowGifts && <li>✅ Gift subs: Treated as active subscribers</li>}
-              {!settings.premiumVoicesAllowGifts && <li>✅ Gift subs: Treated as non-subscribers</li>}
-            </ul>
-          </div>
-        )}
       </div>
 
       {/* Future Features */}

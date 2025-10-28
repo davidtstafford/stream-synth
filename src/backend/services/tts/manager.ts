@@ -124,14 +124,9 @@ export class TTSManager {
       maxEmojisPerMessage: dbSettings.max_emojis_per_message !== undefined ? dbSettings.max_emojis_per_message as number : 3,
       stripExcessiveEmotes: dbSettings.strip_excessive_emotes !== undefined ? dbSettings.strip_excessive_emotes as boolean : true,
       // Character repetition      maxRepeatedChars: dbSettings.max_repeated_chars !== undefined ? dbSettings.max_repeated_chars as number : 3,
-      maxRepeatedWords: dbSettings.max_repeated_words !== undefined ? dbSettings.max_repeated_words as number : 2,
-      // Content filters
+      maxRepeatedWords: dbSettings.max_repeated_words !== undefined ? dbSettings.max_repeated_words as number : 2,      // Content filters
       copypastaFilterEnabled: dbSettings.copypasta_filter_enabled !== undefined ? dbSettings.copypasta_filter_enabled as boolean : false,
       blockedWords: dbSettings.blocked_words !== undefined ? JSON.parse(dbSettings.blocked_words as string) : [],
-      // Premium voice restrictions
-      premiumVoicesLocked: dbSettings.premium_voices_locked !== undefined ? dbSettings.premium_voices_locked as boolean : false,
-      premiumVoicesRequireSubscription: dbSettings.premium_voices_require_subscription !== undefined ? dbSettings.premium_voices_require_subscription as boolean : false,
-      premiumVoicesAllowGifts: dbSettings.premium_voices_allow_gifts !== undefined ? dbSettings.premium_voices_allow_gifts as boolean : false,
     };
   }
 
@@ -363,21 +358,17 @@ export class TTSManager {
     if (settings.userCooldownEnabled !== undefined) dbSettings.user_cooldown_enabled = settings.userCooldownEnabled;
     if (settings.userCooldownSeconds !== undefined) dbSettings.user_cooldown_seconds = settings.userCooldownSeconds;
     if (settings.globalCooldownEnabled !== undefined) dbSettings.global_cooldown_enabled = settings.globalCooldownEnabled;
-    if (settings.globalCooldownSeconds !== undefined) dbSettings.global_cooldown_seconds = settings.globalCooldownSeconds;
-    if (settings.maxQueueSize !== undefined) dbSettings.max_queue_size = settings.maxQueueSize;
+    if (settings.globalCooldownSeconds !== undefined) dbSettings.global_cooldown_seconds = settings.globalCooldownSeconds;    if (settings.maxQueueSize !== undefined) dbSettings.max_queue_size = settings.maxQueueSize;
     // Emote/Emoji limits
     if (settings.maxEmotesPerMessage !== undefined) dbSettings.max_emotes_per_message = settings.maxEmotesPerMessage;
     if (settings.maxEmojisPerMessage !== undefined) dbSettings.max_emojis_per_message = settings.maxEmojisPerMessage;
-    if (settings.stripExcessiveEmotes !== undefined) dbSettings.strip_excessive_emotes = settings.stripExcessiveEmotes;    // Character repetition
+    if (settings.stripExcessiveEmotes !== undefined) dbSettings.strip_excessive_emotes = settings.stripExcessiveEmotes;
+    // Character repetition
     if (settings.maxRepeatedChars !== undefined) dbSettings.max_repeated_chars = settings.maxRepeatedChars;
     if (settings.maxRepeatedWords !== undefined) dbSettings.max_repeated_words = settings.maxRepeatedWords;
     // Content filters
     if (settings.copypastaFilterEnabled !== undefined) dbSettings.copypasta_filter_enabled = settings.copypastaFilterEnabled;
     if (settings.blockedWords !== undefined) dbSettings.blocked_words = JSON.stringify(settings.blockedWords);
-    // Premium voice restrictions
-    if (settings.premiumVoicesLocked !== undefined) dbSettings.premium_voices_locked = settings.premiumVoicesLocked;
-    if (settings.premiumVoicesRequireSubscription !== undefined) dbSettings.premium_voices_require_subscription = settings.premiumVoicesRequireSubscription;
-    if (settings.premiumVoicesAllowGifts !== undefined) dbSettings.premium_voices_allow_gifts = settings.premiumVoicesAllowGifts;
 
     this.repository.saveSettings(dbSettings);
     
@@ -568,13 +559,6 @@ export class TTSManager {
   private isBot(username: string): boolean {
     const botNames = ['nightbot', 'streamelements', 'streamlabs', 'moobot', 'fossabot', 'wizebot'];
     return botNames.includes(username.toLowerCase());
-  }
-
-  /**
-   * Check if a voice ID is a premium voice (Azure or Google)
-   */
-  private isPremiumVoice(voiceId: string): boolean {
-    return voiceId.startsWith('azure_') || voiceId.startsWith('google_');
   }
 
   /**

@@ -203,10 +203,7 @@ export function runMigrations(db: Database.Database): void {
       ('strip_excessive_emotes', 'true'),      ('max_repeated_chars', '3'),
       ('max_repeated_words', '2'),
       ('copypasta_filter_enabled', 'false'),
-      ('blocked_words', '[]'),
-      ('premium_voices_locked', 'false'),
-      ('premium_voices_require_subscription', 'false'),
-      ('premium_voices_allow_gifts', 'false')
+      ('blocked_words', '[]')
   `);  // Create WebSpeech voices table
   db.exec(`
     CREATE TABLE IF NOT EXISTS webspeech_voices (

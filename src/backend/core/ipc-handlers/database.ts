@@ -272,16 +272,7 @@ export function setupDatabaseHandlers(): void {
     }
   });
 
-  // Database: Check Premium Voice Access
-  ipcMain.handle('db:check-premium-voice-access', async (event, broadcasterId: string, userId: string, viewerId: string, ttsPremiumSettings: any) => {
-    try {
-      const result = await twitchSubsService.canUsePremiumVoice(broadcasterId, userId, viewerId, ttsPremiumSettings);
-      return { success: true, ...result };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-}
+  }
 
 export { settingsRepo, sessionsRepo, eventsRepo, tokensRepo, viewersRepo, subscriptionsRepo };
 

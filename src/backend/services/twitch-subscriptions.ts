@@ -163,61 +163,10 @@ export class TwitchSubscriptionsService {
         status += ' (Gift)';
       }
       status += ' Subscriber';
-
-      return { isSubscribed: true, status };
+    return { isSubscribed: true, status };
     } catch (error: any) {
       console.error('[TwitchSubscriptions] Error checking subscription status:', error);
       return { isSubscribed: false };
-    }
-  }
-
-  /**
-   * Check if a viewer can use premium voices based on subscription and settings
-   * Will first sync subscription status to ensure accuracy
-   */
-  async canUsePremiumVoice(
-    broadcasterId: string,
-    userId: string,
-    viewerIdForCheck: string,
-    ttsPremiumSettings: {
-      premiumVoicesLocked?: boolean;
-      premiumVoicesRequireSubscription?: boolean;
-      premiumVoicesAllowGifts?: boolean;
-    }  ): Promise<{ canUse: boolean; reason?: string }> {
-    try {
-      // If subscription is not required, everyone can use premium voices
-      if (!ttsPremiumSettings.premiumVoicesRequireSubscription) {
-        return { canUse: true };
-      }
-
-      console.log('[TwitchSubscriptions] Checking premium voice access for viewer:', viewerIdForCheck);
-
-      // First, sync subscriptions to get latest data
-      const syncResult = await this.syncSubscriptionsFromTwitch(broadcasterId, userId);
-      if (!syncResult.success) {
-        console.warn('[TwitchSubscriptions] Failed to sync subscriptions during premium check:', syncResult.error);
-        // If sync fails, deny access to be safe
-        return { canUse: false, reason: 'Could not verify subscription status' };
-      }
-
-      // Check subscription status
-      const { isSubscribed, status } = await this.checkSubscriptionStatus(viewerIdForCheck);
-
-      if (!isSubscribed) {
-        return { canUse: false, reason: 'Not subscribed' };
-      }
-
-      // Check if gift subscriptions are allowed
-      const subscription = this.subscriptionsRepo.getByViewerId(viewerIdForCheck);
-      if (subscription?.is_gift === 1 && !ttsPremiumSettings.premiumVoicesAllowGifts) {
-        return { canUse: false, reason: 'Gift subscriptions not allowed for premium voices' };
-      }
-
-      console.log('[TwitchSubscriptions] Premium voice access granted:', status);
-      return { canUse: true, reason: status };
-    } catch (error: any) {
-      console.error('[TwitchSubscriptions] Error checking premium voice access:', error);
-      return { canUse: false, reason: 'Error checking subscription status' };
     }
   }
 }
