@@ -585,7 +585,6 @@ export function setupTTSHandlers(): void {
       };
     }
   });
-
   // TTS: Provider - Toggle
   ipcMain.handle('provider:toggle', async (event, payload: { provider: string; enabled: boolean }) => {
     try {
@@ -611,8 +610,7 @@ export function setupTTSHandlers(): void {
       return {
         success: false,
         error: error.message
-      };
-    }
+      };    }
   });
 }
 

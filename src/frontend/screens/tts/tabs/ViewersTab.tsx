@@ -79,6 +79,7 @@ export const ViewersTab: React.FC<Props> = ({
   onCooldownChange,  onCooldownDurationChange,
   onResetVoice,
 }) => {
+  const [viewerError, setViewerError] = useState<string | null>(null);
   const viewerFilteredGroups = getViewerFilteredGroups();
   const viewerVisibleCount = getViewerVisibleVoiceCount();
   // Get voice info helpers
@@ -101,14 +102,14 @@ export const ViewersTab: React.FC<Props> = ({
     }
     return { name: `Voice #${voiceId}`, voice: null, available: false };
   };
-
   const getVoiceInfoByVoiceId = (voiceIdStr: string) => {
     if (!voiceIdStr) return { name: null, voice: null, available: true };
     for (const group of voiceGroups) {
       const voice = group.voices.find(v => v.voice_id === voiceIdStr);
       if (voice) {
         if (voiceIdStr.startsWith('google_')) {
-          return { name: voice.name, voice, available: false };
+          const googleEnabled = settings.googleEnabled ?? false;
+          return { name: voice.name, voice, available: googleEnabled };
         }
         if (voiceIdStr.startsWith('azure_')) {
           const azureEnabled = settings.azureEnabled ?? false;
@@ -166,16 +167,47 @@ export const ViewersTab: React.FC<Props> = ({
             >
               {viewerRule ? 'Delete Rules' : 'Cancel'}
             </button>
-          </div>
-
-          {!viewerRule && (
+          </div>          {!viewerRule && (
             <div className="no-rules-message">
               <p>No custom rules for this viewer</p>
               <button className="create-rule-button" onClick={onCreateRule}>
                 Create Rules
               </button>
             </div>
-          )}          {viewerRule && (
+          )}
+
+          {viewerError && (
+            <div style={{
+              padding: '12px',
+              marginBottom: '15px',
+              backgroundColor: '#ff6b6b',
+              color: 'white',
+              borderRadius: '4px',
+              fontSize: '14px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span>{viewerError}</span>
+              <button
+                onClick={() => setViewerError(null)}
+                style={{
+                  marginLeft: '10px',
+                  padding: '5px 10px',
+                  backgroundColor: 'white',
+                  color: '#ff6b6b',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {viewerRule && (
             <ViewerRuleEditor
               viewerRule={viewerRule}
               settings={settings}
@@ -201,8 +233,9 @@ export const ViewersTab: React.FC<Props> = ({
               onUpdateRule={onUpdateRule}
               onMuteChange={onMuteChange}
               onMuteDurationChange={onMuteDurationChange}
-              onCooldownChange={onCooldownChange}              onCooldownDurationChange={onCooldownDurationChange}
-              onResetVoice={onResetVoice}
+              onCooldownChange={onCooldownChange}              onCooldownDurationChange={onCooldownDurationChange}              onResetVoice={onResetVoice}
+              viewerError={viewerError}
+              setViewerError={setViewerError}
             />
           )}
         </div>
@@ -239,7 +272,19 @@ const ViewerRuleEditor: React.FC<any> = ({
   onMuteDurationChange,  onCooldownChange,
   onCooldownDurationChange,
   onResetVoice,
+  viewerError,
+  setViewerError,
 }) => {
+  // Wrapper to handle errors from onUpdateRule
+  const handleUpdateRuleWithError = async (updates: any) => {
+    try {
+      setViewerError(null);
+      await onUpdateRule(updates);
+    } catch (err: any) {
+      setViewerError(err.message || 'Error updating voice');
+    }
+  };
+
   return (
     <div className="viewer-rule-editor">
       {/* TTS Provider */}
@@ -343,11 +388,9 @@ const ViewerRuleEditor: React.FC<any> = ({
           }}>
             ⚠️ Global voice "{globalVoiceInfo?.name}" is unavailable (provider disabled). Please select a custom voice or enable the provider in Settings tab.
           </div>
-        )}
-
-        <select
+        )}        <select
           value={viewerRule.customVoiceId?.toString() || ''}
-          onChange={(e) => onUpdateRule({ customVoiceId: e.target.value ? parseInt(e.target.value) : null })}
+          onChange={(e) => handleUpdateRuleWithError({ customVoiceId: e.target.value ? parseInt(e.target.value) : null })}
           className="voice-select"
         >          <option value="">Use Global Voice ({globalVoiceInfo?.name || 'None'})</option>
           {viewerFilteredGroups.map((group: VoiceGroup) => (
@@ -479,9 +522,8 @@ const ViewerRuleEditor: React.FC<any> = ({
                 0 = permanent custom cooldown, or set minutes (max 1440 = 24 hours)
               </p>
             </div>
-          </div>
-        )}
+          </div>        )}
       </div>
     </div>
-  );
+    );
 };

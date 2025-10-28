@@ -367,71 +367,50 @@ export const TTSRulesTab: React.FC<Props> = ({ settings, onSettingChange }) => {
         </p>
 
         <BlockedWordsEditor settings={settings} onSettingChange={onSettingChange} />
-      </div>
-
-      {/* Premium Voice Restrictions */}
+      </div>      {/* Premium Voice Restrictions */}
       <div className="rules-section">
         <h4>💎 Premium Voice Restrictions</h4>
         <p className="section-description">
-          Restrict premium voices (like Azure or Google voices) to subscribed users only.
-        </p>
-
-        <div className="setting-group">
-          <label className="checkbox-label">
-            <input
+          Restrict premium voices (Azure & Google) to subscribed users only. Uncheck to allow all users.
+        </p>        <div className="setting-group">
+          <label className="checkbox-label">            <input
               type="checkbox"
-              checked={settings.premiumVoicesLocked ?? false}
-              onChange={(e) => onSettingChange('premiumVoicesLocked', e.target.checked)}
+              checked={settings.premiumVoicesRequireSubscription ?? false}
+              onChange={(e) => onSettingChange('premiumVoicesRequireSubscription', e.target.checked)}
             />
             <span className="checkbox-text">
-              Lock Premium Voices
-              <span className="setting-hint">Restrict premium voice access based on subscription status</span>
+              Require Active Subscription
+              <span className="setting-hint">Users must have an active Twitch subscription to use premium voices (Azure/Google)</span>
             </span>
           </label>
         </div>
 
-        {settings.premiumVoicesLocked && (
-          <>
-            <div className="setting-group" style={{ marginLeft: '28px' }}>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={settings.premiumVoicesRequireSubscription ?? false}
-                  onChange={(e) => onSettingChange('premiumVoicesRequireSubscription', e.target.checked)}
-                />
-                <span className="checkbox-text">
-                  Require Active Subscription
-                  <span className="setting-hint">Users must have an active Twitch subscription to use premium voices</span>
-                </span>
-              </label>
-            </div>
+        {settings.premiumVoicesRequireSubscription && (
+          <div className="setting-group" style={{ marginLeft: '28px' }}>
+            <label className="checkbox-label">              <input
+                type="checkbox"
+                checked={settings.premiumVoicesAllowGifts ?? false}
+                onChange={(e) => onSettingChange('premiumVoicesAllowGifts', e.target.checked)}
+              />
+              <span className="checkbox-text">
+                Allow Gift Subscriptions
+                <span className="setting-hint">Gift subscriptions also qualify for premium voice access</span>
+              </span>
+            </label>
+          </div>
+        )}
 
-            {settings.premiumVoicesRequireSubscription && (
-              <div className="setting-group" style={{ marginLeft: '48px' }}>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={settings.premiumVoicesAllowGifts ?? false}
-                    onChange={(e) => onSettingChange('premiumVoicesAllowGifts', e.target.checked)}
-                  />
-                  <span className="checkbox-text">
-                    Allow Gift Subscriptions
-                    <span className="setting-hint">Gift subscriptions also qualify for premium voice access</span>
-                  </span>
-                </label>
-              </div>
-            )}
-
-            <div className="example-box" style={{ marginLeft: '28px' }}>
-              <strong>Behavior:</strong>
-              <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
-                <li>If locked: Premium voices check subscription status before applying</li>
-                <li>If require subscription: Non-subscribers cannot use Azure/Google voices</li>
-                {settings.premiumVoicesAllowGifts && <li>Gift subs: Treated as subscribers (can use premium voices)</li>}
-                {!settings.premiumVoicesAllowGifts && <li>Gift subs: Treated as non-subscribers (cannot use premium voices)</li>}
-              </ul>
-            </div>
-          </>
+        {settings.premiumVoicesRequireSubscription && (
+          <div className="example-box">
+            <strong>Current Behavior:</strong>
+            <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
+              <li>✅ Non-subscribers: Can use Web Speech voices</li>
+              <li>✅ Non-subscribers: Cannot use Azure or Google voices</li>
+              <li>✅ Subscribers: Can use all voice types</li>
+              {settings.premiumVoicesAllowGifts && <li>✅ Gift subs: Treated as active subscribers</li>}
+              {!settings.premiumVoicesAllowGifts && <li>✅ Gift subs: Treated as non-subscribers</li>}
+            </ul>
+          </div>
         )}
       </div>
 

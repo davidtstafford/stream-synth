@@ -518,8 +518,8 @@ export const TTS: React.FC = () => {
     }
   };
 
-  const handleUpdateRule = async (updates: Partial<ttsService.ViewerTTSRuleInput>) => {
-    if (!selectedViewer || !viewerRule) return;
+    const handleUpdateRule = async (updates: Partial<ttsService.ViewerTTSRuleInput>) => {
+    if (!selectedViewer || !viewerRule || !settings) return;
 
     try {
       const updated = await ttsService.updateViewerRule(selectedViewer, updates);
@@ -528,7 +528,7 @@ export const TTS: React.FC = () => {
       }
     } catch (err: any) {
       console.error('[Viewers] Error updating rule:', err);
-      setError(err.message);
+      throw err; // Throw to let ViewersTab handle it
     }
   };
 
@@ -635,8 +635,7 @@ export const TTS: React.FC = () => {
   const handleResetVoice = async () => {
     if (!selectedViewer) return;
     await handleUpdateRule({ customVoiceId: null });
-  };
-  // Get filtered voice groups for viewer voice picker
+  };  // Get filtered voice groups for viewer voice picker
   const getViewerFilteredGroups = () => {
     if (!voiceGroups.length || !settings) return [];
 
@@ -653,11 +652,12 @@ export const TTS: React.FC = () => {
           const isGoogle = voiceId.startsWith('google_');
 
           // Skip based on provider enable state
-          if (isGoogle) return false; // Google always disabled
+          // WebSpeech is NEVER blocked - it's always available if enabled
+          if (isGoogle && !(settings.googleEnabled ?? false)) return false;
           if (isAzure && !(settings.azureEnabled ?? false)) return false;
           if (isWebSpeech && !(settings.webspeechEnabled ?? false)) return false;
 
-          // Provider filter dropdown
+          // Provider filter dropdown - WebSpeech is always selectable
           const matchesProvider = 
             viewerProviderFilter === 'all' ||
             (viewerProviderFilter === 'webspeech' && isWebSpeech) ||

@@ -183,15 +183,9 @@ export class TwitchSubscriptionsService {
       premiumVoicesLocked?: boolean;
       premiumVoicesRequireSubscription?: boolean;
       premiumVoicesAllowGifts?: boolean;
-    }
-  ): Promise<{ canUse: boolean; reason?: string }> {
+    }  ): Promise<{ canUse: boolean; reason?: string }> {
     try {
-      // If premium voices are not locked, everyone can use them
-      if (!ttsPremiumSettings.premiumVoicesLocked) {
-        return { canUse: true };
-      }
-
-      // If locked but subscription not required, everyone can use them
+      // If subscription is not required, everyone can use premium voices
       if (!ttsPremiumSettings.premiumVoicesRequireSubscription) {
         return { canUse: true };
       }
