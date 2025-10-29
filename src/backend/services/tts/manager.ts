@@ -4,6 +4,7 @@ import { GoogleTTSProvider } from './google-provider';
 import { TTSRepository } from '../../database/repositories/tts';
 import { VoicesRepository } from '../../database/repositories/voices';
 import { SettingsMapper } from './settings-mapper';
+import { TTSAccessControlService } from '../tts-access-control';
 import Database from 'better-sqlite3';
 
 interface TTSQueueItem {
@@ -29,6 +30,7 @@ export class TTSManager {
   private currentProvider: TTSProvider | null = null;
   private repository: TTSRepository;
   private voicesRepo: VoicesRepository;
+  private accessControl: TTSAccessControlService;
   private settings: TTSSettings | null = null;
   private messageQueue: TTSQueueItem[] = [];
   private isProcessing: boolean = false;
@@ -45,6 +47,7 @@ export class TTSManager {
   ]);  constructor(db: Database.Database) {
     this.repository = new TTSRepository();
     this.voicesRepo = new VoicesRepository();
+    this.accessControl = new TTSAccessControlService();
     this.providers = new Map();
     
     // Register Azure provider
@@ -372,14 +375,31 @@ export class TTSManager {
   determineProviderFromVoiceId(voiceId: string): 'webspeech' | 'azure' | 'google' {
     return this.getProviderFromVoiceId(voiceId);
   }
-
   /**
    * Handle incoming chat message for TTS
    */
   async handleChatMessage(username: string, message: string, userId?: string): Promise<void> {
     if (!this.settings || !this.settings.enabled) {
       return; // TTS disabled
-    }    // Check if bot (if filter enabled)
+    }
+
+    // NEW: Access control validation
+    if (userId) {
+      const validation = await this.accessControl.validateAndDetermineVoice(userId, message);
+      
+      if (!validation.canUseTTS) {
+        console.log(`[TTS] Viewer ${username} denied TTS access: ${validation.reason}`);
+        return; // Silent denial - don't queue message
+      }
+      
+      // Override voice/pitch/speed with validated settings
+      if (validation.voiceToUse) {
+        console.log(`[TTS] Using validated voice ${validation.voiceToUse} for ${username} (pitch: ${validation.pitch}, speed: ${validation.speed})`);
+        // We'll use these values when adding to queue below
+      }
+    }
+
+    // Check if bot (if filter enabled)
     if (this.settings.filterBots && this.isBot(username)) {
       console.log('[TTS] Skipping bot:', username);
       return;
@@ -425,15 +445,23 @@ export class TTSManager {
     // Update user cooldown
     if (this.settings.userCooldownEnabled) {
       this.updateUserCooldown(username);
-    }
-
-    // Update global cooldown
+    }    // Update global cooldown
     if (this.settings.globalCooldownEnabled) {
       this.updateGlobalCooldown();
-    }    // Get global voice settings
+    }    // Get voice settings (use validated settings if available, otherwise use global)
     let voiceId = this.settings.voiceId;
     let pitch = this.settings.pitch;
     let rate = this.settings.rate;
+    
+    // NEW: Override with validated voice settings if userId was provided
+    if (userId) {
+      const validation = await this.accessControl.validateAndDetermineVoice(userId, message);
+      if (validation.voiceToUse) {
+        voiceId = validation.voiceToUse;
+        pitch = validation.pitch || pitch;
+        rate = validation.speed || rate;
+      }
+    }
 
     // Add to queue
     this.messageQueue.push({

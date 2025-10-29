@@ -22,6 +22,8 @@ import { TokensRepository } from '../../database/repositories/tokens';
 import { ViewersRepository } from '../../database/repositories/viewers';
 import { SubscriptionsRepository } from '../../database/repositories/subscriptions';
 import { TwitchSubscriptionsService } from '../../services/twitch-subscriptions';
+import { TTSAccessRepository } from '../../database/repositories/tts-access';
+import { ChannelPointGrantsRepository } from '../../database/repositories/channel-point-grants';
 
 // Initialize repositories
 const settingsRepo = new SettingsRepository();
@@ -31,6 +33,8 @@ const tokensRepo = new TokensRepository();
 const viewersRepo = new ViewersRepository();
 const subscriptionsRepo = new SubscriptionsRepository();
 const twitchSubsService = new TwitchSubscriptionsService();
+const ttsAccessRepo = new TTSAccessRepository();
+const channelPointGrantsRepo = new ChannelPointGrantsRepository();
 
 export function setupDatabaseHandlers(): void {
   // ===== Database: Settings =====
@@ -420,9 +424,7 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
           (storedEvent as any).viewer_username = viewer.username;
           (storedEvent as any).viewer_display_name = viewer.display_name;
         }
-      }
-
-      mainWindow?.webContents.send('event:stored', storedEvent);
+      }      mainWindow?.webContents.send('event:stored', storedEvent);
 
       // Forward EventSub chat messages to TTS manager so they are enqueued for speaking.
       // IRC chat is intentionally ignored elsewhere; only EventSub `channel.chat.message` should trigger TTS.
@@ -449,6 +451,45 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
             .catch(err => {
               console.warn('[TTS] Failed to initialize manager for chat forwarding:', err);
             });
+        }        // Handle channel point redemptions for TTS access grants
+        if (eventType === 'channel.channel_points_custom_reward_redemption.add') {
+          const payload = typeof eventData === 'string' ? JSON.parse(eventData) : eventData;
+          const rewardTitle = payload?.reward?.title || '';
+          const redeemerUserId = payload?.user_id || viewerId;
+          
+          if (!redeemerUserId) {
+            console.warn('[Channel Points] Missing user_id for redemption');
+            return { success: true, id };
+          }
+
+          // Get TTS access config to check if this redeem should grant access
+          const config = ttsAccessRepo.getConfig();
+          
+          // Check if this is a limited access grant redeem
+          if (config.limited_redeem_name && rewardTitle === config.limited_redeem_name) {
+            const durationMinutes = config.limited_redeem_duration_mins || 60;
+            channelPointGrantsRepo.createGrant(
+              redeemerUserId,
+              'limited_access',
+              rewardTitle,
+              durationMinutes
+            );
+            
+            console.log(`[Channel Points] Granted limited TTS access to user ${redeemerUserId} for ${durationMinutes} minutes via redeem "${rewardTitle}"`);
+          }
+          
+          // Check if this is a premium voice access grant redeem
+          if (config.premium_redeem_name && rewardTitle === config.premium_redeem_name) {
+            const durationMinutes = config.premium_redeem_duration_mins || 60;
+            channelPointGrantsRepo.createGrant(
+              redeemerUserId,
+              'premium_voice_access',
+              rewardTitle,
+              durationMinutes
+            );
+            
+            console.log(`[Channel Points] Granted premium voice TTS access to user ${redeemerUserId} for ${durationMinutes} minutes via redeem "${rewardTitle}"`);
+          }
         }
       } catch (err) {
         console.warn('[TTS] Error while attempting to forward stored event to TTS:', err);

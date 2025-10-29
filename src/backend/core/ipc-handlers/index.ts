@@ -10,6 +10,7 @@ import { setupTwitchHandlers, setMainWindowForTwitch } from './twitch';
 import { setupTTSHandlers, setMainWindowForTTS, initializeTTS } from './tts';
 import { setupDiscordHandlers } from './discord';
 import { setupIRCHandlers, setMainWindowForIRC } from './irc';
+import { setupTTSAccessHandlers } from './tts-access';
 
 export function setupIpcHandlers(): void {
   setupDatabaseHandlers();
@@ -17,6 +18,7 @@ export function setupIpcHandlers(): void {
   setupTTSHandlers();
   setupDiscordHandlers();
   setupIRCHandlers();
+  setupTTSAccessHandlers();
 }
 
 export function setMainWindow(mainWindow: BrowserWindow): void {

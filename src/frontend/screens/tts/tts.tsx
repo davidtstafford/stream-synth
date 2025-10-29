@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import * as ttsService from '../../services/tts';
 import { VoiceSettingsTab } from './tabs/VoiceSettingsTab';
 import { TTSRulesTab } from './tabs/TTSRulesTab';
+import { TTSAccessTab } from './tabs/TTSAccessTab';
+import { ViewerRulesTab } from './tabs/ViewerRulesTab';
 import './tts.css';
 
 interface VoiceGroup {
@@ -17,7 +19,7 @@ interface VoiceGroup {
   }>;
 }
 
-type TabType = 'settings' | 'rules';
+type TabType = 'settings' | 'rules' | 'access' | 'viewer-rules';
 
 export const TTS: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('settings');
@@ -425,8 +427,7 @@ export const TTS: React.FC = () => {
       <div className="tab-navigation">
         <button
           className={`tab-button ${activeTab === 'settings' ? 'active' : ''}`}
-          onClick={() => setActiveTab('settings')}
-        >
+          onClick={() => setActiveTab('settings')}      >
           🎙️ Voice Settings
         </button>
         <button
@@ -434,6 +435,18 @@ export const TTS: React.FC = () => {
           onClick={() => setActiveTab('rules')}
         >
           📋 TTS Rules
+        </button>
+        <button
+          className={`tab-button ${activeTab === 'access' ? 'active' : ''}`}
+          onClick={() => setActiveTab('access')}
+        >
+          🔐 TTS Access
+        </button>
+        <button
+          className={`tab-button ${activeTab === 'viewer-rules' ? 'active' : ''}`}
+          onClick={() => setActiveTab('viewer-rules')}
+        >
+          👤 Viewer Rules
         </button>
       </div>
 
@@ -477,6 +490,23 @@ export const TTS: React.FC = () => {
           <TTSRulesTab
             settings={settings}
             onSettingChange={handleSettingChange}
+          />
+        </div>
+      )}
+
+      {activeTab === 'access' && (
+        <div className="tab-content">
+          <TTSAccessTab
+            globalVoiceProvider={settings?.provider || 'webspeech'}
+          />
+        </div>
+      )}
+
+      {activeTab === 'viewer-rules' && (
+        <div className="tab-content">
+          <ViewerRulesTab
+            voiceGroups={voiceGroups}
+            accessMode={'access_all'}
           />
         </div>
       )}

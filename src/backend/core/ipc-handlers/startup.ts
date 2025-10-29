@@ -10,6 +10,7 @@
 import { SettingsRepository } from '../../database/repositories/settings';
 import { VoicesRepository } from '../../database/repositories/voices';
 import { SessionsRepository } from '../../database/repositories/sessions';
+import { ChannelPointGrantsRepository } from '../../database/repositories/channel-point-grants';
 import { initializeTTS } from './tts';
 import { VoiceSyncService } from '../../services/tts/voice-sync';
 import { TwitchSubscriptionsService } from '../../services/twitch-subscriptions';
@@ -17,11 +18,37 @@ import { TwitchSubscriptionsService } from '../../services/twitch-subscriptions'
 const settingsRepo = new SettingsRepository();
 const voicesRepo = new VoicesRepository();
 const sessionsRepo = new SessionsRepository();
+const channelPointGrantsRepo = new ChannelPointGrantsRepository();
 const twitchSubsService = new TwitchSubscriptionsService();
 
 export async function runStartupTasks(): Promise<void> {
   try {
     console.log('[Startup] Running startup tasks...');
+
+    // Cleanup expired channel point grants (keep expired records for 7 days)
+    console.log('[Startup] Cleaning up expired channel point grants...');
+    try {
+      const deletedCount = channelPointGrantsRepo.cleanupExpiredGrants(7);
+      if (deletedCount > 0) {
+        console.log(`[Startup] Cleaned up ${deletedCount} expired channel point grants`);
+      } else {
+        console.log('[Startup] No expired grants to clean up');
+      }
+    } catch (err: any) {
+      console.error('[Startup] Error cleaning up expired grants:', err);
+    }
+
+    // Schedule periodic cleanup every 5 minutes
+    setInterval(() => {
+      try {
+        const deletedCount = channelPointGrantsRepo.cleanupExpiredGrants(7);
+        if (deletedCount > 0) {
+          console.log(`[Background] Cleaned up ${deletedCount} expired channel point grants`);
+        }
+      } catch (err: any) {
+        console.error('[Background] Error cleaning up expired grants:', err);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
 
     // Initialize TTS services
     const ttsManager = await initializeTTS();

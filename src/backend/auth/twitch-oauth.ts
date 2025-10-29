@@ -19,6 +19,7 @@ const TWITCH_SCOPES = [
   'moderator:manage:shoutouts',
   'moderator:read:banned_users',  // For channel.ban and channel.unban events
   'moderator:read:moderators',    // For channel.moderator.add and channel.moderator.remove events
+  'channel:read:vips',            // For VIP sync and viewer role management
   'bits:read',
   'channel:read:charity'
 ];

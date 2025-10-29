@@ -280,7 +280,6 @@ export function runMigrations(db: Database.Database): void {
     UNION ALL
     SELECT * FROM google_voices
   `);
-
   // Create tts_provider_status table to track voice sync state per provider
   db.exec(`
     CREATE TABLE IF NOT EXISTS tts_provider_status (
@@ -291,6 +290,143 @@ export function runMigrations(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )  `);
+
+  // ===== TTS Access & Enablement Tables =====
+  
+  // Create tts_access_config table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tts_access_config (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      access_mode TEXT NOT NULL DEFAULT 'access_all',
+      
+      -- Limited Access Rules
+      limited_allow_subscribers INTEGER DEFAULT 1,
+      limited_deny_gifted_subs INTEGER DEFAULT 0,
+      limited_allow_vip INTEGER DEFAULT 0,
+      limited_redeem_name TEXT,
+      limited_redeem_duration_mins INTEGER,
+      
+      -- Premium Voice Access Rules
+      premium_allow_subscribers INTEGER DEFAULT 1,
+      premium_deny_gifted_subs INTEGER DEFAULT 0,
+      premium_allow_vip INTEGER DEFAULT 0,
+      premium_redeem_name TEXT,
+      premium_redeem_duration_mins INTEGER,
+      
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      
+      CHECK (id = 1),
+      CHECK (access_mode IN ('access_all', 'limited_access', 'premium_voice_access'))
+    )
+  `);
+
+  // Insert default config if not exists
+  db.exec(`
+    INSERT OR IGNORE INTO tts_access_config (id, access_mode) 
+    VALUES (1, 'access_all')
+  `);
+
+  // Create viewer_voice_preferences table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_voice_preferences (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      viewer_id TEXT NOT NULL UNIQUE,
+      voice_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      pitch REAL DEFAULT 1.0,
+      speed REAL DEFAULT 1.0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE,
+      CHECK (provider IN ('webspeech', 'azure', 'google')),
+      CHECK (pitch >= 0.5 AND pitch <= 2.0),
+      CHECK (speed >= 0.5 AND speed <= 2.0)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_voice_prefs ON viewer_voice_preferences(viewer_id)
+  `);
+
+  // Migrate existing tts_voice_id data from viewers table to viewer_voice_preferences
+  try {
+    const viewersWithVoices = db.prepare(`
+      SELECT id, tts_voice_id 
+      FROM viewers 
+      WHERE tts_voice_id IS NOT NULL AND tts_voice_id != ''
+    `).all() as Array<{ id: string; tts_voice_id: string }>;
+
+    console.log(`[Migration] Found ${viewersWithVoices.length} viewers with custom voices to migrate`);
+
+    for (const viewer of viewersWithVoices) {
+      // Determine provider from voice_id pattern
+      let provider = 'webspeech';
+      if (viewer.tts_voice_id.includes('azure:') || viewer.tts_voice_id.includes('Neural')) {
+        provider = 'azure';
+      } else if (viewer.tts_voice_id.includes('google:')) {
+        provider = 'google';
+      }
+
+      db.prepare(`
+        INSERT OR IGNORE INTO viewer_voice_preferences (viewer_id, voice_id, provider, pitch, speed)
+        VALUES (?, ?, ?, 1.0, 1.0)
+      `).run(viewer.id, viewer.tts_voice_id, provider);
+    }
+
+    console.log(`[Migration] Migrated ${viewersWithVoices.length} viewer voice preferences`);
+  } catch (error) {
+    console.log('[Migration] Note: Could not migrate viewer voices (may not exist yet):', error);
+  }
+
+  // Create viewer_roles table for VIP tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_roles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      viewer_id TEXT NOT NULL,
+      role_type TEXT NOT NULL,
+      granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      revoked_at DATETIME,
+      
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE,
+      CHECK (role_type IN ('vip', 'moderator', 'broadcaster')),
+      UNIQUE(viewer_id, role_type)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_roles ON viewer_roles(viewer_id, role_type)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_active_roles ON viewer_roles(viewer_id, role_type, revoked_at)
+  `);
+
+  // Create channel_point_grants table for temporary access
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channel_point_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      viewer_id TEXT NOT NULL,
+      grant_type TEXT NOT NULL,
+      redeem_name TEXT NOT NULL,
+      duration_mins INTEGER NOT NULL,
+      granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME NOT NULL,
+      
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE,
+      CHECK (grant_type IN ('limited_access', 'premium_voice_access'))
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_grants_viewer ON channel_point_grants(viewer_id)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_grants_expiry ON channel_point_grants(expires_at)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_grants_active ON channel_point_grants(viewer_id, expires_at)
+  `);
 
   console.log('Database migrations completed');
 }
