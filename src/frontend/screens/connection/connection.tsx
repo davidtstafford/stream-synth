@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Connection } from '../../components/Connection';
+import { EventSubscriptions } from '../../components/EventSubscriptions';
 import { createWebSocketConnection } from '../../services/websocket';
 import * as db from '../../services/database';
 
@@ -100,13 +101,16 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
               type: 'success',
               message: `Auto-reconnected! Monitoring: ${lastChannelLogin || user.login}`
             });
-            
-            // Connect to IRC for JOIN/PART events
+              // Connect to IRC for JOIN/PART events
             try {
               console.log('🔌 Connecting to IRC (auto-reconnect)...');
               const { ipcRenderer } = window.require('electron');
               const channelToJoin = lastChannelLogin || user.login;
-              const ircResult = await ipcRenderer.invoke('irc:connect', user.login, savedToken.accessToken, channelToJoin);
+              const ircResult = await ipcRenderer.invoke('irc:connect', {
+                username: user.login,
+                token: savedToken.accessToken,
+                channel: channelToJoin
+              });
               if (ircResult.success) {
                 console.log('✅ IRC connected');
                 setStatusMessage({
@@ -119,8 +123,7 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
             } catch (error) {
               console.error('❌ IRC connection error:', error);
             }
-          },
-          onKeepalive: () => {},
+          },          onKeepalive: () => {},
           onNotification: async (data: any) => {
             console.log('🔔 Event received (full):', JSON.stringify(data, null, 2));
             
@@ -277,12 +280,15 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
           type: 'success',
           message: `WebSocket session established! Monitoring: ${userLoginValue}`
         });
-        
-        // Connect to IRC for JOIN/PART events
+          // Connect to IRC for JOIN/PART events
         try {
           console.log('🔌 Connecting to IRC...');
           const { ipcRenderer } = window.require('electron');
-          const ircResult = await ipcRenderer.invoke('irc:connect', userLoginValue, accessTokenValue, userLoginValue);
+          const ircResult = await ipcRenderer.invoke('irc:connect', {
+            username: userLoginValue,
+            token: accessTokenValue,
+            channel: userLoginValue
+          });
           if (ircResult.success) {
             console.log('✅ IRC connected');
             setStatusMessage({
@@ -295,8 +301,7 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
         } catch (error) {
           console.error('❌ IRC connection error:', error);
         }
-      },
-      onKeepalive: () => {
+      },      onKeepalive: () => {
         // Keepalive received
       },
       onNotification: async (data: any) => {
@@ -407,13 +412,26 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
           <p style={{ color: '#888' }}>Please wait</p>
         </div>
       ) : (
-        <Connection 
-          onConnected={handleConnected}
-          onDisconnected={handleDisconnected}
-          isConnected={!!accessToken}
-          connectedUserLogin={userLogin}
-          connectedUserId={userId}
-        />
+        <>          <Connection 
+            onConnected={handleConnected}
+            onDisconnected={handleDisconnected}
+            isConnected={!!accessToken}
+            connectedUserLogin={userLogin}
+            connectedUserId={userId}
+          />
+          
+          {sessionId && (
+            <EventSubscriptions
+              userId={userId}
+              accessToken={accessToken}
+              clientId={clientId}
+              sessionId={sessionId}
+              broadcasterId={broadcasterId}
+              broadcasterLogin={broadcasterLogin}
+              isBroadcaster={isBroadcaster}
+            />
+          )}
+        </>
       )}
     </div>
   );

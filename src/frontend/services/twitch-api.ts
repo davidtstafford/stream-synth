@@ -27,8 +27,7 @@ export async function subscribeToEvent(
   }
 
   const opPromise = (async () => {
-    try {
-      // Create subscription condition based on event type
+    try {      // Create subscription condition based on event type
       const condition: any = {};
       if (eventType.startsWith('channel.chat')) {
         condition.broadcaster_user_id = broadcasterId;
@@ -45,7 +44,22 @@ export async function subscribeToEvent(
         condition.broadcaster_user_id = broadcasterId;
       }
 
+      // Set version based on event type
       let version = '1';
+      if (eventType === 'channel.chat.message') {
+        version = '1';
+      } else if (eventType === 'channel.chat.clear' || 
+                 eventType === 'channel.chat.clear_user_messages' ||
+                 eventType === 'channel.chat.message_delete' ||
+                 eventType === 'channel.chat_settings.update') {
+        version = '1';
+      } else if (eventType === 'channel.shield_mode.begin' ||
+                 eventType === 'channel.shield_mode.end') {
+        version = '1';
+      } else if (eventType === 'channel.shoutout.create' ||
+                 eventType === 'channel.shoutout.receive') {
+        version = '1';
+      }
 
       const persistedKey = `eventsub:${broadcasterId}:${eventType}:subscription_id`;
       const persistedCreatedAtKey = `eventsub:${broadcasterId}:${eventType}:created_at`;
