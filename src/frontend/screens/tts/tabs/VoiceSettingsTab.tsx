@@ -163,8 +163,20 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           <span className="setting-hint" style={{ display: 'block', fontWeight: 'normal', fontSize: '0.9em', marginTop: '5px' }}>
             Enable multiple providers to use different voices for different viewers
           </span>
-        </label>        {/* Web Speech Provider */}
-        <div className="provider-toggle-section" style={{ marginBottom: '15px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
+        </label>
+
+        {/* Providers Container with dark background */}
+        <div style={{
+          padding: '15px',
+          backgroundColor: '#2a2a2a',
+          borderRadius: '4px',
+          border: '1px solid #555',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '15px'
+        }}>
+          {/* Web Speech Provider */}
+          <div className="provider-toggle-section" style={{ padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
             <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
               <input
@@ -411,15 +423,27 @@ export const VoiceSettingsTab: React.FC<Props> = ({
             <ul style={{ margin: '0', paddingLeft: '20px' }}>
               <li>Use Google voices for a global audience with diverse language needs</li>
               <li>Combine with Azure voices for maximum quality and cost flexibility</li>
-              <li>Monitor your usage to stay within free tier (500K chars/month)</li>
-              <li>Test voices before using them to ensure quality</li>
+              <li>Monitor your usage to stay within free tier (500K chars/month)</li>              <li>Test voices before using them to ensure quality</li>
             </ul>
           </div>
         </div>
+        </div>
       </div>
 
-      {/* Voice Search and Filters */}
-      <div className="voice-filters">        <input
+      {/* Voice Selection & Testing Container */}
+      <div className="setting-group">
+        <label className="setting-label">
+          Voice Selection & Testing
+        </label>
+
+        <div style={{
+          padding: '15px',
+          backgroundColor: '#2a2a2a',
+          borderRadius: '4px',
+          border: '1px solid #555'
+        }}>
+          {/* Voice Search and Filters */}
+          <div className="voice-filters"><input
           type="text"
           placeholder="🔍 Search voices by name, language, or ID..."
           value={searchTerm}
@@ -455,11 +479,12 @@ export const VoiceSettingsTab: React.FC<Props> = ({
             <option key={gender} value={gender}>
               {gender === 'male' ? '♂️ Male' : gender === 'female' ? '♀️ Female' : '⚧ Neutral'}
             </option>
-          ))}
-        </select>
-      </div>      {/* Voice Selection with Grouped Dropdown */}
-      <div className="setting-group">
-        <label className="setting-label">
+          ))}          </select>
+        </div>
+
+        {/* Voice Selection with Grouped Dropdown */}
+        <div style={{ marginTop: '15px' }}>
+          <label className="setting-label">
           Voice ({visibleCount} of {voiceStats.available} available)
         </label>
 
@@ -514,12 +539,11 @@ export const VoiceSettingsTab: React.FC<Props> = ({
                 </option>
               ))}
             </optgroup>
-          ))}
-        </select>
+          ))}        </select>
       </div>
 
       {/* Volume Control */}
-      <div className="setting-group">
+      <div style={{ marginTop: '15px' }}>
         <label className="setting-label">
           Volume: {settings.volume}%
         </label>
@@ -529,12 +553,11 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           max="100"
           value={settings.volume}
           onChange={(e) => onSettingChange('volume', parseInt(e.target.value))}
-          className="slider"
-        />
+          className="slider"        />
       </div>
 
       {/* Rate Control */}
-      <div className="setting-group">
+      <div style={{ marginTop: '15px' }}>
         <label className="setting-label">
           Speed: {settings.rate}x
         </label>
@@ -545,12 +568,11 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           step="0.1"
           value={settings.rate}
           onChange={(e) => onSettingChange('rate', parseFloat(e.target.value))}
-          className="slider"
-        />
+          className="slider"        />
       </div>
 
       {/* Pitch Control */}
-      <div className="setting-group">
+      <div style={{ marginTop: '15px' }}>
         <label className="setting-label">
           Pitch: {settings.pitch}x
         </label>
@@ -561,12 +583,11 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           step="0.1"
           value={settings.pitch}
           onChange={(e) => onSettingChange('pitch', parseFloat(e.target.value))}
-          className="slider"
-        />
+          className="slider"        />
       </div>
 
       {/* Test Message */}
-      <div className="setting-group">
+      <div style={{ marginTop: '15px' }}>
         <label className="setting-label">
           Test Message
         </label>
@@ -574,10 +595,11 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           value={testMessage}
           onChange={(e) => onTestMessageChange(e.target.value)}
           rows={3}
-          className="test-textarea"
-        />
-      </div>      {/* Test Buttons */}
-      <div className="button-group">
+          className="test-textarea"        />
+      </div>
+
+      {/* Test Buttons */}
+      <div className="button-group" style={{ marginTop: '15px' }}>
         <button
           onClick={onTestVoice}
           disabled={!settings.voiceId || isSpeaking}
@@ -592,7 +614,11 @@ export const VoiceSettingsTab: React.FC<Props> = ({
         >
           ⏹️ Stop
         </button>
-      </div>      {/* Azure Setup Guide Modal */}
+      </div>
+        </div>
+      </div>
+
+      {/* Azure Setup Guide Modal */}
       {showAzureGuide && (
         <AzureSetupGuide
           onClose={handleAzureGuideClose}
