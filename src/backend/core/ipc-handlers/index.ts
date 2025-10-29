@@ -11,6 +11,7 @@ import { setupTTSHandlers, setMainWindowForTTS, initializeTTS } from './tts';
 import { setupDiscordHandlers } from './discord';
 import { setupIRCHandlers, setMainWindowForIRC } from './irc';
 import { setupTTSAccessHandlers } from './tts-access';
+import './twitch-polling'; // Auto-registers handlers
 
 export function setupIpcHandlers(): void {
   setupDatabaseHandlers();
@@ -19,6 +20,7 @@ export function setupIpcHandlers(): void {
   setupDiscordHandlers();
   setupIRCHandlers();
   setupTTSAccessHandlers();
+  // twitch-polling handlers auto-registered on import
 }
 
 export function setMainWindow(mainWindow: BrowserWindow): void {

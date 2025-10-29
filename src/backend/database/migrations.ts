@@ -433,7 +433,6 @@ export function runMigrations(db: Database.Database): void {
   `);  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_grants_active ON channel_point_grants(viewer_id, expires_at)
   `);
-
   // Migration: Add moderator columns to tts_access_config (if not exist)
   const columns = db.prepare(`PRAGMA table_info(tts_access_config)`).all() as any[];
   const hasModColumns = columns.some(col => col.name === 'limited_allow_mod');
@@ -447,7 +446,31 @@ export function runMigrations(db: Database.Database): void {
       ALTER TABLE tts_access_config ADD COLUMN premium_allow_mod INTEGER DEFAULT 0
     `);
     console.log('Moderator columns added successfully');
-  }
+  }  // Create twitch_polling_config table for flexible API polling intervals
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS twitch_polling_config (
+      api_type TEXT PRIMARY KEY,
+      interval_minutes INTEGER NOT NULL DEFAULT 30,
+      enabled INTEGER DEFAULT 1,
+      last_poll_at DATETIME,
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      
+      CHECK (interval_minutes >= 5 AND interval_minutes <= 120),
+      CHECK (api_type IN ('role_sync'))
+    )
+  `);
+
+  // Upsert default polling config for role_sync
+  // Only updates description (build-controlled), preserves user settings (interval_minutes, enabled)
+  db.exec(`
+    INSERT INTO twitch_polling_config (api_type, interval_minutes, description) 
+    VALUES ('role_sync', 30, 'Combined sync for Subscribers, VIPs, and Moderators')
+    ON CONFLICT(api_type) DO UPDATE SET 
+      description = excluded.description,
+      updated_at = CURRENT_TIMESTAMP
+  `);
 
   console.log('Database migrations completed');
 }

@@ -39,11 +39,11 @@ Stream Synth provides streamers with a centralized hub to manage Twitch events, 
     │   IPC   │  │ Files │  │ Database  │
     │Framework│  │System │  │ (SQLite)  │
     └────┬────┘  └───────┘  └───┬──────┘
-         │                       │    ┌────▼────────────────────────▼───┐
-    │  IPC Handlers (80+ handlers)    │
+         │                       │    ┌────▼────────────────────────▼───┐    │  IPC Handlers (85+ handlers)    │
     │  • Database (30)                │
     │  • TTS (20)                     │
     │  • TTS Access (4)               │
+    │  • Twitch Polling (5)           │
     │  • Twitch (8)                   │
     │  • IRC (6)                      │
     │  • Discord (5)                  │
@@ -80,6 +80,7 @@ src/backend/
 │       ├── database.ts              # Database operations (30 handlers)
 │       ├── tts.ts                   # Text-to-speech (20 handlers)
 │       ├── tts-access.ts            # TTS access control (4 handlers)
+│       ├── twitch-polling.ts        # Twitch API polling config (5 handlers)
 │       ├── twitch.ts                # Twitch integration (8 handlers)
 │       ├── irc.ts                   # IRC chat (6 handlers)
 │       ├── discord.ts               # Discord webhooks (5 handlers)
@@ -101,13 +102,15 @@ src/backend/
 │       ├── voices.ts                # TTS voice cache
 │       ├── tts.ts                   # TTS provider settings
 │       ├── tts-access.ts            # TTS access control configuration
-│       └── channel-point-grants.ts  # Channel point redemption tracking
+│       ├── channel-point-grants.ts  # Channel point redemption tracking
+│       └── twitch-polling-config.ts # Twitch API polling intervals
 ├── services/
 │   ├── export-import.ts             # Settings backup/restore
 │   ├── twitch-subscriptions.ts      # Sync subscriptions from Twitch
 │   ├── twitch-vip.ts                # Sync VIPs from Twitch
 │   ├── twitch-moderators.ts         # Sync moderators from Twitch
 │   ├── twitch-role-sync.ts          # Centralized role sync service
+│   ├── dynamic-polling-manager.ts   # Dynamic API polling manager
 │   ├── twitch-irc.ts                # IRC management via tmi.js
 │   ├── tts-access-control.ts        # TTS access rule evaluation
 │   └── tts/
@@ -146,6 +149,7 @@ src/frontend/
 │   ├── database.ts                  # IPC wrapper for database ops
 │   ├── tts.ts                       # IPC wrapper for TTS ops
 │   ├── twitch-api.ts                # IPC wrapper for Twitch ops
+│   ├── twitch-polling.ts            # IPC wrapper for polling config
 │   ├── irc-api.ts                   # IPC wrapper for IRC ops
 │   ├── ipc-client.ts                # Generic IPC client
 │   └── websocket.ts                 # WebSocket management
@@ -310,13 +314,31 @@ Everyone can use TTS, but only specific viewers can use premium voices (Azure/Go
 
 ### Automatic Role Syncing
 
-Viewer roles (Subscribers, VIPs, Moderators) are automatically synced:
+Viewer roles (Subscribers, VIPs, Moderators) are automatically synced from Twitch Helix APIs:
 - ✅ **On Startup** - When app launches
 - ✅ **On OAuth Connection** - After successful authentication
-- ✅ **Every 30 Minutes** - Background periodic sync
+- ✅ **Periodic Background Sync** - Configurable interval (default: every 30 minutes)
 - ✅ **Manual Sync** - Via "Sync Viewer Roles" button
 
 **Implementation:** Centralized `twitch-role-sync.ts` service with parallel API execution for 3x speed improvement.
+
+**Customization:** Configure sync frequency in **Advanced Settings** (5-120 minutes, default: 30 minutes).
+
+### Dynamic Polling Framework
+
+Stream Synth includes a **flexible polling framework** for managing Twitch Helix API request intervals. Users can customize how often the app syncs data from Twitch.
+
+**Features:**
+- 🎚️ **Configurable Intervals** - Adjust polling frequency from 5 to 120 minutes
+- ⚡ **Dynamic Updates** - Changes take effect immediately without app restart
+- 🔘 **Enable/Disable Toggle** - Turn polling on/off per API type
+- 📊 **Real-Time Status** - See which pollers are active and when they last ran
+- 🔮 **Future-Proof** - Easily extensible for new API endpoints
+
+**Available in:** Advanced Settings → Twitch API Polling Settings
+
+**Current API Types:**
+- `role_sync` - Combined sync for Subscribers, VIPs, and Moderators (active)
 
 ### Premium Voice Mutual Exclusion
 
