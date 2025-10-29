@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import * as ttsService from '../../services/tts';
 import { VoiceSettingsTab } from './tabs/VoiceSettingsTab';
 import { TTSRulesTab } from './tabs/TTSRulesTab';
-import { ViewersTab } from './tabs/ViewersTab';
+import { TTSAccessTab } from './tabs/TTSAccessTab';
+import { ViewerRulesTab } from './tabs/ViewerRulesTab';
 import './tts.css';
 
 interface VoiceGroup {
@@ -18,7 +19,7 @@ interface VoiceGroup {
   }>;
 }
 
-type TabType = 'settings' | 'rules' | 'viewers';
+type TabType = 'settings' | 'rules' | 'access' | 'viewer-rules';
 
 export const TTS: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('settings');
@@ -29,28 +30,14 @@ export const TTS: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState('Hello! This is a test of the text to speech system.');
   const [isSpeaking, setIsSpeaking] = useState(false);
-  // Rescan state
   const [rescanningProvider, setRescanningProvider] = useState<string | null>(null);
   const [rescanMessages, setRescanMessages] = useState<{ [key: string]: string }>({});
-  // Voice filtering state
   const [searchTerm, setSearchTerm] = useState('');
   const [languageFilter, setLanguageFilter] = useState('all');
   const [genderFilter, setGenderFilter] = useState('all');
   const [providerFilter, setProviderFilter] = useState('all');
   const [voiceStats, setVoiceStats] = useState({ total: 0, available: 0, unavailable: 0 });
 
-  // Viewer tab state
-  const [viewerSearchTerm, setViewerSearchTerm] = useState('');
-  const [viewerSearchResults, setViewerSearchResults] = useState<Array<{ id: string; username: string; display_name?: string }>>([]);
-  const [selectedViewer, setSelectedViewer] = useState<string | null>(null);
-  const [viewerRule, setViewerRule] = useState<ttsService.ViewerTTSRule | null>(null);
-  // Viewer voice filters
-  const [viewerVoiceSearch, setViewerVoiceSearch] = useState('');
-  const [viewerLanguageFilter, setViewerLanguageFilter] = useState('all');
-  const [viewerGenderFilter, setViewerGenderFilter] = useState('all');
-  const [viewerProviderFilter, setViewerProviderFilter] = useState('all');
-
-  // Load initial data
   useEffect(() => {
     loadData();
   }, []);
@@ -68,7 +55,6 @@ export const TTS: React.FC = () => {
       setSettings(loadedSettings);
       setProviders(loadedProviders);
 
-      // Load voices for current provider
       if (loadedSettings) {
         await syncAndLoadVoices(loadedSettings);
         await loadVoiceStats();
@@ -85,11 +71,9 @@ export const TTS: React.FC = () => {
     try {
       console.log('[TTS Screen] Loading voices from database...');
 
-      // Load grouped voices from database (voices are synced on app startup, not here)
       const grouped = await ttsService.getGroupedVoices();
       console.log('[TTS Screen] Got grouped voices:', grouped);
 
-      // Convert Record to array of VoiceGroup objects
       const groupArray: VoiceGroup[] = Object.entries(grouped).map(([category, voices]) => ({
         category,
         voices: voices as any[]
@@ -112,28 +96,27 @@ export const TTS: React.FC = () => {
       console.error('[TTS Screen] Error loading voice stats:', err);
     }
   };
-  // Handle provider toggle (enable/disable provider voices in database)
+
   const handleProviderToggle = async (provider: 'webspeech' | 'azure' | 'google', enabled: boolean) => {
     try {
       console.log(`[TTS] Toggling ${provider} provider:`, enabled);
 
-      // Save the enable setting
       await ttsService.saveSettings({ [`${provider}Enabled`]: enabled } as any);
       setSettings(prev => prev ? { ...prev, [`${provider}Enabled`]: enabled } : null);
 
-      // For other providers, just toggle availability
       const { ipcRenderer } = window.require('electron');
       await ipcRenderer.invoke('provider:toggle', { provider, enabled });
       console.log(`[TTS] Provider ${provider} ${enabled ? 'enabled' : 'disabled'}`);
 
-      // Reload voices
       await syncAndLoadVoices();
       await loadVoiceStats();
     } catch (err: any) {
       setError(err.message);
       console.error(`[TTS] Error toggling ${provider} provider:`, err);
     }
-  };  const handleProviderRescan = async (provider: 'webspeech' | 'azure' | 'google') => {
+  };
+
+  const handleProviderRescan = async (provider: 'webspeech' | 'azure' | 'google') => {
     try {
       setRescanningProvider(provider);
       setRescanMessages(prev => ({ ...prev, [provider]: 'Rescanning...' }));
@@ -142,55 +125,50 @@ export const TTS: React.FC = () => {
 
       const { ipcRenderer } = window.require('electron');
       
-      // For Azure: use sync-voices handler with stored credentials
       if (provider === 'azure') {
         const currentSettings = await ttsService.getSettings();
         if (!currentSettings?.azureApiKey || !currentSettings?.azureRegion) {
           throw new Error('Azure not configured. Please set up Azure first.');
         }
-        
-        console.log(`[TTS] Rescanning Azure with stored credentials for region: ${currentSettings.azureRegion}`);
+          console.log(`[TTS] Rescanning Azure with stored credentials for region: ${currentSettings.azureRegion}`);
         const result = await ipcRenderer.invoke('azure:sync-voices', {
           apiKey: currentSettings.azureApiKey,
           region: currentSettings.azureRegion
         });
 
         if (result.success) {
-          console.log(`[TTS] Azure rescan complete: ${result.voiceCount} voices found`);
+          const data = result.data;
+          console.log(`[TTS] Azure rescan complete: ${data.voiceCount} voices found`);
           
-          // Reload voice list from database
           await syncAndLoadVoices();
           await loadVoiceStats();
 
-          setRescanMessages(prev => ({ ...prev, [provider]: `✓ Azure rescanned: ${result.voiceCount} voices found` }));
+          setRescanMessages(prev => ({ ...prev, [provider]: `✓ Azure rescanned: ${data.voiceCount} voices found` }));
         } else {
           throw new Error(result.error || 'Azure rescan failed');
         }
       } else if (provider === 'google') {
-        // For Google: use sync-voices handler with stored credentials
         const currentSettings = await ttsService.getSettings();
         if (!currentSettings?.googleApiKey) {
           throw new Error('Google not configured. Please set up Google Cloud first.');
         }
-        
-        console.log(`[TTS] Rescanning Google with stored credentials`);
+          console.log(`[TTS] Rescanning Google with stored credentials`);
         const result = await ipcRenderer.invoke('google:sync-voices', {
           apiKey: currentSettings.googleApiKey
         });
 
         if (result.success) {
-          console.log(`[TTS] Google rescan complete: ${result.voiceCount} voices found`);
+          const data = result.data;
+          console.log(`[TTS] Google rescan complete: ${data.voiceCount} voices found`);
           
-          // Reload voice list from database
           await syncAndLoadVoices();
           await loadVoiceStats();
 
-          setRescanMessages(prev => ({ ...prev, [provider]: `✓ Google rescanned: ${result.voiceCount} voices found` }));
+          setRescanMessages(prev => ({ ...prev, [provider]: `✓ Google rescanned: ${data.voiceCount} voices found` }));
         } else {
           throw new Error(result.error || 'Google rescan failed');
         }
       } else {
-        // For WebSpeech: get voices and rescan
         let currentVoices: any[] = [];
         if (provider === 'webspeech') {
           if (!window.speechSynthesis) {
@@ -199,7 +177,6 @@ export const TTS: React.FC = () => {
           const rawVoices = window.speechSynthesis.getVoices();
           console.log(`[TTS] Found ${rawVoices.length} Web Speech voices for rescan`);
 
-          // Convert SpeechSynthesisVoice objects to plain objects for IPC serialization
           currentVoices = rawVoices.map(v => ({
             name: v.name,
             lang: v.lang,
@@ -208,26 +185,23 @@ export const TTS: React.FC = () => {
             default: v.default
           }));
 
-          console.log(`[TTS] Serialized voices for IPC:`, currentVoices[0]); // Log first voice to verify
-        }
-
-        if (currentVoices.length === 0) {
+          console.log(`[TTS] Serialized voices for IPC:`, currentVoices[0]);
+        }        if (currentVoices.length === 0) {
           throw new Error(`No ${provider} voices available to rescan`);
         }
 
-        // Call backend to rescan immediately
-        const result = await ipcRenderer.invoke('provider:rescan-immediate', provider, currentVoices);
+        const response = await ipcRenderer.invoke('provider:rescan-immediate', { provider, voices: currentVoices });
 
-        if (result.success) {
-          console.log(`[TTS] Rescan complete: ${result.count} voices found`);
+        if (response.success) {
+          const data = response.data;
+          console.log(`[TTS] Rescan complete: ${data.count} voices found`);
 
-          // Reload voice list from database
           await syncAndLoadVoices();
           await loadVoiceStats();
 
-          setRescanMessages(prev => ({ ...prev, [provider]: `✓ ${provider} rescanned: ${result.count} voices found` }));
+          setRescanMessages(prev => ({ ...prev, [provider]: `✓ ${provider} rescanned: ${data.count} voices found` }));
         } else {
-          throw new Error(result.error || 'Rescan failed');
+          throw new Error(response.error || 'Rescan failed');
         }
       }
     } catch (err: any) {
@@ -235,7 +209,6 @@ export const TTS: React.FC = () => {
       setRescanMessages(prev => ({ ...prev, [provider]: `❌ Error: ${err.message}` }));
     } finally {
       setRescanningProvider(null);
-      // Clear message after 5 seconds
       setTimeout(() => {
         setRescanMessages(prev => {
           const newMessages = { ...prev };
@@ -244,10 +217,31 @@ export const TTS: React.FC = () => {
         });
       }, 5000);
     }
-  };
-
-  const handleSettingChange = async (key: keyof ttsService.TTSSettings, value: any) => {
+  };  const handleSettingChange = async (key: keyof ttsService.TTSSettings, value: any) => {
     try {
+      // Special validation for voiceId changes
+      if (key === 'voiceId') {
+        const voiceIdStr = String(value);
+        const isPremiumVoice = voiceIdStr.startsWith('azure_') || voiceIdStr.startsWith('google_');
+        
+        if (isPremiumVoice) {
+          // Check if Premium Voice Access mode is enabled
+          const { ipcRenderer } = window.require('electron');
+          const response = await ipcRenderer.invoke('tts-access:get-config');
+          
+          if (response.success && response.data) {
+            const accessMode = response.data.access_mode;
+            
+            if (accessMode === 'premium_voice_access') {
+              setError('Premium Voice Access mode is currently enabled. Remove the Premium Voice Access setting in the TTS Access tab first.');
+              // Clear error after 8 seconds (longer for user to read)
+              setTimeout(() => setError(null), 8000);
+              return;
+            }
+          }
+        }
+      }
+
       console.log(`[TTS] Saving ${key}:`, value);
       await ttsService.saveSettings({ [key]: value });
       setSettings(prev => prev ? { ...prev, [key]: value } : null);
@@ -281,7 +275,6 @@ export const TTS: React.FC = () => {
     } catch (err: any) {
       setError(err.message);
     } finally {
-      // Reset after a delay (speech might still be playing)
       setTimeout(() => setIsSpeaking(false), 1000);
     }
   };
@@ -294,25 +287,22 @@ export const TTS: React.FC = () => {
       setError(err.message);
     }
   };
-  // Get unique languages from voice groups, filtered by provider and enabled status
+
   const getUniqueLanguages = (): string[] => {
     if (!settings) return [];
 
     const languages = new Set<string>();
     voiceGroups.forEach(group => {
       group.voices.forEach(voice => {
-        // Check if provider is enabled
         const voiceIdStr = voice.voice_id || '';
         const isWebSpeech = !voiceIdStr.startsWith('azure_') && !voiceIdStr.startsWith('google_');
         const isAzure = voiceIdStr.startsWith('azure_');
         const isGoogle = voiceIdStr.startsWith('google_');
 
-        // Only include voices from enabled providers
         if (isWebSpeech && !(settings.webspeechEnabled ?? true)) return;
         if (isAzure && !(settings.azureEnabled ?? false)) return;
         if (isGoogle && !(settings.googleEnabled ?? false)) return;
 
-        // Only include voices from selected provider filter
         if (providerFilter !== 'all' && voice.provider !== providerFilter) return;
 
         languages.add(voice.language_name);
@@ -321,28 +311,23 @@ export const TTS: React.FC = () => {
     return Array.from(languages).sort();
   };
 
-  // Get available genders for current filters
   const getAvailableGenders = (): string[] => {
     if (!settings) return [];
 
     const genders = new Set<string>();
     voiceGroups.forEach(group => {
       group.voices.forEach(voice => {
-        // Check if provider is enabled
         const voiceIdStr = voice.voice_id || '';
         const isWebSpeech = !voiceIdStr.startsWith('azure_') && !voiceIdStr.startsWith('google_');
         const isAzure = voiceIdStr.startsWith('azure_');
         const isGoogle = voiceIdStr.startsWith('google_');
 
-        // Only include voices from enabled providers
         if (isWebSpeech && !(settings.webspeechEnabled ?? true)) return;
         if (isAzure && !(settings.azureEnabled ?? false)) return;
         if (isGoogle && !(settings.googleEnabled ?? false)) return;
 
-        // Only include voices from selected provider filter
         if (providerFilter !== 'all' && voice.provider !== providerFilter) return;
 
-        // Only include voices from selected language filter
         if (languageFilter !== 'all' && voice.language_name !== languageFilter) return;
 
         if (voice.gender) {
@@ -353,7 +338,6 @@ export const TTS: React.FC = () => {
     return Array.from(genders).sort();
   };
 
-  // Get available providers based on enabled settings
   const getAvailableProviders = (): Array<{ value: string; label: string }> => {
     if (!settings) return [];
 
@@ -372,25 +356,21 @@ export const TTS: React.FC = () => {
     return providers;
   };
 
-  // Filter voices based on search and filters
   const getFilteredGroups = (): VoiceGroup[] => {
     if (!settings) return [];
 
     return voiceGroups.map(group => ({
       ...group,
       voices: group.voices.filter(voice => {
-        // Check if provider is enabled
         const voiceIdStr = voice.voice_id || '';
         const isWebSpeech = !voiceIdStr.startsWith('azure_') && !voiceIdStr.startsWith('google_');
         const isAzure = voiceIdStr.startsWith('azure_');
         const isGoogle = voiceIdStr.startsWith('google_');
 
-        // Only show voices from enabled providers
         if (isWebSpeech && !(settings.webspeechEnabled ?? true)) return false;
         if (isAzure && !(settings.azureEnabled ?? false)) return false;
         if (isGoogle && !(settings.googleEnabled ?? false)) return false;
 
-        // Search filter
         const searchLower = searchTerm.toLowerCase();
         const matchesSearch = !searchTerm ||
           voice.name.toLowerCase().includes(searchLower) ||
@@ -398,24 +378,20 @@ export const TTS: React.FC = () => {
           voice.region.toLowerCase().includes(searchLower) ||
           voice.id.toString().includes(searchTerm);
 
-        // Provider filter
         const matchesProvider = providerFilter === 'all' || voice.provider === providerFilter;
 
-        // Language filter
         const matchesLanguage = languageFilter === 'all' || voice.language_name === languageFilter;
 
-        // Gender filter
         const matchesGender = genderFilter === 'all' || voice.gender === genderFilter;
 
         return matchesSearch && matchesProvider && matchesLanguage && matchesGender;
       })
     })).filter(group => group.voices.length > 0);
   };
+
   const formatVoiceOption = (voice: VoiceGroup['voices'][0]): string => {
     const genderIcon = voice.gender === 'male' ? '♂️' : voice.gender === 'female' ? '♀️' : '⚧';
     const id = voice.id.toString().padStart(3, '0');
-
-    // Include region if available to differentiate voices with same name
     const location = voice.region ? ` (${voice.region})` : '';
 
     return `${id} │ ${voice.provider} │ ${voice.name}${location} ${genderIcon}`;
@@ -425,262 +401,16 @@ export const TTS: React.FC = () => {
     return getFilteredGroups().reduce((sum, group) => sum + group.voices.length, 0);
   };
 
-  // Get voice counts by provider (only WebSpeech)
   const getProviderVoiceCounts = () => {
     const counts = { webspeech: 0 };
 
     voiceGroups.forEach(group => {
       group.voices.forEach(voice => {
-        // All available voices are Web Speech (Azure and Google are disabled)
         counts.webspeech++;
       });
     });
 
     return counts;
-  };
-
-  // Viewer tab handlers
-  const handleViewerSearch = async (query: string) => {
-    setViewerSearchTerm(query);
-
-    if (query.length < 2) {
-      setViewerSearchResults([]);
-      return;
-    }
-
-    try {
-      const { ipcRenderer } = window.require('electron');
-      const result = await ipcRenderer.invoke('db:search-viewers', query, 10);
-      if (result.success) {
-        setViewerSearchResults(result.viewers);
-      }
-    } catch (err: any) {
-      console.error('[Viewers] Error searching viewers:', err);
-    }
-  };
-
-  const handleSelectViewer = async (username: string) => {
-    setSelectedViewer(username);
-    setViewerSearchTerm('');
-    setViewerSearchResults([]);
-
-    try {
-      const rule = await ttsService.getViewerRule(username);
-      setViewerRule(rule);
-    } catch (err: any) {
-      console.error('[Viewers] Error loading viewer rule:', err);
-      setError(err.message);
-    }
-  };
-
-  const handleCreateRule = async () => {
-    if (!selectedViewer) return;
-
-    try {
-      const rule = await ttsService.createViewerRule({
-        username: selectedViewer,
-        customVoiceId: null,
-        pitchOverride: null,
-        rateOverride: null,
-        isMuted: false,
-        mutedUntil: null,
-        cooldownEnabled: false,
-        cooldownSeconds: null,
-        cooldownUntil: null
-      });
-      setViewerRule(rule);
-    } catch (err: any) {
-      console.error('[Viewers] Error creating rule:', err);
-      setError(err.message);
-    }
-  };
-
-  const handleDeleteRule = async () => {
-    if (!selectedViewer) return;
-
-    if (!viewerRule) {
-      // Just close the viewer section
-      setSelectedViewer(null);
-      return;
-    }
-
-    if (!confirm(`Delete all custom rules for ${selectedViewer}?`)) {
-      return;
-    }
-
-    try {
-      await ttsService.deleteViewerRule(selectedViewer);
-      setViewerRule(null);
-      setSelectedViewer(null);
-    } catch (err: any) {
-      console.error('[Viewers] Error deleting rule:', err);
-      setError(err.message);
-    }
-  };
-
-  const handleUpdateRule = async (updates: Partial<ttsService.ViewerTTSRuleInput>) => {
-    if (!selectedViewer || !viewerRule) return;
-
-    try {
-      const updated = await ttsService.updateViewerRule(selectedViewer, updates);
-      if (updated) {
-        setViewerRule(updated);
-      }
-    } catch (err: any) {
-      console.error('[Viewers] Error updating rule:', err);
-      setError(err.message);
-    }
-  };
-
-  const handleMuteChange = async (muted: boolean) => {
-    if (!selectedViewer || !viewerRule) return;
-
-    try {
-      const updates: Partial<ttsService.ViewerTTSRuleInput> = {
-        isMuted: muted,
-        mutedUntil: muted ? null : null // null means permanent when muted
-      };
-      const updated = await ttsService.updateViewerRule(selectedViewer, updates);
-      if (updated) {
-        setViewerRule(updated);
-      }
-    } catch (err: any) {
-      console.error('[Viewers] Error updating mute:', err);
-      setError(err.message);
-    }
-  };
-
-  const handleMuteDurationChange = async (minutes: number) => {
-    if (!selectedViewer || !viewerRule) return;
-
-    try {
-      let mutedUntil: string | null = null;
-      if (minutes > 0) {
-        const until = new Date();
-        until.setMinutes(until.getMinutes() + minutes);
-        mutedUntil = until.toISOString();
-      }
-
-      const updated = await ttsService.updateViewerRule(selectedViewer, { mutedUntil });
-      if (updated) {
-        setViewerRule(updated);
-      }
-    } catch (err: any) {
-      console.error('[Viewers] Error updating mute duration:', err);
-      setError(err.message);
-    }
-  };
-
-  const getMuteDurationMinutes = (): number => {
-    if (!viewerRule || !viewerRule.mutedUntil) return 0;
-
-    const until = new Date(viewerRule.mutedUntil).getTime();
-    const now = Date.now();
-    const diffMs = until - now;
-    const diffMinutes = Math.ceil(diffMs / (1000 * 60));
-
-    return Math.max(0, diffMinutes);
-  };
-
-  const handleCooldownChange = async (enabled: boolean) => {
-    if (!selectedViewer || !viewerRule) return;
-
-    try {
-      const updates: Partial<ttsService.ViewerTTSRuleInput> = {
-        cooldownEnabled: enabled,
-        cooldownUntil: enabled ? null : null // null means permanent when enabled
-      };
-      const updated = await ttsService.updateViewerRule(selectedViewer, updates);
-      if (updated) {
-        setViewerRule(updated);
-      }
-    } catch (err: any) {
-      console.error('[Viewers] Error updating cooldown:', err);
-      setError(err.message);
-    }
-  };
-
-  const handleCooldownDurationChange = async (minutes: number) => {
-    if (!selectedViewer || !viewerRule) return;
-
-    try {
-      let cooldownUntil: string | null = null;
-      if (minutes > 0) {
-        const until = new Date();
-        until.setMinutes(until.getMinutes() + minutes);
-        cooldownUntil = until.toISOString();
-      }
-
-      const updated = await ttsService.updateViewerRule(selectedViewer, { cooldownUntil });
-      if (updated) {
-        setViewerRule(updated);
-      }
-    } catch (err: any) {
-      console.error('[Viewers] Error updating cooldown duration:', err);
-      setError(err.message);
-    }
-  };
-
-  const getCooldownDurationMinutes = (): number => {
-    if (!viewerRule || !viewerRule.cooldownUntil) return 0;
-
-    const until = new Date(viewerRule.cooldownUntil).getTime();
-    const now = Date.now();
-    const diffMs = until - now;
-    const diffMinutes = Math.ceil(diffMs / (1000 * 60));
-
-    return Math.max(0, diffMinutes);
-  };
-
-  const handleResetVoice = async () => {
-    if (!selectedViewer) return;
-    await handleUpdateRule({ customVoiceId: null });
-  };
-  // Get filtered voice groups for viewer voice picker
-  const getViewerFilteredGroups = () => {
-    if (!voiceGroups.length || !settings) return [];
-
-    return voiceGroups
-      .map(group => ({
-        ...group,
-        voices: group.voices.filter(voice => {
-          // Only show available voices from ENABLED providers
-          const voiceId = voice.voice_id || '';
-
-          // Check if voice provider is enabled
-          const isWebSpeech = !voiceId.startsWith('azure_') && !voiceId.startsWith('google_');
-          const isAzure = voiceId.startsWith('azure_');
-          const isGoogle = voiceId.startsWith('google_');
-
-          // Skip based on provider enable state
-          if (isGoogle) return false; // Google always disabled
-          if (isAzure && !(settings.azureEnabled ?? false)) return false;
-          if (isWebSpeech && !(settings.webspeechEnabled ?? false)) return false;
-
-          // Provider filter dropdown
-          const matchesProvider = 
-            viewerProviderFilter === 'all' ||
-            (viewerProviderFilter === 'webspeech' && isWebSpeech) ||
-            (viewerProviderFilter === 'azure' && isAzure) ||
-            (viewerProviderFilter === 'google' && isGoogle);
-
-          if (!matchesProvider) return false;
-
-          const matchesSearch = !viewerVoiceSearch ||
-            voice.name.toLowerCase().includes(viewerVoiceSearch.toLowerCase()) ||
-            voice.voice_id.toString().includes(viewerVoiceSearch);
-
-          const matchesLanguage = viewerLanguageFilter === 'all' || voice.language_name === viewerLanguageFilter;
-          const matchesGender = viewerGenderFilter === 'all' || voice.gender === viewerGenderFilter;
-
-          return matchesSearch && matchesLanguage && matchesGender;
-        })
-      }))
-      .filter(group => group.voices.length > 0);
-  };
-
-  const getViewerVisibleVoiceCount = () => {
-    return getViewerFilteredGroups().reduce((sum, group) => sum + group.voices.length, 0);
   };
 
   if (loading && !settings) {
@@ -704,7 +434,6 @@ export const TTS: React.FC = () => {
   const filteredGroups = getFilteredGroups();
   const visibleCount = getVisibleVoiceCount();
   const providerCounts = getProviderVoiceCounts();
-  const viewerFilteredGroups = getViewerFilteredGroups();
 
   return (
     <div className="tts-container">
@@ -716,12 +445,10 @@ export const TTS: React.FC = () => {
         </div>
       )}
 
-      {/* Tab Navigation */}
       <div className="tab-navigation">
         <button
           className={`tab-button ${activeTab === 'settings' ? 'active' : ''}`}
-          onClick={() => setActiveTab('settings')}
-        >
+          onClick={() => setActiveTab('settings')}      >
           🎙️ Voice Settings
         </button>
         <button
@@ -731,15 +458,20 @@ export const TTS: React.FC = () => {
           📋 TTS Rules
         </button>
         <button
-          className={`tab-button ${activeTab === 'viewers' ? 'active' : ''}`}
-          onClick={() => setActiveTab('viewers')}
+          className={`tab-button ${activeTab === 'access' ? 'active' : ''}`}
+          onClick={() => setActiveTab('access')}
         >
-          👤 Viewers
+          🔐 TTS Access
         </button>
-      </div>
-
-      {/* Tab Content */}
-      {activeTab === 'settings' && (        <div className="tab-content">          <VoiceSettingsTab
+        <button
+          className={`tab-button ${activeTab === 'viewer-rules' ? 'active' : ''}`}
+          onClick={() => setActiveTab('viewer-rules')}
+        >
+          👤 Viewer Rules
+        </button>
+      </div>      {activeTab === 'settings' && (
+        <div className="tab-content">
+          <VoiceSettingsTab
             settings={settings}
             voiceGroups={voiceGroups}
             voiceStats={voiceStats}
@@ -751,6 +483,7 @@ export const TTS: React.FC = () => {
             languageFilter={languageFilter}
             genderFilter={genderFilter}
             providerFilter={providerFilter}
+            error={error}
             onSettingChange={handleSettingChange}
             onTestVoice={handleTestVoice}
             onStop={handleStop}
@@ -759,7 +492,9 @@ export const TTS: React.FC = () => {
             onProviderRescan={handleProviderRescan}
             onSearchChange={setSearchTerm}
             onLanguageFilterChange={setLanguageFilter}
-            onGenderFilterChange={setGenderFilter}            onProviderFilterChange={setProviderFilter}
+            onGenderFilterChange={setGenderFilter}
+            onProviderFilterChange={setProviderFilter}
+            onErrorClear={() => setError(null)}
             getUniqueLanguages={getUniqueLanguages}
             getAvailableGenders={getAvailableGenders}
             getAvailableProviders={getAvailableProviders}
@@ -778,39 +513,23 @@ export const TTS: React.FC = () => {
             onSettingChange={handleSettingChange}
           />
         </div>
-      )}      {activeTab === 'viewers' && (
+      )}      {activeTab === 'access' && (
         <div className="tab-content">
-          <ViewersTab
-            settings={settings}
-            voiceGroups={viewerFilteredGroups}
-            voiceStats={voiceStats}
-            viewerSearchTerm={viewerSearchTerm}
-            viewerSearchResults={viewerSearchResults}
-            selectedViewer={selectedViewer}
-            viewerRule={viewerRule}
-            viewerVoiceSearch={viewerVoiceSearch}
-            viewerLanguageFilter={viewerLanguageFilter}
-            viewerGenderFilter={viewerGenderFilter}
-            viewerProviderFilter={viewerProviderFilter}
-            onViewerSearch={handleViewerSearch}
-            onSelectViewer={handleSelectViewer}
-            onCreateRule={handleCreateRule}
-            onDeleteRule={handleDeleteRule}
-            onUpdateRule={handleUpdateRule}
-            onMuteChange={handleMuteChange}
-            onMuteDurationChange={handleMuteDurationChange}
-            getMuteDurationMinutes={getMuteDurationMinutes}
-            onCooldownChange={handleCooldownChange}
-            onCooldownDurationChange={handleCooldownDurationChange}
-            getCooldownDurationMinutes={getCooldownDurationMinutes}
-            onViewerVoiceSearchChange={setViewerVoiceSearch}
-            onViewerLanguageFilterChange={setViewerLanguageFilter}            onViewerGenderFilterChange={setViewerGenderFilter}
-            onViewerProviderFilterChange={setViewerProviderFilter}
-            onResetVoice={handleResetVoice}
-            getUniqueLanguages={getUniqueLanguages}
-            getViewerFilteredGroups={getViewerFilteredGroups}
-            getViewerVisibleVoiceCount={getViewerVisibleVoiceCount}
-            formatVoiceOption={formatVoiceOption}
+          <TTSAccessTab
+            globalVoiceProvider={
+              settings?.voiceId?.startsWith('azure_') ? 'azure' :
+              settings?.voiceId?.startsWith('google_') ? 'google' :
+              'webspeech'
+            }
+          />
+        </div>
+      )}
+
+      {activeTab === 'viewer-rules' && (
+        <div className="tab-content">
+          <ViewerRulesTab
+            voiceGroups={voiceGroups}
+            accessMode={'access_all'}
           />
         </div>
       )}

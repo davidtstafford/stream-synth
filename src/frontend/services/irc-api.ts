@@ -33,8 +33,12 @@ export async function connectIRC(
   channel?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const result = await ipcRenderer.invoke('irc:connect', username, token, channel);
-    return result;
+    const response = await ipcRenderer.invoke('irc:connect', { username, token, channel });
+    if (response.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: response.error };
+    }
   } catch (error) {
     console.error('[IRC API] Connection error:', error);
     return {
@@ -49,8 +53,12 @@ export async function connectIRC(
  */
 export async function disconnectIRC(): Promise<{ success: boolean; error?: string }> {
   try {
-    const result = await ipcRenderer.invoke('irc:disconnect');
-    return result;
+    const response = await ipcRenderer.invoke('irc:disconnect');
+    if (response.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: response.error };
+    }
   } catch (error) {
     console.error('[IRC API] Disconnect error:', error);
     return {
@@ -70,8 +78,12 @@ export async function sendChatMessage(
   channel?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const result = await ipcRenderer.invoke('irc:send-message', message, channel);
-    return result;
+    const response = await ipcRenderer.invoke('irc:send-message', { message, channel });
+    if (response.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: response.error };
+    }
   } catch (error) {
     console.error('[IRC API] Send message error:', error);
     return {
@@ -86,8 +98,17 @@ export async function sendChatMessage(
  */
 export async function getIRCStatus(): Promise<IRCConnectionStatus> {
   try {
-    const status = await ipcRenderer.invoke('irc:get-status');
-    return status;
+    const response = await ipcRenderer.invoke('irc:get-status');
+    if (response.success) {
+      return response.data;
+    } else {
+      return {
+        connected: false,
+        channel: null,
+        username: null,
+        error: response.error || 'Unknown error',
+      };
+    }
   } catch (error) {
     console.error('[IRC API] Get status error:', error);
     return {
@@ -105,8 +126,12 @@ export async function getIRCStatus(): Promise<IRCConnectionStatus> {
  */
 export async function joinChannel(channel: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const result = await ipcRenderer.invoke('irc:join-channel', channel);
-    return result;
+    const response = await ipcRenderer.invoke('irc:join-channel', channel);
+    if (response.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: response.error };
+    }
   } catch (error) {
     console.error('[IRC API] Join channel error:', error);
     return {
@@ -122,8 +147,12 @@ export async function joinChannel(channel: string): Promise<{ success: boolean; 
  */
 export async function leaveChannel(channel: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const result = await ipcRenderer.invoke('irc:leave-channel', channel);
-    return result;
+    const response = await ipcRenderer.invoke('irc:leave-channel', channel);
+    if (response.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: response.error };
+    }
   } catch (error) {
     console.error('[IRC API] Leave channel error:', error);
     return {

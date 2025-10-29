@@ -40,8 +40,7 @@ export interface TTSSettings {
   userCooldownEnabled?: boolean;
   userCooldownSeconds?: number;
   globalCooldownEnabled?: boolean;
-  globalCooldownSeconds?: number;
-  maxQueueSize?: number;
+  globalCooldownSeconds?: number;  maxQueueSize?: number;
   // Emote/Emoji Limits
   maxEmotesPerMessage?: number;
   maxEmojisPerMessage?: number;
@@ -51,6 +50,7 @@ export interface TTSSettings {
   maxRepeatedWords?: number;
   // Content Filters
   copypastaFilterEnabled?: boolean;
+  blockedWords?: string[];
 }
 
 export interface TTSOptions {
@@ -60,64 +60,37 @@ export interface TTSOptions {
   pitch?: number;
 }
 
-// Auto-sync WebSpeech voices to database
-export async function autoSyncWebSpeechVoices(): Promise<number> {
+/**
+ * Sync WebSpeech voices to database
+ * @param checkIfNeeded - If true, check with backend if sync is needed (for startup)
+ *                        If false, always sync (for manual refresh)
+ * @returns Promise with success status and voice count
+ */
+export async function syncWebSpeechVoices(checkIfNeeded: boolean = false): Promise<{ success: boolean; count: number }> {
   try {
-    if (!window.speechSynthesis) {
-      console.warn('[TTS] Web Speech API not available');
-      return 0;
-    }
-
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length === 0) {
-      console.log('[TTS] No WebSpeech voices to sync');
-      return 0;
-    }
-
-    console.log(`[TTS] Auto-syncing ${voices.length} WebSpeech voices...`);
-
-    // Convert browser voices to TTSVoice format
-    const ttsVoices = mapWebSpeechVoices();
-    
-    // Send to backend for syncing
-    const result = await ipcRenderer.invoke('tts:sync-voices', 'webspeech', ttsVoices);
-    
-    if (result.success) {
-      console.log(`[TTS] Auto-synced ${result.count} WebSpeech voices`);
-      return result.count;
-    } else {
-      console.error('[TTS] Failed to sync WebSpeech voices:', result.error);
-      return 0;
-    }
-  } catch (error) {
-    console.error('[TTS] Error in autoSyncWebSpeechVoices:', error);
-    return 0;
-  }
-}
-
-// Initialize voice syncing on app startup (one-time per provider)
-export async function initializeVoiceSync(): Promise<{ success: boolean; count: number }> {
-  try {
-    console.log('[TTS] Checking if voice sync is needed...');
+    console.log(`[TTS] ${checkIfNeeded ? 'Checking' : 'Starting'} WebSpeech voice sync...`);
     
     if (!window.speechSynthesis) {
       console.warn('[TTS] Web Speech API not available');
       return { success: true, count: 0 };
     }
 
-    // Check with backend if WebSpeech voices need syncing
-    const syncNeeded = await ipcRenderer.invoke('provider:check-sync-needed', 'webspeech');
-    
-    if (!syncNeeded) {
-      console.log('[TTS] WebSpeech voices already synced, skipping');
-      return { success: true, count: 0 };
-    }    console.log('[TTS] WebSpeech voices need syncing, performing sync...');
-    
+    // If checking is enabled, verify sync is needed
+    if (checkIfNeeded) {
+      const syncNeeded = await ipcRenderer.invoke('provider:check-sync-needed', 'webspeech');
+      if (!syncNeeded) {
+        console.log('[TTS] WebSpeech voices already synced, skipping');
+        return { success: true, count: 0 };
+      }
+    }
+
     const rawVoices = window.speechSynthesis.getVoices();
     if (rawVoices.length === 0) {
-      console.log('[TTS] No WebSpeech voices available to sync');
+      console.log('[TTS] No WebSpeech voices available');
       return { success: true, count: 0 };
     }
+
+    console.log(`[TTS] Found ${rawVoices.length} WebSpeech voices, sending to backend...`);
 
     // Convert SpeechSynthesisVoice objects to plain objects for IPC serialization
     const serializedVoices = rawVoices.map(v => ({
@@ -126,21 +99,37 @@ export async function initializeVoiceSync(): Promise<{ success: boolean; count: 
       voiceURI: v.voiceURI,
       localService: v.localService,
       default: v.default
-    }));
+    }));    const response = await ipcRenderer.invoke('tts:sync-voices', { provider: 'webspeech', voices: serializedVoices });
     
-    const result = await ipcRenderer.invoke('tts:sync-voices', 'webspeech', serializedVoices);
-    
-    if (result.success) {
-      console.log(`[TTS] Synced ${result.count} WebSpeech voices on startup`);
-      return { success: true, count: result.count };
+    if (response.success) {
+      const data = response.data;
+      console.log(`[TTS] Successfully synced ${data.count} WebSpeech voices`);
+      return { success: true, count: data.count };
     } else {
-      console.error('[TTS] Failed to sync WebSpeech voices:', result.error);
+      console.error('[TTS] Failed to sync WebSpeech voices:', response.error);
       return { success: false, count: 0 };
     }
   } catch (error: any) {
-    console.error('[TTS] Error in initializeVoiceSync:', error);
+    console.error('[TTS] Error syncing WebSpeech voices:', error);
     return { success: false, count: 0 };
   }
+}
+
+/**
+ * Auto-sync WebSpeech voices (convenience wrapper)
+ * @deprecated Use syncWebSpeechVoices(false) instead
+ */
+export async function autoSyncWebSpeechVoices(): Promise<number> {
+  const result = await syncWebSpeechVoices(false);
+  return result.count;
+}
+
+/**
+ * Initialize voice syncing on app startup (convenience wrapper)
+ * @deprecated Use syncWebSpeechVoices(true) instead
+ */
+export async function initializeVoiceSync(): Promise<{ success: boolean; count: number }> {
+  return syncWebSpeechVoices(true);
 }
 
 // Web Speech API - Renderer Process Only
@@ -273,6 +262,7 @@ function mapWebSpeechVoices(): TTSVoice[] {
 function guessGender(voiceName: string): 'male' | 'female' | 'neutral' {
   const name = voiceName.toLowerCase();
   
+  // NOTE: Keep in sync with GENDER_INDICATORS in backend/services/tts/language-config.ts
   // Female indicators
   const femaleNames = ['female', 'woman', 'samantha', 'victoria', 'karen', 'moira', 'tessa', 'fiona', 'kate', 'anna', 'alice', 'emma', 'sophia'];
   if (femaleNames.some(n => name.includes(n))) return 'female';
@@ -285,6 +275,7 @@ function guessGender(voiceName: string): 'male' | 'female' | 'neutral' {
 }
 
 function getLanguageName(langCode: string): string {
+  // NOTE: Keep in sync with LANGUAGE_MAP in backend/services/tts/language-config.ts
   const langMap: Record<string, string> = {
     'en-US': 'English (United States)',
     'en-GB': 'English (United Kingdom)',
@@ -324,14 +315,13 @@ async function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions
   const utterance = new SpeechSynthesisUtterance(text);
   
   let voice: SpeechSynthesisVoice | undefined;
-  
-  // Try to get voiceURI from database metadata
+    // Try to get voiceURI from database metadata
   try {
-    const metaResult = await ipcRenderer.invoke('tts:get-voice-metadata', voiceId);
-    if (metaResult.success && metaResult.voiceURI) {
-      console.log('[TTS] webSpeechSpeak() - Got voiceURI from database:', metaResult.voiceURI);
+    const metaResponse = await ipcRenderer.invoke('tts:get-voice-metadata', voiceId);
+    if (metaResponse.success && metaResponse.data && metaResponse.data.voiceURI) {
+      console.log('[TTS] webSpeechSpeak() - Got voiceURI from database:', metaResponse.data.voiceURI);
       // Find voice by voiceURI
-      voice = webSpeechVoices.find(v => v.voiceURI === metaResult.voiceURI);
+      voice = webSpeechVoices.find(v => v.voiceURI === metaResponse.data.voiceURI);
       if (voice) {
         console.log('[TTS] webSpeechSpeak() - Found voice by voiceURI:', voice.name, voice.lang);
       }
@@ -417,11 +407,11 @@ export async function getVoices(): Promise<TTSVoice[]> {
   }
   
   // For Azure/Google, call backend
-  const result = await ipcRenderer.invoke('tts:get-voices');
-  if (!result.success) {
-    throw new Error(result.error);
+  const response = await ipcRenderer.invoke('tts:get-voices');
+  if (!response.success) {
+    throw new Error(response.error || 'Failed to get voices');
   }
-  return result.voices;
+  return response.data;
 }
 
 export async function testVoice(voiceId: string, options?: TTSOptions, message?: string): Promise<void> {
@@ -437,11 +427,8 @@ export async function testVoice(voiceId: string, options?: TTSOptions, message?:
     return;
   }
   
-  // For Azure/Google, call backend
-  const result = await ipcRenderer.invoke('tts:test-voice', voiceId, options, message);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
+  // For Azure/Google, call backend with object parameter
+  await ipcRenderer.invoke('tts:test-voice', { voiceId, options, message });
 }
 
 export async function speak(text: string, options?: TTSOptions): Promise<void> {
@@ -458,12 +445,9 @@ export async function speak(text: string, options?: TTSOptions): Promise<void> {
     return;
   }
   
-  // For Azure/Google, call backend
+  // For Azure/Google, call backend with object parameter
   console.log('[TTS Service] speak() - Using backend provider for voiceId:', voiceId, 'options:', options);
-  const result = await ipcRenderer.invoke('tts:speak', text, options);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
+  await ipcRenderer.invoke('tts:speak', { text, options });
 }
 
 export async function stop(): Promise<void> {
@@ -475,130 +459,47 @@ export async function stop(): Promise<void> {
   }
   
   // For Azure/Google, call backend
-  const result = await ipcRenderer.invoke('tts:stop');
-  if (!result.success) {
-    throw new Error(result.error);
-  }
+  await ipcRenderer.invoke('tts:stop');
 }
 
 export async function getSettings(): Promise<TTSSettings> {
-  const result = await ipcRenderer.invoke('tts:get-settings');
-  if (!result.success) {
-    throw new Error(result.error);
+  const response = await ipcRenderer.invoke('tts:get-settings');
+  if (!response.success) {
+    throw new Error(response.error || 'Failed to load TTS settings');
   }
-  return result.settings;
+  return response.data;
 }
 
 export async function saveSettings(settings: Partial<TTSSettings>): Promise<void> {
-  const result = await ipcRenderer.invoke('tts:save-settings', settings);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
+  await ipcRenderer.invoke('tts:save-settings', settings);
 }
 
 export async function getProviders(): Promise<string[]> {
-  const result = await ipcRenderer.invoke('tts:get-providers');
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.providers;
+  const response = await ipcRenderer.invoke('tts:get-providers');
+  return response.success ? response.data : [];
 }
 
 export async function syncVoices(provider: string, voices: any[]): Promise<{ success: boolean; count: number; stats: any }> {
-  const result = await ipcRenderer.invoke('tts:sync-voices', provider, voices);
-  if (!result.success) {
-    throw new Error(result.error);
+  const response = await ipcRenderer.invoke('tts:sync-voices', { provider, voices });
+  if (!response.success) {
+    throw new Error(response.error);
   }
-  return result;
+  return { success: true, ...response.data };
 }
 
 export async function getGroupedVoices(): Promise<Record<string, any[]>> {
-  const result = await ipcRenderer.invoke('tts:get-grouped-voices');
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.grouped;
+  const response = await ipcRenderer.invoke('tts:get-grouped-voices');
+  return response.success ? response.data : {};
 }
 
 export async function getVoiceStats(): Promise<any> {
-  const result = await ipcRenderer.invoke('tts:get-voice-stats');
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.stats;
+  const response = await ipcRenderer.invoke('tts:get-voice-stats');
+  return response.success ? response.data : null;
 }
 
 export async function getVoiceByNumericId(numericId: number): Promise<any> {
-  const result = await ipcRenderer.invoke('tts:get-voice-by-id', numericId);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.voice;
-}
-
-// Viewer TTS Rules
-export interface ViewerTTSRule {
-  id: number;
-  username: string;
-  customVoiceId: number | null;
-  pitchOverride: number | null;
-  rateOverride: number | null;
-  isMuted: boolean;
-  mutedUntil: string | null;
-  cooldownEnabled: boolean;
-  cooldownSeconds: number | null;
-  cooldownUntil: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ViewerTTSRuleInput {
-  username: string;
-  customVoiceId?: number | null;
-  pitchOverride?: number | null;
-  rateOverride?: number | null;
-  isMuted?: boolean;
-  mutedUntil?: string | null;
-  cooldownEnabled?: boolean;
-  cooldownSeconds?: number | null;
-  cooldownUntil?: string | null;
-}
-
-export async function getViewerRule(username: string): Promise<ViewerTTSRule | null> {
-  const result = await ipcRenderer.invoke('viewer-rules:get', username);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.rule;
-}
-
-export async function createViewerRule(input: ViewerTTSRuleInput): Promise<ViewerTTSRule> {
-  const result = await ipcRenderer.invoke('viewer-rules:create', input);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.rule;
-}
-
-export async function updateViewerRule(username: string, updates: Partial<Omit<ViewerTTSRuleInput, 'username'>>): Promise<ViewerTTSRule | null> {
-  const result = await ipcRenderer.invoke('viewer-rules:update', username, updates);
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.rule;
-}
-
-export async function deleteViewerRule(username: string): Promise<boolean> {
-  const result = await ipcRenderer.invoke('viewer-rules:delete', username);
-  return result.success;
-}
-
-export async function getAllViewerRules(): Promise<ViewerTTSRule[]> {
-  const result = await ipcRenderer.invoke('viewer-rules:get-all');
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-  return result.rules;
+  const response = await ipcRenderer.invoke('tts:get-voice-by-id', numericId);
+  return response.success ? response.data : null;
 }
 
 // Web Audio API for Azure/Google TTS (OBS-compatible)

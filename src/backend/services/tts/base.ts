@@ -52,8 +52,7 @@ export interface TTSSettings {
   userCooldownEnabled?: boolean;
   userCooldownSeconds?: number;
   globalCooldownEnabled?: boolean;
-  globalCooldownSeconds?: number;
-  maxQueueSize?: number;
+  globalCooldownSeconds?: number;  maxQueueSize?: number;
   // Emote/Emoji Limits
   maxEmotesPerMessage?: number;
   maxEmojisPerMessage?: number;
@@ -63,6 +62,7 @@ export interface TTSSettings {
   maxRepeatedWords?: number;
   // Content Filters
   copypastaFilterEnabled?: boolean;
+  blockedWords?: string[];
 }
 
 export interface TTSProvider {

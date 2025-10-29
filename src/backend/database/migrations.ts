@@ -86,10 +86,62 @@ export function runMigrations(db: Database.Database): void {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-
   // Create index on username for faster lookups
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_viewers_username ON viewers(username)
+  `);
+
+  // Create viewer_subscriptions table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_subscriptions (
+      id TEXT PRIMARY KEY,
+      viewer_id TEXT NOT NULL,
+      tier TEXT NOT NULL,
+      is_gift INTEGER DEFAULT 0,
+      start_date DATETIME NOT NULL,
+      end_date DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id)
+    )
+  `);
+
+  // Create index on viewer_id for faster lookups
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_viewer ON viewer_subscriptions(viewer_id)
+  `);
+  // Create view combining viewer info with subscription status
+  db.exec(`
+    DROP VIEW IF EXISTS viewer_subscription_status
+  `);
+  
+  db.exec(`
+    CREATE VIEW viewer_subscription_status AS
+    SELECT 
+      v.id,
+      v.display_name,
+      v.tts_voice_id,
+      v.tts_enabled,
+      v.created_at,
+      v.updated_at,
+      vs.tier,
+      vs.is_gift,
+      vs.start_date,
+      vs.end_date,
+      CASE 
+        WHEN vs.id IS NOT NULL THEN 
+          CASE 
+            WHEN vs.is_gift = 1 THEN vs.tier || ' (Gift)'
+            ELSE vs.tier || ' Subscriber'
+          END
+        ELSE 'Not Subscribed'
+      END AS subscription_status,
+      -- Add role information
+      (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'vip' AND revoked_at IS NULL) AS is_vip,
+      (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'moderator' AND revoked_at IS NULL) AS is_moderator,
+      (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'broadcaster' AND revoked_at IS NULL) AS is_broadcaster
+    FROM viewers v
+    LEFT JOIN viewer_subscriptions vs ON v.id = vs.viewer_id
   `);
 
   // Create events table
@@ -155,10 +207,10 @@ export function runMigrations(db: Database.Database): void {
       ('max_queue_size', '20'),
       ('max_emotes_per_message', '5'),
       ('max_emojis_per_message', '3'),
-      ('strip_excessive_emotes', 'true'),
-      ('max_repeated_chars', '3'),
+      ('strip_excessive_emotes', 'true'),      ('max_repeated_chars', '3'),
       ('max_repeated_words', '2'),
-      ('copypasta_filter_enabled', 'false')
+      ('copypasta_filter_enabled', 'false'),
+      ('blocked_words', '[]')
   `);  // Create WebSpeech voices table
   db.exec(`
     CREATE TABLE IF NOT EXISTS webspeech_voices (
@@ -235,7 +287,6 @@ export function runMigrations(db: Database.Database): void {
     UNION ALL
     SELECT * FROM google_voices
   `);
-
   // Create tts_provider_status table to track voice sync state per provider
   db.exec(`
     CREATE TABLE IF NOT EXISTS tts_provider_status (
@@ -245,46 +296,157 @@ export function runMigrations(db: Database.Database): void {
       voice_count INTEGER DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )  `);
+
+  // ===== TTS Access & Enablement Tables =====
+  
+  // Create tts_access_config table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tts_access_config (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      access_mode TEXT NOT NULL DEFAULT 'access_all',
+      
+      -- Limited Access Rules
+      limited_allow_subscribers INTEGER DEFAULT 1,
+      limited_deny_gifted_subs INTEGER DEFAULT 0,
+      limited_allow_vip INTEGER DEFAULT 0,
+      limited_redeem_name TEXT,
+      limited_redeem_duration_mins INTEGER,
+      
+      -- Premium Voice Access Rules
+      premium_allow_subscribers INTEGER DEFAULT 1,
+      premium_deny_gifted_subs INTEGER DEFAULT 0,
+      premium_allow_vip INTEGER DEFAULT 0,
+      premium_redeem_name TEXT,
+      premium_redeem_duration_mins INTEGER,
+      
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      
+      CHECK (id = 1),
+      CHECK (access_mode IN ('access_all', 'limited_access', 'premium_voice_access'))
     )
   `);
-  // Create viewer_tts_rules table for per-viewer TTS overrides
+
+  // Insert default config if not exists
   db.exec(`
-    CREATE TABLE IF NOT EXISTS viewer_tts_rules (
+    INSERT OR IGNORE INTO tts_access_config (id, access_mode) 
+    VALUES (1, 'access_all')
+  `);
+
+  // Create viewer_voice_preferences table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_voice_preferences (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL UNIQUE,
-      custom_voice_id INTEGER,
-      pitch_override REAL,
-      rate_override REAL,
-      is_muted INTEGER DEFAULT 0,
-      muted_until TEXT,
-      cooldown_enabled INTEGER DEFAULT 0,
-      cooldown_seconds INTEGER,
-      cooldown_until TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      viewer_id TEXT NOT NULL UNIQUE,
+      voice_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      pitch REAL DEFAULT 1.0,
+      speed REAL DEFAULT 1.0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE,
+      CHECK (provider IN ('webspeech', 'azure', 'google')),
+      CHECK (pitch >= 0.5 AND pitch <= 2.0),
+      CHECK (speed >= 0.5 AND speed <= 2.0)
     )
   `);
 
   db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_viewer_tts_rules_username ON viewer_tts_rules(username)
+    CREATE INDEX IF NOT EXISTS idx_viewer_voice_prefs ON viewer_voice_preferences(viewer_id)
   `);
 
-  // Migration: Add cooldown_enabled and cooldown_until columns if they don't exist
+  // Migrate existing tts_voice_id data from viewers table to viewer_voice_preferences
   try {
-    // Get table info to check if columns exist
-    const tableInfo = db.prepare("PRAGMA table_info(viewer_tts_rules)").all() as any[];
-    const hasColumns = tableInfo.some(col => col.name === 'cooldown_enabled');
-    
-    if (!hasColumns) {
-      console.log('Adding cooldown_enabled and cooldown_until columns to viewer_tts_rules');
-      db.exec(`ALTER TABLE viewer_tts_rules ADD COLUMN cooldown_enabled INTEGER DEFAULT 0`);
-      db.exec(`ALTER TABLE viewer_tts_rules ADD COLUMN cooldown_until TEXT`);
-      console.log('Cooldown columns added successfully');
-    } else {
-      console.log('Cooldown columns already exist');
+    const viewersWithVoices = db.prepare(`
+      SELECT id, tts_voice_id 
+      FROM viewers 
+      WHERE tts_voice_id IS NOT NULL AND tts_voice_id != ''
+    `).all() as Array<{ id: string; tts_voice_id: string }>;
+
+    console.log(`[Migration] Found ${viewersWithVoices.length} viewers with custom voices to migrate`);
+
+    for (const viewer of viewersWithVoices) {
+      // Determine provider from voice_id pattern
+      let provider = 'webspeech';
+      if (viewer.tts_voice_id.includes('azure:') || viewer.tts_voice_id.includes('Neural')) {
+        provider = 'azure';
+      } else if (viewer.tts_voice_id.includes('google:')) {
+        provider = 'google';
+      }
+
+      db.prepare(`
+        INSERT OR IGNORE INTO viewer_voice_preferences (viewer_id, voice_id, provider, pitch, speed)
+        VALUES (?, ?, ?, 1.0, 1.0)
+      `).run(viewer.id, viewer.tts_voice_id, provider);
     }
-  } catch (err) {
-    console.log('Error checking/adding cooldown columns:', err);
+
+    console.log(`[Migration] Migrated ${viewersWithVoices.length} viewer voice preferences`);
+  } catch (error) {
+    console.log('[Migration] Note: Could not migrate viewer voices (may not exist yet):', error);
+  }
+
+  // Create viewer_roles table for VIP tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_roles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      viewer_id TEXT NOT NULL,
+      role_type TEXT NOT NULL,
+      granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      revoked_at DATETIME,
+      
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE,
+      CHECK (role_type IN ('vip', 'moderator', 'broadcaster')),
+      UNIQUE(viewer_id, role_type)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_roles ON viewer_roles(viewer_id, role_type)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_active_roles ON viewer_roles(viewer_id, role_type, revoked_at)
+  `);
+
+  // Create channel_point_grants table for temporary access
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channel_point_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      viewer_id TEXT NOT NULL,
+      grant_type TEXT NOT NULL,
+      redeem_name TEXT NOT NULL,
+      duration_mins INTEGER NOT NULL,
+      granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME NOT NULL,
+      
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE,
+      CHECK (grant_type IN ('limited_access', 'premium_voice_access'))
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_grants_viewer ON channel_point_grants(viewer_id)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_grants_expiry ON channel_point_grants(expires_at)
+  `);  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_grants_active ON channel_point_grants(viewer_id, expires_at)
+  `);
+
+  // Migration: Add moderator columns to tts_access_config (if not exist)
+  const columns = db.prepare(`PRAGMA table_info(tts_access_config)`).all() as any[];
+  const hasModColumns = columns.some(col => col.name === 'limited_allow_mod');
+  
+  if (!hasModColumns) {
+    console.log('Migrating tts_access_config: Adding moderator columns...');
+    db.exec(`
+      ALTER TABLE tts_access_config ADD COLUMN limited_allow_mod INTEGER DEFAULT 0
+    `);
+    db.exec(`
+      ALTER TABLE tts_access_config ADD COLUMN premium_allow_mod INTEGER DEFAULT 0
+    `);
+    console.log('Moderator columns added successfully');
   }
 
   console.log('Database migrations completed');

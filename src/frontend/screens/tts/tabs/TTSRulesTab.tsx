@@ -340,9 +340,7 @@ export const TTSRulesTab: React.FC<Props> = ({ settings, onSettingChange }) => {
             "really really really really" → "really really"
           </p>
         </div>
-      </div>
-
-      {/* Content Filters */}
+      </div>      {/* Content Filters */}
       <div className="rules-section">
         <h4>🛡️ Content Filters</h4>
 
@@ -361,6 +359,16 @@ export const TTSRulesTab: React.FC<Props> = ({ settings, onSettingChange }) => {
         </div>
       </div>
 
+      {/* Blocked Words */}
+      <div className="rules-section">
+        <h4>🚫 Blocked Words</h4>
+        <p className="section-description">
+          Add words or phrases that should not be read aloud by TTS. They will be silently removed from messages.
+        </p>
+
+        <BlockedWordsEditor settings={settings} onSettingChange={onSettingChange} />
+      </div>
+
       {/* Future Features */}
       <div className="rules-section">
         <h4>✨ Coming Soon</h4>
@@ -372,9 +380,151 @@ export const TTSRulesTab: React.FC<Props> = ({ settings, onSettingChange }) => {
           <li>Watch time requirements</li>
           <li>Role-based voice rules (subscribers, mods, VIPs)</li>
           <li>Priority queue for specific users</li>
-          <li>Custom copypasta blocklist</li>
         </ul>
       </div>
+    </div>
+  );
+};
+
+/**
+ * Component for managing blocked words
+ */
+interface BlockedWordsEditorProps {
+  settings: ttsService.TTSSettings;
+  onSettingChange: (key: keyof ttsService.TTSSettings, value: any) => Promise<void>;
+}
+
+const BlockedWordsEditor: React.FC<BlockedWordsEditorProps> = ({ settings, onSettingChange }) => {
+  const [inputValue, setInputValue] = React.useState('');
+  const [error, setError] = React.useState('');
+
+  const blockedWords = settings.blockedWords ?? [];
+
+  const handleAddWord = async () => {
+    const word = inputValue.trim().toLowerCase();
+    
+    if (!word) {
+      setError('Please enter a word');
+      return;
+    }
+
+    if (blockedWords.includes(word)) {
+      setError('Word already in list');
+      return;
+    }
+
+    if (word.length > 50) {
+      setError('Word too long (max 50 characters)');
+      return;
+    }
+
+    const newList = [...blockedWords, word].sort();
+    await onSettingChange('blockedWords', newList);
+    setInputValue('');
+    setError('');
+  };
+
+  const handleRemoveWord = async (word: string) => {
+    const newList = blockedWords.filter(w => w !== word);
+    await onSettingChange('blockedWords', newList);
+  };
+
+  return (
+    <div className="blocked-words-editor">
+      <div className="setting-group">
+        <label className="setting-label">Add Blocked Word:</label>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input
+            type="text"
+            placeholder="Enter word to block..."
+            value={inputValue}
+            onChange={(e) => {
+              setInputValue(e.target.value);
+              setError('');
+            }}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                handleAddWord();
+              }
+            }}
+            style={{
+              flex: 1,
+              padding: '8px',
+              borderRadius: '4px',
+              border: '1px solid #555',
+              backgroundColor: '#333',
+              color: 'white',
+              fontSize: '14px'
+            }}
+          />
+          <button
+            onClick={handleAddWord}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#9147ff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Add
+          </button>
+        </div>
+        {error && <p style={{ color: '#ff4444', fontSize: '12px', marginTop: '4px' }}>{error}</p>}
+      </div>
+
+      {blockedWords.length > 0 && (
+        <div className="setting-group">
+          <label className="setting-label">Blocked Words ({blockedWords.length}):</label>
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '8px',
+            padding: '10px',
+            backgroundColor: '#2a2a2a',
+            borderRadius: '4px',
+            border: '1px solid #555'
+          }}>
+            {blockedWords.map((word) => (
+              <div
+                key={word}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#ff4444',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '3px',
+                  fontSize: '12px'
+                }}
+              >
+                <span>{word}</span>
+                <button
+                  onClick={() => handleRemoveWord(word)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'white',
+                    cursor: 'pointer',
+                    padding: '0 4px',
+                    fontSize: '14px',
+                    lineHeight: '1'
+                  }}
+                  title="Remove"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="setting-hint">
+            {blockedWords.length} word(s) will be silently removed from messages before TTS processing.
+          </p>
+        </div>
+      )}
     </div>
   );
 };

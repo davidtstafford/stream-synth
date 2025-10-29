@@ -19,6 +19,9 @@ const TWITCH_SCOPES = [
   'moderator:manage:shoutouts',
   'moderator:read:banned_users',  // For channel.ban and channel.unban events
   'moderator:read:moderators',    // For channel.moderator.add and channel.moderator.remove events
+  'moderation:read',              // Required for reading moderators list
+  'channel:read:vips',            // For VIP sync and viewer role management
+  'channel:manage:vips',          // Alternative scope for VIP access
   'bits:read',
   'channel:read:charity'
 ];
@@ -28,7 +31,7 @@ const REDIRECT_URI = 'http://localhost:3300/auth/twitch/callback';
 export async function authenticateWithTwitch(
   clientId: string,
   parentWindow: BrowserWindow | null
-): Promise<{ success: boolean; accessToken?: string; error?: string }> {
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const authWindow = new BrowserWindow({
       width: 800,
@@ -46,21 +49,30 @@ export async function authenticateWithTwitch(
 
     authWindow.loadURL(authUrl);
 
+    let handled = false;
+
     // Listen for navigation events to catch the redirect with the token
     const handleNavigation = (event: any, url: string) => {
       if (url.startsWith(REDIRECT_URI)) {
         event.preventDefault();
         
+        if (handled) return;
+        handled = true;
+
         const urlObj = new URL(url);
         const hash = urlObj.hash.substring(1);
         const params = new URLSearchParams(hash);
         const accessToken = params.get('access_token');
+        const error = params.get('error');
         
         if (accessToken) {
-          resolve({ success: true, accessToken });
+          resolve(accessToken);
+          authWindow.close();
+        } else if (error) {
+          reject(new Error(`Twitch OAuth error: ${error}`));
           authWindow.close();
         } else {
-          reject(new Error('Failed to get access token'));
+          reject(new Error('Failed to get access token from Twitch'));
           authWindow.close();
         }
       }
@@ -71,7 +83,10 @@ export async function authenticateWithTwitch(
     authWindow.webContents.on('did-navigate', handleNavigation);
 
     authWindow.on('closed', () => {
-      reject(new Error('Authentication window closed'));
+      if (!handled) {
+        handled = true;
+        reject(new Error('Authentication window was closed'));
+      }
     });
   });
 }

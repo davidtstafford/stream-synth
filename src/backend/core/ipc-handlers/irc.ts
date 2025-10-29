@@ -1,14 +1,18 @@
 /**
  * IRC IPC Handlers
  * 
- * Handles IRC (Twitch Chat) operations via IPC:
+ * Handles IRC (Twitch Chat) operations via IPC using centralized IPC Framework:
  * - Connect/Disconnect
  * - Send messages
  * - Join/Leave channels
  * - IRC event forwarding
+ * - Status monitoring
+ * 
+ * Phase 3: Migrated to use IPCRegistry for consistent error handling
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
+import { ipcRegistry } from '../ipc/ipc-framework';
 import { twitchIRCService } from '../../services/twitch-irc';
 import { SessionsRepository } from '../../database/repositories/sessions';
 import { EventsRepository } from '../../database/repositories/events';
@@ -25,60 +29,76 @@ export function setMainWindowForIRC(window: BrowserWindow | null): void {
 }
 
 export function setupIRCHandlers(): void {
-  // IRC: Connect
-  ipcMain.handle('irc:connect', async (event, username: string, token: string, channel?: string) => {
-    try {
-      await twitchIRCService.connect(username, token, channel);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  // ===== IRC: Connection Management =====
+  ipcRegistry.register<{ username: string; token: string; channel?: string }, void>(
+    'irc:connect',
+    {
+      validate: (input) => {
+        if (!input.username) return 'Username is required';
+        if (!input.token) return 'Token is required';
+        return null;
+      },
+      execute: async (input) => {
+        console.log('[IRC] Connecting with username:', input.username);
+        await twitchIRCService.connect(input.username, input.token, input.channel);
+      }
     }
-  });
+  );
 
-  // IRC: Disconnect
-  ipcMain.handle('irc:disconnect', async () => {
-    try {
-      await twitchIRCService.disconnect();
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  ipcRegistry.register<void, void>(
+    'irc:disconnect',
+    {
+      execute: async () => {
+        console.log('[IRC] Disconnecting...');
+        await twitchIRCService.disconnect();
+      }
     }
-  });
+  );
 
-  // IRC: Send message
-  ipcMain.handle('irc:send-message', async (event, message: string, channel?: string) => {
-    try {
-      await twitchIRCService.sendMessage(message, channel);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  // ===== IRC: Messaging =====
+  ipcRegistry.register<{ message: string; channel?: string }, void>(
+    'irc:send-message',
+    {
+      validate: (input) => input.message ? null : 'Message is required',
+      execute: async (input) => {
+        console.log('[IRC] Sending message:', input.message);
+        await twitchIRCService.sendMessage(input.message, input.channel);
+      }
     }
-  });
+  );
 
-  // IRC: Get status
-  ipcMain.handle('irc:get-status', async () => {
-    return twitchIRCService.getStatus();
-  });
-
-  // IRC: Join channel
-  ipcMain.handle('irc:join-channel', async (event, channel: string) => {
-    try {
-      await twitchIRCService.joinChannel(channel);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  // ===== IRC: Channel Management =====
+  ipcRegistry.register<string, void>(
+    'irc:join-channel',
+    {
+      validate: (channel) => channel ? null : 'Channel is required',
+      execute: async (channel) => {
+        console.log('[IRC] Joining channel:', channel);
+        await twitchIRCService.joinChannel(channel);
+      }
     }
-  });
+  );
 
-  // IRC: Leave channel
-  ipcMain.handle('irc:leave-channel', async (event, channel: string) => {
-    try {
-      await twitchIRCService.leaveChannel(channel);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  ipcRegistry.register<string, void>(
+    'irc:leave-channel',
+    {
+      validate: (channel) => channel ? null : 'Channel is required',
+      execute: async (channel) => {
+        console.log('[IRC] Leaving channel:', channel);
+        await twitchIRCService.leaveChannel(channel);
+      }
     }
-  });
+  );
+
+  // ===== IRC: Status =====
+  ipcRegistry.register<void, any>(
+    'irc:get-status',
+    {
+      execute: async () => {
+        return twitchIRCService.getStatus();
+      }
+    }
+  );
 
   // IRC: Forward events to renderer AND store in database
   twitchIRCService.on('chat.join', async (event) => {

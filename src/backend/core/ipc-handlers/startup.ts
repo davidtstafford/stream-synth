@@ -10,16 +10,63 @@
 import { SettingsRepository } from '../../database/repositories/settings';
 import { VoicesRepository } from '../../database/repositories/voices';
 import { SessionsRepository } from '../../database/repositories/sessions';
+import { ChannelPointGrantsRepository } from '../../database/repositories/channel-point-grants';
 import { initializeTTS } from './tts';
 import { VoiceSyncService } from '../../services/tts/voice-sync';
+import { TwitchRoleSyncService } from '../../services/twitch-role-sync';
 
 const settingsRepo = new SettingsRepository();
 const voicesRepo = new VoicesRepository();
 const sessionsRepo = new SessionsRepository();
+const channelPointGrantsRepo = new ChannelPointGrantsRepository();
+const roleSyncService = new TwitchRoleSyncService();
 
 export async function runStartupTasks(): Promise<void> {
   try {
     console.log('[Startup] Running startup tasks...');
+
+    // Cleanup expired channel point grants (keep expired records for 7 days)
+    console.log('[Startup] Cleaning up expired channel point grants...');
+    try {
+      const deletedCount = channelPointGrantsRepo.cleanupExpiredGrants(7);
+      if (deletedCount > 0) {
+        console.log(`[Startup] Cleaned up ${deletedCount} expired channel point grants`);
+      } else {
+        console.log('[Startup] No expired grants to clean up');
+      }
+    } catch (err: any) {
+      console.error('[Startup] Error cleaning up expired grants:', err);
+    }    // Schedule periodic cleanup every 5 minutes
+    setInterval(() => {
+      try {
+        const deletedCount = channelPointGrantsRepo.cleanupExpiredGrants(7);
+        if (deletedCount > 0) {
+          console.log(`[Background] Cleaned up ${deletedCount} expired channel point grants`);
+        }
+      } catch (err: any) {
+        console.error('[Background] Error cleaning up expired grants:', err);
+      }
+    }, 5 * 60 * 1000); // 5 minutes    // Schedule periodic Twitch role sync every 30 minutes
+    setInterval(async () => {
+      try {
+        const currentSession = sessionsRepo.getCurrentSession();
+        if (!currentSession) {
+          return; // Silently skip if not connected
+        }
+
+        const result = await roleSyncService.syncAllRoles(
+          currentSession.channel_id,
+          currentSession.user_id,
+          'background-30min'
+        );
+
+        if (!result.success) {
+          console.warn('[Background] Periodic sync had errors:', result.errors);
+        }
+      } catch (err: any) {
+        console.error('[Background] Error during periodic role sync:', err);
+      }
+    }, 30 * 60 * 1000); // 30 minutes
 
     // Initialize TTS services
     const ttsManager = await initializeTTS();
@@ -43,6 +90,30 @@ export async function runStartupTasks(): Promise<void> {
       // Azure sync happens when user enables it and provides credentials
     } else {
       console.log('[Startup] Azure voices already synced or not enabled');
+    }    // Sync Twitch data (subscriptions, VIPs, moderators)
+    console.log('[Startup] Syncing Twitch subscriptions, VIPs, and moderators...');
+    try {
+      const currentSession = sessionsRepo.getCurrentSession();
+      if (currentSession) {
+        const result = await roleSyncService.syncAllRoles(
+          currentSession.channel_id,
+          currentSession.user_id,
+          'startup'
+        );
+
+        if (result.success) {
+          console.log(
+            `[Startup] ✓ Synced all roles: ${result.subCount} subs, ` +
+            `${result.vipCount} VIPs, ${result.modCount} mods`
+          );
+        } else {
+          console.warn('[Startup] Role sync completed with errors:', result.errors);
+        }
+      } else {
+        console.log('[Startup] No active session found, skipping Twitch data sync');
+      }
+    } catch (err: any) {
+      console.error('[Startup] Error syncing Twitch data:', err);
     }
 
     // Check if Discord auto-post is enabled

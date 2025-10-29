@@ -21,25 +21,28 @@ export interface OAuthToken {
 
 // Settings
 export async function getSetting(key: string): Promise<string | null> {
-  return await ipcRenderer.invoke('db:get-setting', key);
+  const response = await ipcRenderer.invoke('db:get-setting', key);
+  return response.success ? response.data : null;
 }
 
 export async function setSetting(key: string, value: string): Promise<void> {
-  await ipcRenderer.invoke('db:set-setting', key, value);
+  await ipcRenderer.invoke('db:set-setting', { key, value });
 }
 
 export async function getAllSettings(): Promise<Array<{ key: string; value: string }>> {
-  return await ipcRenderer.invoke('db:get-all-settings');
+  const response = await ipcRenderer.invoke('db:get-all-settings');
+  return response.success ? response.data : [];
 }
 
 // Sessions
 export async function createSession(session: ConnectionSession): Promise<number> {
-  const result = await ipcRenderer.invoke('db:create-session', session);
-  return result.id;
+  const response = await ipcRenderer.invoke('db:create-session', session);
+  return response.success ? response.data.id : 0;
 }
 
 export async function getCurrentSession(): Promise<ConnectionSession | null> {
-  return await ipcRenderer.invoke('db:get-current-session');
+  const response = await ipcRenderer.invoke('db:get-current-session');
+  return response.success ? response.data : null;
 }
 
 export async function endCurrentSession(): Promise<void> {
@@ -47,24 +50,27 @@ export async function endCurrentSession(): Promise<void> {
 }
 
 export async function getRecentSessions(limit: number = 10): Promise<ConnectionSession[]> {
-  return await ipcRenderer.invoke('db:get-recent-sessions', limit);
+  const response = await ipcRenderer.invoke('db:get-recent-sessions', limit);
+  return response.success ? response.data : [];
 }
 
 // Event Subscriptions
 export async function saveSubscription(userId: string, channelId: string, eventType: string, isEnabled: boolean): Promise<void> {
-  await ipcRenderer.invoke('db:save-subscription', userId, channelId, eventType, isEnabled);
+  await ipcRenderer.invoke('db:save-subscription', { userId, channelId, eventType, isEnabled });
 }
 
 export async function getSubscriptions(userId: string, channelId: string): Promise<Array<{ event_type: string; is_enabled: boolean }>> {
-  return await ipcRenderer.invoke('db:get-subscriptions', userId, channelId);
+  const response = await ipcRenderer.invoke('db:get-subscriptions', { userId, channelId });
+  return response.success ? response.data : [];
 }
 
 export async function getEnabledEvents(userId: string, channelId: string): Promise<string[]> {
-  return await ipcRenderer.invoke('db:get-enabled-events', userId, channelId);
+  const response = await ipcRenderer.invoke('db:get-enabled-events', { userId, channelId });
+  return response.success ? response.data : [];
 }
 
 export async function clearSubscriptions(userId: string, channelId: string): Promise<void> {
-  await ipcRenderer.invoke('db:clear-subscriptions', userId, channelId);
+  await ipcRenderer.invoke('db:clear-subscriptions', { userId, channelId });
 }
 
 // OAuth Tokens
@@ -73,7 +79,8 @@ export async function saveToken(token: OAuthToken): Promise<void> {
 }
 
 export async function getToken(userId: string): Promise<OAuthToken | null> {
-  return await ipcRenderer.invoke('db:get-token', userId);
+  const response = await ipcRenderer.invoke('db:get-token', userId);
+  return response.success ? response.data : null;
 }
 
 export async function invalidateToken(userId: string): Promise<void> {
@@ -86,15 +93,31 @@ export async function deleteToken(userId: string): Promise<void> {
 
 // Export/Import
 export async function exportSettings(): Promise<{ success: boolean; filePath?: string; error?: string }> {
-  return await ipcRenderer.invoke('export-settings');
+  const response = await ipcRenderer.invoke('export-settings');
+  if (response.success && response.data) {
+    return { success: true, filePath: response.data };
+  }
+  return { success: response.success, error: response.error };
 }
 
 export async function importSettings(): Promise<{ success: boolean; message?: string; error?: string; imported?: any }> {
-  return await ipcRenderer.invoke('import-settings');
+  const response = await ipcRenderer.invoke('import-settings');
+  if (response.success && response.data) {
+    return { 
+      success: true, 
+      message: response.data.message, 
+      imported: response.data.imported 
+    };
+  }
+  return { success: response.success, error: response.error };
 }
 
 export async function getExportPreview(): Promise<{ success: boolean; preview?: any; error?: string }> {
-  return await ipcRenderer.invoke('get-export-preview');
+  const response = await ipcRenderer.invoke('get-export-preview');
+  if (response.success && response.data) {
+    return { success: true, preview: response.data };
+  }
+  return { success: response.success, error: response.error };
 }
 
 // Events Storage
@@ -130,15 +153,18 @@ export async function storeEvent(
 }
 
 export async function getEvents(filters: EventFilters): Promise<{ success: boolean; events?: StoredEvent[]; error?: string }> {
-  return await ipcRenderer.invoke('db:get-events', filters);
+  const response = await ipcRenderer.invoke('db:get-events', filters);
+  return response.success ? { success: true, events: response.data.events } : response;
 }
 
 export async function getChatEvents(channelId: string, limit?: number): Promise<{ success: boolean; events?: StoredEvent[]; error?: string }> {
-  return await ipcRenderer.invoke('db:get-chat-events', channelId, limit);
+  const response = await ipcRenderer.invoke('db:get-chat-events', { channelId, limit });
+  return response.success ? { success: true, events: response.data.events } : response;
 }
 
 export async function getEventCount(channelId?: string, eventType?: string): Promise<{ success: boolean; count?: number; error?: string }> {
-  return await ipcRenderer.invoke('db:get-event-count', channelId, eventType);
+  const response = await ipcRenderer.invoke('db:get-event-count', { channelId, eventType });
+  return response.success ? { success: true, count: response.data.count } : response;
 }
 
 // Viewers
@@ -155,7 +181,7 @@ export async function getOrCreateViewer(
   username: string,
   displayName?: string
 ): Promise<{ success: boolean; viewer?: Viewer; error?: string }> {
-  return await ipcRenderer.invoke('db:get-or-create-viewer', id, username, displayName);
+  return await ipcRenderer.invoke('db:get-or-create-viewer', { id, username, displayName });
 }
 
 export async function getViewer(id: string): Promise<{ success: boolean; viewer?: Viewer | null; error?: string }> {
@@ -163,11 +189,11 @@ export async function getViewer(id: string): Promise<{ success: boolean; viewer?
 }
 
 export async function getAllViewers(limit?: number, offset?: number): Promise<{ success: boolean; viewers?: Viewer[]; error?: string }> {
-  return await ipcRenderer.invoke('db:get-all-viewers', limit, offset);
+  return await ipcRenderer.invoke('db:get-all-viewers', { limit, offset });
 }
 
 export async function searchViewers(query: string, limit?: number): Promise<{ success: boolean; viewers?: Viewer[]; error?: string }> {
-  return await ipcRenderer.invoke('db:search-viewers', query, limit);
+  return await ipcRenderer.invoke('db:search-viewers', { query, limit });
 }
 
 export async function deleteViewer(id: string): Promise<{ success: boolean; error?: string }> {
@@ -181,3 +207,72 @@ export async function deleteAllViewers(): Promise<{ success: boolean; error?: st
 export async function getViewerCount(): Promise<{ success: boolean; count?: number; error?: string }> {
   return await ipcRenderer.invoke('db:get-viewer-count');
 }
+
+// Subscriptions
+export interface ViewerSubscription {
+  id: string;
+  viewer_id: string;
+  tier: string;
+  is_gift: number;
+  start_date: string;
+  end_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ViewerWithSubscription {
+  id: string;
+  display_name: string | null;
+  tts_voice_id: string | null;
+  tts_enabled: number;
+  created_at: string;
+  updated_at: string;
+  tier: string | null;
+  is_gift: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  subscription_status: string;
+  is_vip: number | null;
+  is_moderator: number | null;
+  is_broadcaster: number | null;
+}
+
+export async function upsertSubscription(
+  subscription: Partial<ViewerSubscription>
+): Promise<{ success: boolean; error?: string }> {
+  return await ipcRenderer.invoke('db:upsert-subscription', subscription);
+}
+
+export async function getSubscription(viewerId: string): Promise<{ success: boolean; subscription?: ViewerSubscription | null; error?: string }> {
+  return await ipcRenderer.invoke('db:get-subscription', viewerId);
+}
+
+export async function getAllViewersWithStatus(limit?: number, offset?: number): Promise<{ success: boolean; viewers?: ViewerWithSubscription[]; error?: string }> {
+  const response = await ipcRenderer.invoke('db:get-all-viewers-with-status', { limit, offset });
+  if (response.success && response.data) {
+    return { success: true, viewers: response.data };
+  }
+  return { success: response.success, error: response.error };
+}
+
+export async function searchViewersWithStatus(query: string, limit?: number): Promise<{ success: boolean; viewers?: ViewerWithSubscription[]; error?: string }> {
+  const response = await ipcRenderer.invoke('db:search-viewers-with-status', { query, limit });
+  if (response.success && response.data) {
+    return { success: true, viewers: response.data };
+  }
+  return { success: response.success, error: response.error };
+}
+
+export async function deleteSubscription(viewerId: string): Promise<{ success: boolean; error?: string }> {
+  return await ipcRenderer.invoke('db:delete-subscription', viewerId);
+}
+
+export async function syncSubscriptionsFromTwitch(broadcasterId: string, userId: string): Promise<{ success: boolean; count?: number; error?: string }> {
+  return await ipcRenderer.invoke('db:sync-subscriptions', { broadcasterId, userId });
+}
+
+export async function checkSubscriptionStatus(viewerId: string): Promise<{ success: boolean; isSubscribed?: boolean; status?: string; error?: string }> {
+  return await ipcRenderer.invoke('db:check-subscription-status', viewerId);
+}
+
+

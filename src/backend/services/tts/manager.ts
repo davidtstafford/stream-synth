@@ -2,8 +2,9 @@ import { TTSProvider, TTSVoice, TTSSettings, TTSOptions } from './base';
 import { AzureTTSProvider } from './azure-provider';
 import { GoogleTTSProvider } from './google-provider';
 import { TTSRepository } from '../../database/repositories/tts';
-import { ViewerRulesRepository } from '../../database/viewer-rules-repository';
 import { VoicesRepository } from '../../database/repositories/voices';
+import { SettingsMapper } from './settings-mapper';
+import { TTSAccessControlService } from '../tts-access-control';
 import Database from 'better-sqlite3';
 
 interface TTSQueueItem {
@@ -28,8 +29,8 @@ export class TTSManager {
   private providers: Map<string, TTSProvider>;
   private currentProvider: TTSProvider | null = null;
   private repository: TTSRepository;
-  private viewerRulesRepo: ViewerRulesRepository;
   private voicesRepo: VoicesRepository;
+  private accessControl: TTSAccessControlService;
   private settings: TTSSettings | null = null;
   private messageQueue: TTSQueueItem[] = [];
   private isProcessing: boolean = false;
@@ -43,12 +44,10 @@ export class TTSManager {
   private copypastaList: Set<string> = new Set([
     'kappa123',
     'pogchamp',
-    // Add common copypastas here
-  ]);
-  constructor(db: Database.Database) {
-    this.repository = new TTSRepository(db);
-    this.viewerRulesRepo = new ViewerRulesRepository(db);
+  ]);  constructor(db: Database.Database) {
+    this.repository = new TTSRepository();
     this.voicesRepo = new VoicesRepository();
+    this.accessControl = new TTSAccessControlService();
     this.providers = new Map();
     
     // Register Azure provider
@@ -86,53 +85,12 @@ export class TTSManager {
     console.log('[TTS] Manager initialized. Providers ready:', Array.from(this.providers.keys()).join(', '));
   }
 
-  /**
+    /**
    * Load settings from database
    */
   private async loadSettings(): Promise<void> {
     const dbSettings = this.repository.getSettings();
-    
-    this.settings = {
-      enabled: dbSettings.tts_enabled as boolean,
-      provider: (dbSettings.tts_provider as string) as 'webspeech' | 'azure' | 'google',
-      voiceId: dbSettings.tts_voice_id as string,
-      volume: dbSettings.tts_volume as number,
-      rate: dbSettings.tts_rate as number,
-      pitch: dbSettings.tts_pitch as number,
-      // Provider enable flags (default: webspeech on, others off)
-      webspeechEnabled: dbSettings.webspeech_enabled !== undefined ? dbSettings.webspeech_enabled as boolean : true,
-      azureEnabled: dbSettings.azure_enabled !== undefined ? dbSettings.azure_enabled as boolean : false,
-      googleEnabled: dbSettings.google_enabled !== undefined ? dbSettings.google_enabled as boolean : false,
-      // Provider credentials
-      azureApiKey: dbSettings.azure_api_key as string || '',
-      azureRegion: dbSettings.azure_region as string || '',
-      googleApiKey: dbSettings.google_api_key as string || '',
-      // Basic filters
-      filterCommands: dbSettings.filter_commands !== undefined ? dbSettings.filter_commands as boolean : true,
-      filterBots: dbSettings.filter_bots !== undefined ? dbSettings.filter_bots as boolean : true,
-      filterUrls: dbSettings.filter_urls !== undefined ? dbSettings.filter_urls as boolean : true,
-      announceUsername: dbSettings.announce_username !== undefined ? dbSettings.announce_username as boolean : true,
-      minMessageLength: dbSettings.min_message_length !== undefined ? dbSettings.min_message_length as number : 0,
-      maxMessageLength: dbSettings.max_message_length !== undefined ? dbSettings.max_message_length as number : 500,
-      // Duplicate detection
-      skipDuplicateMessages: dbSettings.skip_duplicate_messages !== undefined ? dbSettings.skip_duplicate_messages as boolean : true,
-      duplicateMessageWindow: dbSettings.duplicate_message_window !== undefined ? dbSettings.duplicate_message_window as number : 300,
-      // Rate limiting
-      userCooldownEnabled: dbSettings.user_cooldown_enabled !== undefined ? dbSettings.user_cooldown_enabled as boolean : true,
-      userCooldownSeconds: dbSettings.user_cooldown_seconds !== undefined ? dbSettings.user_cooldown_seconds as number : 30,
-      globalCooldownEnabled: dbSettings.global_cooldown_enabled !== undefined ? dbSettings.global_cooldown_enabled as boolean : false,
-      globalCooldownSeconds: dbSettings.global_cooldown_seconds !== undefined ? dbSettings.global_cooldown_seconds as number : 5,
-      maxQueueSize: dbSettings.max_queue_size !== undefined ? dbSettings.max_queue_size as number : 20,
-      // Emote/Emoji limits
-      maxEmotesPerMessage: dbSettings.max_emotes_per_message !== undefined ? dbSettings.max_emotes_per_message as number : 5,
-      maxEmojisPerMessage: dbSettings.max_emojis_per_message !== undefined ? dbSettings.max_emojis_per_message as number : 3,
-      stripExcessiveEmotes: dbSettings.strip_excessive_emotes !== undefined ? dbSettings.strip_excessive_emotes as boolean : true,
-      // Character repetition
-      maxRepeatedChars: dbSettings.max_repeated_chars !== undefined ? dbSettings.max_repeated_chars as number : 3,
-      maxRepeatedWords: dbSettings.max_repeated_words !== undefined ? dbSettings.max_repeated_words as number : 2,
-      // Content filters
-      copypastaFilterEnabled: dbSettings.copypasta_filter_enabled !== undefined ? dbSettings.copypasta_filter_enabled as boolean : false,
-    };
+    this.settings = SettingsMapper.fromDatabase(dbSettings);
   }
 
   /**
@@ -210,15 +168,47 @@ export class TTSManager {
   }
 
   /**
-   * Speak text using current settings
+   * Send audio data to renderer for playback (for Azure/Google voices)
+   * Helper method to eliminate code duplication
    */
-  async speak(text: string, options?: Partial<TTSOptions>): Promise<void> {
-    // Web Speech is handled in renderer
-    if (this.settings?.provider === 'webspeech') {
+  private sendAudioToRenderer(providerName: string, options: TTSOptions): void {
+    const provider = this.providers.get(providerName);
+    if (!provider) {
+      console.error(`[TTS] ${providerName} provider not found`);
       return;
     }
-    
-    if (!this.currentProvider || !this.settings) {
+
+    const audioData = (provider as any).getLastAudioData();
+    if (audioData && this.mainWindow) {
+      console.log(`[TTS] Sending ${providerName} audio to renderer (${audioData.length} bytes)`);
+      this.mainWindow.webContents.send('tts:play-audio', {
+        audioData: audioData.toString('base64'),
+        volume: options.volume,
+        rate: options.rate,
+        pitch: options.pitch
+      });
+    } else if (!audioData) {
+      console.warn(`[TTS] No audio data available from ${providerName}`);
+    }
+  }
+
+  /**
+   * Get provider name from voice ID prefix
+   * Helper method to centralize routing logic
+   */
+  private getProviderFromVoiceId(voiceId: string): 'webspeech' | 'azure' | 'google' {
+    if (voiceId?.startsWith('webspeech_')) return 'webspeech';
+    if (voiceId?.startsWith('azure_')) return 'azure';
+    if (voiceId?.startsWith('google_')) return 'google';
+    // Fallback to settings provider
+    return this.settings?.provider || 'webspeech';
+  }
+  /**
+   * Speak text using current settings
+   * Uses voice ID to determine provider (not global currentProvider)
+   */
+  async speak(text: string, options?: Partial<TTSOptions>): Promise<void> {
+    if (!this.settings) {
       throw new Error('TTS not initialized');
     }
 
@@ -227,7 +217,22 @@ export class TTSManager {
       return;
     }
 
-    const voiceId = this.resolveVoiceId(options?.voiceId ?? this.settings.voiceId);
+    const voiceId = options?.voiceId ?? this.settings.voiceId;
+    
+    // Web Speech is handled in renderer
+    if (voiceId?.startsWith('webspeech_')) {
+      return;
+    }
+
+    // Determine which provider to use based on voice ID prefix
+    const provider = this.getProviderFromVoiceId(voiceId);
+    const providerInstance = this.providers.get(provider);
+    
+    if (!providerInstance) {
+      throw new Error(`Provider ${provider} not available for voice: ${voiceId}`);
+    }
+
+    const resolvedVoiceId = this.resolveVoiceId(voiceId);
     
     const ttsOptions: TTSOptions = {
       volume: options?.volume ?? this.settings.volume,
@@ -235,7 +240,7 @@ export class TTSManager {
       pitch: options?.pitch ?? this.settings.pitch
     };
 
-    await this.currentProvider.speak(text, voiceId, ttsOptions);
+    await providerInstance.speak(text, resolvedVoiceId, ttsOptions);
   }
 
   /**
@@ -250,8 +255,7 @@ export class TTSManager {
     if (this.currentProvider) {
       this.currentProvider.stop();
     }
-  }
-  /**
+  }  /**
    * Test a specific voice
    */
   async testVoice(voiceId: string, options?: Partial<TTSOptions>, message?: string): Promise<void> {
@@ -263,119 +267,47 @@ export class TTSManager {
       return;
     }
     
-    if (!this.currentProvider || !this.settings) {
+    if (!this.settings) {
       throw new Error('TTS not initialized');
     }
 
+    // Determine which provider to use based on voice ID prefix
+    const provider = this.getProviderFromVoiceId(voiceId);
+    const providerInstance = this.providers.get(provider);
+    
+    if (!providerInstance) {
+      throw new Error(`Provider ${provider} not available for voice: ${voiceId}`);
+    }
+
     const actualVoiceId = this.resolveVoiceId(voiceId);
-    console.log('[TTS Manager] testVoice() - Resolved voiceId:', actualVoiceId);
+    console.log('[TTS Manager] testVoice() - Resolved voiceId:', actualVoiceId, 'using provider:', provider);
 
     const ttsOptions: TTSOptions = {
       volume: options?.volume ?? this.settings.volume,
       rate: options?.rate ?? this.settings.rate,
       pitch: options?.pitch ?? this.settings.pitch
-    };    console.log('[TTS Manager] testVoice() - Calling currentProvider.test()');
-    await this.currentProvider.test(actualVoiceId, ttsOptions, message);
+    };
+    
+    console.log('[TTS Manager] testVoice() - Calling', provider, 'provider.test()');
+    await providerInstance.test(actualVoiceId, ttsOptions, message);
     console.log('[TTS Manager] testVoice() - Provider test completed');
     
     // For Azure voices, retrieve audio data and send to renderer
-    if (voiceId.startsWith('azure_')) {
-      console.log('[TTS Manager] testVoice() - Azure voice, retrieving audio data');
-      const azureProvider = this.providers.get('azure');
-      if (azureProvider) {
-        const audioData = (azureProvider as any).getLastAudioData();
-        console.log('[TTS Manager] testVoice() - Audio data retrieved:', audioData ? audioData.length + ' bytes' : 'null');
-        if (audioData && this.mainWindow) {
-          console.log('[TTS Manager] testVoice() - Sending audio to renderer');
-          this.mainWindow.webContents.send('tts:play-audio', {
-            audioData: audioData.toString('base64'), // Convert Buffer to base64 for IPC
-            volume: ttsOptions.volume,
-            rate: ttsOptions.rate,
-            pitch: ttsOptions.pitch
-          });
-        } else if (!audioData) {
-          console.error('[TTS Manager] testVoice() - No audio data available!');
-        } else if (!this.mainWindow) {
-          console.error('[TTS Manager] testVoice() - mainWindow is null!');
-        }
-      } else {
-        console.error('[TTS Manager] testVoice() - Azure provider not found!');
-      }
+    if (provider === 'azure') {
+      this.sendAudioToRenderer('azure', ttsOptions);
     }
 
     // For Google voices, retrieve audio data and send to renderer
-    if (voiceId.startsWith('google_')) {
-      console.log('[TTS Manager] testVoice() - Google voice, retrieving audio data');
-      const googleProvider = this.providers.get('google');
-      if (googleProvider) {
-        const audioData = (googleProvider as any).getLastAudioData();
-        console.log('[TTS Manager] testVoice() - Audio data retrieved:', audioData ? audioData.length + ' bytes' : 'null');
-        if (audioData && this.mainWindow) {
-          console.log('[TTS Manager] testVoice() - Sending audio to renderer');
-          this.mainWindow.webContents.send('tts:play-audio', {
-            audioData: audioData.toString('base64'), // Convert Buffer to base64 for IPC
-            volume: ttsOptions.volume,
-            rate: ttsOptions.rate,
-            pitch: ttsOptions.pitch
-          });
-        } else if (!audioData) {
-          console.error('[TTS Manager] testVoice() - No audio data available!');
-        } else if (!this.mainWindow) {
-          console.error('[TTS Manager] testVoice() - mainWindow is null!');
-        }
-      } else {
-        console.error('[TTS Manager] testVoice() - Google provider not found!');
-      }
+    if (provider === 'google') {
+      this.sendAudioToRenderer('google', ttsOptions);
     }
   }
-
   /**
    * Save settings to database
    */
   async saveSettings(settings: Partial<TTSSettings>): Promise<void> {
-    const dbSettings: Record<string, any> = {};
-    
-    if (settings.enabled !== undefined) dbSettings.tts_enabled = settings.enabled;
-    if (settings.provider !== undefined) dbSettings.tts_provider = settings.provider;
-    if (settings.voiceId !== undefined) dbSettings.tts_voice_id = settings.voiceId;
-    if (settings.volume !== undefined) dbSettings.tts_volume = settings.volume;
-    if (settings.rate !== undefined) dbSettings.tts_rate = settings.rate;
-    if (settings.pitch !== undefined) dbSettings.tts_pitch = settings.pitch;
-    // Provider enable flags
-    if (settings.webspeechEnabled !== undefined) dbSettings.webspeech_enabled = settings.webspeechEnabled;
-    if (settings.azureEnabled !== undefined) dbSettings.azure_enabled = settings.azureEnabled;
-    if (settings.googleEnabled !== undefined) dbSettings.google_enabled = settings.googleEnabled;
-    // Provider credentials
-    if (settings.azureApiKey !== undefined) dbSettings.azure_api_key = settings.azureApiKey;
-    if (settings.azureRegion !== undefined) dbSettings.azure_region = settings.azureRegion;
-    if (settings.googleApiKey !== undefined) dbSettings.google_api_key = settings.googleApiKey;
-    // Basic filters
-    if (settings.filterCommands !== undefined) dbSettings.filter_commands = settings.filterCommands;
-    if (settings.filterBots !== undefined) dbSettings.filter_bots = settings.filterBots;
-    if (settings.filterUrls !== undefined) dbSettings.filter_urls = settings.filterUrls;
-    if (settings.announceUsername !== undefined) dbSettings.announce_username = settings.announceUsername;
-    if (settings.minMessageLength !== undefined) dbSettings.min_message_length = settings.minMessageLength;
-    if (settings.maxMessageLength !== undefined) dbSettings.max_message_length = settings.maxMessageLength;
-    // Duplicate detection
-    if (settings.skipDuplicateMessages !== undefined) dbSettings.skip_duplicate_messages = settings.skipDuplicateMessages;
-    if (settings.duplicateMessageWindow !== undefined) dbSettings.duplicate_message_window = settings.duplicateMessageWindow;
-    // Rate limiting
-    if (settings.userCooldownEnabled !== undefined) dbSettings.user_cooldown_enabled = settings.userCooldownEnabled;
-    if (settings.userCooldownSeconds !== undefined) dbSettings.user_cooldown_seconds = settings.userCooldownSeconds;
-    if (settings.globalCooldownEnabled !== undefined) dbSettings.global_cooldown_enabled = settings.globalCooldownEnabled;
-    if (settings.globalCooldownSeconds !== undefined) dbSettings.global_cooldown_seconds = settings.globalCooldownSeconds;
-    if (settings.maxQueueSize !== undefined) dbSettings.max_queue_size = settings.maxQueueSize;
-    // Emote/Emoji limits
-    if (settings.maxEmotesPerMessage !== undefined) dbSettings.max_emotes_per_message = settings.maxEmotesPerMessage;
-    if (settings.maxEmojisPerMessage !== undefined) dbSettings.max_emojis_per_message = settings.maxEmojisPerMessage;
-    if (settings.stripExcessiveEmotes !== undefined) dbSettings.strip_excessive_emotes = settings.stripExcessiveEmotes;
-    // Character repetition
-    if (settings.maxRepeatedChars !== undefined) dbSettings.max_repeated_chars = settings.maxRepeatedChars;
-    if (settings.maxRepeatedWords !== undefined) dbSettings.max_repeated_words = settings.maxRepeatedWords;
-    // Content filters
-    if (settings.copypastaFilterEnabled !== undefined) dbSettings.copypasta_filter_enabled = settings.copypastaFilterEnabled;
-
-
+    // Use centralized mapper to convert settings to database format
+    const dbSettings = SettingsMapper.toDatabase(settings);
     this.repository.saveSettings(dbSettings);
     
     // Reload settings
@@ -425,7 +357,6 @@ export class TTSManager {
   getSettings(): TTSSettings | null {
     return this.settings;
   }
-
   /**
    * Get available provider names
    */
@@ -438,6 +369,13 @@ export class TTSManager {
   }
 
   /**
+   * Determine provider from voice ID prefix (public wrapper for IPC handlers)
+   * Provides centralized routing logic across all TTS operations
+   */
+  determineProviderFromVoiceId(voiceId: string): 'webspeech' | 'azure' | 'google' {
+    return this.getProviderFromVoiceId(voiceId);
+  }
+  /**
    * Handle incoming chat message for TTS
    */
   async handleChatMessage(username: string, message: string, userId?: string): Promise<void> {
@@ -445,28 +383,19 @@ export class TTSManager {
       return; // TTS disabled
     }
 
-    // Check viewer-specific rules first
-    const viewerRule = this.viewerRulesRepo.getByUsername(username);
-    
-    // Check if viewer is muted
-    if (viewerRule?.isMuted) {
-      // Check if mute is temporary
-      if (viewerRule.mutedUntil) {
-        const mutedUntilTime = new Date(viewerRule.mutedUntil).getTime();
-        const now = Date.now();
-        
-        if (now < mutedUntilTime) {
-          console.log('[TTS] Viewer is temporarily muted:', username);
-          return;
-        } else {
-          // Mute expired, unmute the viewer
-          console.log('[TTS] Viewer mute expired, unmuting:', username);
-          this.viewerRulesRepo.update(username, { isMuted: false, mutedUntil: null });
-        }
-      } else {
-        // Permanent mute
-        console.log('[TTS] Viewer is permanently muted:', username);
-        return;
+    // NEW: Access control validation
+    if (userId) {
+      const validation = await this.accessControl.validateAndDetermineVoice(userId, message);
+      
+      if (!validation.canUseTTS) {
+        console.log(`[TTS] Viewer ${username} denied TTS access: ${validation.reason}`);
+        return; // Silent denial - don't queue message
+      }
+      
+      // Override voice/pitch/speed with validated settings
+      if (validation.voiceToUse) {
+        console.log(`[TTS] Using validated voice ${validation.voiceToUse} for ${username} (pitch: ${validation.pitch}, speed: ${validation.speed})`);
+        // We'll use these values when adding to queue below
       }
     }
 
@@ -474,54 +403,10 @@ export class TTSManager {
     if (this.settings.filterBots && this.isBot(username)) {
       console.log('[TTS] Skipping bot:', username);
       return;
-    }
-
-    // Check viewer-specific cooldown if enabled
-    if (viewerRule?.cooldownEnabled) {
-      // Check if cooldown is temporary and has expired
-      if (viewerRule.cooldownUntil) {
-        const cooldownUntilTime = new Date(viewerRule.cooldownUntil).getTime();
-        const now = Date.now();
-        
-        if (now >= cooldownUntilTime) {
-          // Cooldown expired, disable it
-          console.log('[TTS] Viewer cooldown expired, disabling:', username);
-          this.viewerRulesRepo.update(username, { cooldownEnabled: false, cooldownUntil: null });
-          // Don't return, continue with normal processing
-        } else {
-          // Cooldown still active
-          // Calculate effective cooldown (max of global and viewer-specific)
-          let effectiveCooldownSeconds = this.settings.userCooldownSeconds || 30;
-          if (viewerRule.cooldownSeconds !== null && viewerRule.cooldownSeconds !== undefined) {
-            effectiveCooldownSeconds = Math.max(effectiveCooldownSeconds, viewerRule.cooldownSeconds);
-          }
-
-          // Check user cooldown with effective cooldown
-          if (this.settings.userCooldownEnabled && !this.checkUserCooldownWithSeconds(username, effectiveCooldownSeconds)) {
-            console.log('[TTS] User on viewer-specific cooldown:', username, `(${effectiveCooldownSeconds}s)`);
-            return;
-          }
-        }
-      } else {
-        // Permanent viewer cooldown
-        // Calculate effective cooldown (max of global and viewer-specific)
-        let effectiveCooldownSeconds = this.settings.userCooldownSeconds || 30;
-        if (viewerRule.cooldownSeconds !== null && viewerRule.cooldownSeconds !== undefined) {
-          effectiveCooldownSeconds = Math.max(effectiveCooldownSeconds, viewerRule.cooldownSeconds);
-        }
-
-        // Check user cooldown with effective cooldown
-        if (this.settings.userCooldownEnabled && !this.checkUserCooldownWithSeconds(username, effectiveCooldownSeconds)) {
-          console.log('[TTS] User on permanent viewer cooldown:', username, `(${effectiveCooldownSeconds}s)`);
-          return;
-        }
-      }
-    } else {
-      // No viewer-specific cooldown, use normal global cooldown check
-      if (this.settings.userCooldownEnabled && !this.checkUserCooldown(username)) {
-        console.log('[TTS] User on cooldown:', username);
-        return;
-      }
+    }    // Check user cooldown
+    if (this.settings.userCooldownEnabled && !this.checkUserCooldown(username)) {
+      console.log('[TTS] User on cooldown:', username);
+      return;
     }
 
     // Check global cooldown
@@ -560,38 +445,25 @@ export class TTSManager {
     // Update user cooldown
     if (this.settings.userCooldownEnabled) {
       this.updateUserCooldown(username);
-    }
-
-    // Update global cooldown
+    }    // Update global cooldown
     if (this.settings.globalCooldownEnabled) {
       this.updateGlobalCooldown();
-    }
-
-    // Get viewer's custom voice/pitch/rate if they have them
+    }    // Get voice settings (use validated settings if available, otherwise use global)
     let voiceId = this.settings.voiceId;
     let pitch = this.settings.pitch;
     let rate = this.settings.rate;
     
-    if (viewerRule) {
-      if (viewerRule.customVoiceId !== null) {
-        // Look up the actual voice_id string from the numeric ID
-        const voice = this.voicesRepo.getVoiceByNumericId(viewerRule.customVoiceId);
-        if (voice) {
-          voiceId = voice.voice_id;
-          console.log(`[TTS] Using custom voice for ${username}: ${voice.name} (${voice.voice_id})`);
-        } else {
-          console.warn(`[TTS] Custom voice ID ${viewerRule.customVoiceId} not found for ${username}, using global`);
-        }
-      }
-      if (viewerRule.pitchOverride !== null) {
-        pitch = viewerRule.pitchOverride;
-      }
-      if (viewerRule.rateOverride !== null) {
-        rate = viewerRule.rateOverride;
+    // NEW: Override with validated voice settings if userId was provided
+    if (userId) {
+      const validation = await this.accessControl.validateAndDetermineVoice(userId, message);
+      if (validation.voiceToUse) {
+        voiceId = validation.voiceToUse;
+        pitch = validation.pitch || pitch;
+        rate = validation.speed || rate;
       }
     }
 
-    // Add to queue with viewer overrides
+    // Add to queue
     this.messageQueue.push({
       username,
       message: filteredMessage,
@@ -607,8 +479,7 @@ export class TTSManager {
 
   /**
    * Filter and clean message before speaking
-   */
-  private filterMessage(message: string): string | null {
+   */  private filterMessage(message: string): string | null {
     // Skip empty messages
     if (!message || message.trim().length === 0) {
       return null;
@@ -625,6 +496,11 @@ export class TTSManager {
     // Remove URLs if filter enabled
     if (this.settings?.filterUrls) {
       filtered = filtered.replace(/https?:\/\/\S+/gi, '');
+    }
+
+    // Remove blocked words
+    if (this.settings?.blockedWords && this.settings.blockedWords.length > 0) {
+      filtered = this.removeBlockedWords(filtered);
     }
 
     // Check message length limits
@@ -653,6 +529,32 @@ export class TTSManager {
   private isBot(username: string): boolean {
     const botNames = ['nightbot', 'streamelements', 'streamlabs', 'moobot', 'fossabot', 'wizebot'];
     return botNames.includes(username.toLowerCase());
+  }
+
+  /**
+   * Remove blocked words from message
+   */
+  private removeBlockedWords(message: string): string {
+    if (!this.settings?.blockedWords || this.settings.blockedWords.length === 0) {
+      return message;
+    }
+
+    let filtered = message;
+
+    // Remove each blocked word (case-insensitive, as whole words)
+    for (const blockedWord of this.settings.blockedWords) {
+      if (!blockedWord.trim()) continue;
+      
+      // Create a regex that matches the word as a whole word (with word boundaries)
+      // Use case-insensitive flag
+      const regex = new RegExp(`\\b${blockedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+      filtered = filtered.replace(regex, '');
+    }
+
+    // Clean up extra whitespace
+    filtered = filtered.replace(/\s+/g, ' ').trim();
+
+    return filtered;
   }
 
   /**
@@ -797,28 +699,18 @@ export class TTSManager {
     const normalized = message.toLowerCase().trim();
     return this.copypastaList.has(normalized);
   }
-
   /**
    * Check if user is on cooldown
+   * @param username - The username to check
+   * @param cooldownSeconds - Optional custom cooldown in seconds (defaults to settings.userCooldownSeconds)
    */
-  private checkUserCooldown(username: string): boolean {
+  private checkUserCooldown(username: string, cooldownSeconds?: number): boolean {
     const cooldown = this.userCooldowns.get(username);
     if (!cooldown) return true;
 
     const now = Date.now();
-    const cooldownMs = (this.settings?.userCooldownSeconds || 30) * 1000;
-    return now - cooldown.lastSpoke >= cooldownMs;
-  }
-
-  /**
-   * Check if user is on cooldown with custom seconds
-   */
-  private checkUserCooldownWithSeconds(username: string, cooldownSeconds: number): boolean {
-    const cooldown = this.userCooldowns.get(username);
-    if (!cooldown) return true;
-
-    const now = Date.now();
-    const cooldownMs = cooldownSeconds * 1000;
+    const seconds = cooldownSeconds ?? this.settings?.userCooldownSeconds ?? 30;
+    const cooldownMs = seconds * 1000;
     return now - cooldown.lastSpoke >= cooldownMs;
   }
 
@@ -932,19 +824,15 @@ export class TTSManager {
             });
             
             // Get audio data and send to renderer for playback (OBS-compatible)
-            const audioData = (azureProvider as any).getLastAudioData();
-            if (audioData && this.mainWindow) {
-              this.mainWindow.webContents.send('tts:play-audio', {
-                audioData: audioData.toString('base64'), // Convert Buffer to base64 for IPC
-                volume: this.settings?.volume,
-                rate: item.rate ?? this.settings?.rate,
-                pitch: item.pitch ?? this.settings?.pitch
-              });
-              
-              // Wait for frontend to confirm audio playback is complete
-              console.log('[TTS] Waiting for Azure audio playback to finish...');
-              await this.waitForAudioFinished();
-            }
+            this.sendAudioToRenderer('azure', {
+              volume: this.settings?.volume,
+              rate: item.rate ?? this.settings?.rate,
+              pitch: item.pitch ?? this.settings?.pitch
+            });
+            
+            // Wait for frontend to confirm audio playback is complete
+            console.log('[TTS] Waiting for Azure audio playback to finish...');
+            await this.waitForAudioFinished();
           } else {
             console.error('[TTS] Azure provider not available for voice:', voiceId);
           }        } else if (voiceId.startsWith('google_')) {
@@ -958,19 +846,15 @@ export class TTSManager {
             });
             
             // Get audio data and send to renderer for playback (OBS-compatible)
-            const audioData = (googleProvider as any).getLastAudioData();
-            if (audioData && this.mainWindow) {
-              this.mainWindow.webContents.send('tts:play-audio', {
-                audioData: audioData.toString('base64'), // Convert Buffer to base64 for IPC
-                volume: this.settings?.volume,
-                rate: item.rate ?? this.settings?.rate,
-                pitch: item.pitch ?? this.settings?.pitch
-              });
-              
-              // Wait for frontend to confirm audio playback is complete
-              console.log('[TTS] Waiting for Google audio playback to finish...');
-              await this.waitForAudioFinished();
-            }
+            this.sendAudioToRenderer('google', {
+              volume: this.settings?.volume,
+              rate: item.rate ?? this.settings?.rate,
+              pitch: this.settings?.pitch
+            });
+            
+            // Wait for frontend to confirm audio playback is complete
+            console.log('[TTS] Waiting for Google audio playback to finish...');
+            await this.waitForAudioFinished();
           } else {
             console.error('[TTS] Google provider not available for voice:', voiceId);
           }

@@ -68,21 +68,17 @@ export class VoiceParser {
     const cleanName = match ? match[1].trim() : voiceName;
     
     return cleanName;
-  }
-
-  // Detect gender from voice name or URI
+  }  // Detect gender from voice name or URI
   private static detectGender(voiceName: string, voiceURI: string): string | null {
     const combined = `${voiceName} ${voiceURI}`.toLowerCase();
     
     // Known male voices (common TTS voice names)
     const maleIndicators = [
       'male', 'man', 'boy', 'guy', 'tom',
-      // English male names
       'alex', 'daniel', 'fred', 'jorge', 'juan', 'diego', 'thomas', 'ralph', 
       'bruce', 'aaron', 'albert', 'arthur', 'brian', 'carlos', 'gordon',
       'henrik', 'james', 'lee', 'luca', 'martin', 'matej', 'nicolas', 
       'oliver', 'otoya', 'reed', 'rocko', 'damayanti', 'grandpa',
-      // International male names
       'xander', 'yannick', 'eddy', 'majed', 'maged', 'tarik', 'filip',
       'giorgio', 'diego', 'enrique', 'jorge', 'juan', 'matej', 'oskar',
       'mikhail', 'yuri', 'pierre', 'thomas', 'henrik', 'emilio'
@@ -91,13 +87,11 @@ export class VoiceParser {
     // Known female voices
     const femaleIndicators = [
       'female', 'woman', 'girl', 
-      // English female names
       'samantha', 'victoria', 'kate', 'monica', 'paulina', 'amelie', 
       'alice', 'emma', 'sophia', 'karen', 'nicky', 'jenny', 'flo',
       'sara', 'laura', 'anna', 'ava', 'catherine', 'ellen', 'grandma',
       'martha', 'sandy', 'shelley', 'susan', 'allison', 'kathy', 'melina',
       'milena', 'nora', 'tessa', 'zuzana', 'joana', 'luciana', 'monica',
-      // International female names
       'ting', 'mei', 'li', 'yan', 'kyoko', 'sara', 'satu', 'laura',
       'alva', 'klara', 'petra', 'veena', 'lekha', 'carmit', 'yelda'
     ];
@@ -136,60 +130,22 @@ export class VoiceParser {
     const regionPart = parts[1]?.toUpperCase();
 
     const languageNames: Record<string, string> = {
-      'en': 'English',
-      'es': 'Spanish',
-      'fr': 'French',
-      'de': 'German',
-      'it': 'Italian',
-      'pt': 'Portuguese',
-      'ru': 'Russian',
-      'ja': 'Japanese',
-      'ko': 'Korean',
-      'zh': 'Chinese',
-      'ar': 'Arabic',
-      'hi': 'Hindi',
-      'nl': 'Dutch',
-      'pl': 'Polish',
-      'tr': 'Turkish',
-      'sv': 'Swedish',
-      'da': 'Danish',
-      'no': 'Norwegian',
-      'fi': 'Finnish',
-      'cs': 'Czech',
-      'el': 'Greek',
-      'he': 'Hebrew',
-      'th': 'Thai',
-      'id': 'Indonesian',
-      'vi': 'Vietnamese',
-      'ro': 'Romanian',
-      'hu': 'Hungarian',
-      'sk': 'Slovak'
+      'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+      'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian', 'ja': 'Japanese',
+      'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi',
+      'nl': 'Dutch', 'pl': 'Polish', 'tr': 'Turkish', 'sv': 'Swedish',
+      'da': 'Danish', 'no': 'Norwegian', 'fi': 'Finnish', 'cs': 'Czech',
+      'el': 'Greek', 'he': 'Hebrew', 'th': 'Thai', 'id': 'Indonesian',
+      'vi': 'Vietnamese', 'ro': 'Romanian', 'hu': 'Hungarian', 'sk': 'Slovak'
     };
 
     const regionNames: Record<string, string> = {
-      'US': 'United States',
-      'GB': 'United Kingdom',
-      'AU': 'Australia',
-      'CA': 'Canada',
-      'IN': 'India',
-      'ES': 'Spain',
-      'MX': 'Mexico',
-      'AR': 'Argentina',
-      'FR': 'France',
-      'DE': 'Germany',
-      'IT': 'Italy',
-      'BR': 'Brazil',
-      'PT': 'Portugal',
-      'RU': 'Russia',
-      'JP': 'Japan',
-      'KR': 'South Korea',
-      'CN': 'China',
-      'TW': 'Taiwan',
-      'HK': 'Hong Kong',
-      'NL': 'Netherlands',
-      'BE': 'Belgium',
-      'CH': 'Switzerland',
-      'AT': 'Austria'
+      'US': 'United States', 'GB': 'United Kingdom', 'AU': 'Australia',
+      'CA': 'Canada', 'IN': 'India', 'ES': 'Spain', 'MX': 'Mexico',
+      'AR': 'Argentina', 'FR': 'France', 'DE': 'Germany', 'IT': 'Italy',
+      'BR': 'Brazil', 'PT': 'Portugal', 'RU': 'Russia', 'JP': 'Japan',
+      'KR': 'South Korea', 'CN': 'China', 'TW': 'Taiwan', 'HK': 'Hong Kong',
+      'NL': 'Netherlands', 'BE': 'Belgium', 'CH': 'Switzerland', 'AT': 'Austria'
     };
 
     const languageName = languageNames[langPart] || langPart.toUpperCase();
