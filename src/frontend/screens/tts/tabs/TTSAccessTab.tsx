@@ -100,16 +100,17 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
     } finally {
       setSaving(false);
     }
-  };
-  const handleModeChange = (newMode: 'access_all' | 'limited_access' | 'premium_voice_access') => {
+  };  const handleModeChange = (newMode: 'access_all' | 'limited_access' | 'premium_voice_access') => {
     if (!config) return;
 
     // Validate premium mode
     if (newMode === 'premium_voice_access' && globalVoiceProvider !== 'webspeech') {
       setMessage({
-        type: 'warning',
-        text: 'Cannot enable Premium Voice Access while global voice is set to Azure or Google. Please set global voice to WebSpeech first.'
+        type: 'error',
+        text: 'A premium voice is currently set. Pick a Web Speech voice in Voice Settings first.'
       });
+      // Clear error message after 8 seconds (longer for user to read)
+      setTimeout(() => setMessage(null), 8000);
       return;
     }
 

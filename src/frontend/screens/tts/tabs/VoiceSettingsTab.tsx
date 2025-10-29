@@ -29,6 +29,7 @@ interface Props {
   languageFilter: string;
   genderFilter: string;
   providerFilter: string;
+  error: string | null;
   onSettingChange: (key: keyof ttsService.TTSSettings, value: any) => Promise<void>;
   onTestVoice: () => Promise<void>;
   onStop: () => Promise<void>;
@@ -38,7 +39,9 @@ interface Props {
   onSearchChange: (term: string) => void;
   onLanguageFilterChange: (filter: string) => void;
   onGenderFilterChange: (filter: string) => void;
-  onProviderFilterChange: (filter: string) => void;  getUniqueLanguages: () => string[];
+  onProviderFilterChange: (filter: string) => void;
+  onErrorClear: () => void;
+  getUniqueLanguages: () => string[];
   getAvailableGenders: () => string[];
   getAvailableProviders: () => Array<{ value: string; label: string }>;
   getFilteredGroups: () => VoiceGroup[];
@@ -59,6 +62,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   languageFilter,
   genderFilter,
   providerFilter,
+  error,
   onSettingChange,
   onTestVoice,
   onStop,
@@ -69,6 +73,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   onLanguageFilterChange,
   onGenderFilterChange,
   onProviderFilterChange,
+  onErrorClear,
   getUniqueLanguages,
   getAvailableGenders,
   getAvailableProviders,
@@ -523,9 +528,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
             );
           }
           return null;
-        })()}
-
-        <select
+        })()}        <select
           value={settings.voiceId || ''}
           onChange={(e) => onSettingChange('voiceId', e.target.value)}
           className="voice-select"
@@ -540,6 +543,38 @@ export const VoiceSettingsTab: React.FC<Props> = ({
               ))}
             </optgroup>
           ))}        </select>
+
+        {/* Error message display */}
+        {error && (
+          <div style={{
+            marginTop: '10px',
+            padding: '12px',
+            backgroundColor: '#3a1a1a',
+            border: '1px solid #dc3545',
+            borderRadius: '4px',
+            color: '#dc3545',
+            fontSize: '14px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>❌ {error}</span>
+            <button
+              onClick={onErrorClear}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#dc3545',
+                cursor: 'pointer',
+                fontSize: '18px',
+                padding: '0 5px'
+              }}
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Volume Control */}

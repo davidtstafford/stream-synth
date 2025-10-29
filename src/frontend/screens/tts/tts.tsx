@@ -217,10 +217,31 @@ export const TTS: React.FC = () => {
         });
       }, 5000);
     }
-  };
-
-  const handleSettingChange = async (key: keyof ttsService.TTSSettings, value: any) => {
+  };  const handleSettingChange = async (key: keyof ttsService.TTSSettings, value: any) => {
     try {
+      // Special validation for voiceId changes
+      if (key === 'voiceId') {
+        const voiceIdStr = String(value);
+        const isPremiumVoice = voiceIdStr.startsWith('azure_') || voiceIdStr.startsWith('google_');
+        
+        if (isPremiumVoice) {
+          // Check if Premium Voice Access mode is enabled
+          const { ipcRenderer } = window.require('electron');
+          const response = await ipcRenderer.invoke('tts-access:get-config');
+          
+          if (response.success && response.data) {
+            const accessMode = response.data.access_mode;
+            
+            if (accessMode === 'premium_voice_access') {
+              setError('Premium Voice Access mode is currently enabled. Remove the Premium Voice Access setting in the TTS Access tab first.');
+              // Clear error after 8 seconds (longer for user to read)
+              setTimeout(() => setError(null), 8000);
+              return;
+            }
+          }
+        }
+      }
+
       console.log(`[TTS] Saving ${key}:`, value);
       await ttsService.saveSettings({ [key]: value });
       setSettings(prev => prev ? { ...prev, [key]: value } : null);
@@ -448,9 +469,7 @@ export const TTS: React.FC = () => {
         >
           👤 Viewer Rules
         </button>
-      </div>
-
-      {activeTab === 'settings' && (
+      </div>      {activeTab === 'settings' && (
         <div className="tab-content">
           <VoiceSettingsTab
             settings={settings}
@@ -464,6 +483,7 @@ export const TTS: React.FC = () => {
             languageFilter={languageFilter}
             genderFilter={genderFilter}
             providerFilter={providerFilter}
+            error={error}
             onSettingChange={handleSettingChange}
             onTestVoice={handleTestVoice}
             onStop={handleStop}
@@ -474,6 +494,7 @@ export const TTS: React.FC = () => {
             onLanguageFilterChange={setLanguageFilter}
             onGenderFilterChange={setGenderFilter}
             onProviderFilterChange={setProviderFilter}
+            onErrorClear={() => setError(null)}
             getUniqueLanguages={getUniqueLanguages}
             getAvailableGenders={getAvailableGenders}
             getAvailableProviders={getAvailableProviders}
@@ -492,12 +513,14 @@ export const TTS: React.FC = () => {
             onSettingChange={handleSettingChange}
           />
         </div>
-      )}
-
-      {activeTab === 'access' && (
+      )}      {activeTab === 'access' && (
         <div className="tab-content">
           <TTSAccessTab
-            globalVoiceProvider={settings?.provider || 'webspeech'}
+            globalVoiceProvider={
+              settings?.voiceId?.startsWith('azure_') ? 'azure' :
+              settings?.voiceId?.startsWith('google_') ? 'google' :
+              'webspeech'
+            }
           />
         </div>
       )}
