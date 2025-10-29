@@ -10,6 +10,7 @@ interface TTSAccessConfig {
   limited_allow_subscribers: number;
   limited_deny_gifted_subs: number;
   limited_allow_vip: number;
+  limited_allow_mod: number;
   limited_redeem_name: string | null;
   limited_redeem_duration_mins: number | null;
   
@@ -17,6 +18,7 @@ interface TTSAccessConfig {
   premium_allow_subscribers: number;
   premium_deny_gifted_subs: number;
   premium_allow_vip: number;
+  premium_allow_mod: number;
   premium_redeem_name: string | null;
   premium_redeem_duration_mins: number | null;
 }
@@ -35,10 +37,26 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
+  const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadConfig();
   }, []);
+
+  useEffect(() => {
+    // Auto-save when config changes (debounced)
+    if (config && !loading) {
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+      
+      const timeout = setTimeout(() => {
+        saveConfig(config);
+      }, 500); // 500ms debounce
+      
+      setSaveTimeout(timeout);
+    }
+  }, [config]);
 
   const loadConfig = async () => {
     try {
@@ -56,7 +74,6 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
       setLoading(false);
     }
   };
-
   const updateConfig = (field: keyof TTSAccessConfig, value: any) => {
     if (!config) return;
     
@@ -66,6 +83,24 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
     });
   };
 
+  const saveConfig = async (configToSave: TTSAccessConfig) => {
+    try {
+      setSaving(true);
+      const response = await ipcRenderer.invoke('tts-access:save-config', configToSave);
+      
+      if (response.success) {
+        setMessage({ type: 'success', text: 'Saved' });
+        // Clear message after 2 seconds
+        setTimeout(() => setMessage(null), 2000);
+      } else {
+        setMessage({ type: 'error', text: response.error || 'Failed to save' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      setSaving(false);
+    }
+  };
   const handleModeChange = (newMode: 'access_all' | 'limited_access' | 'premium_voice_access') => {
     if (!config) return;
 
@@ -87,27 +122,6 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
     });
   };
 
-  const handleSave = async () => {
-    if (!config) return;
-
-    try {
-      setSaving(true);
-      setMessage(null);
-
-      const response = await ipcRenderer.invoke('tts-access:save-config', config);
-      
-      if (response.success) {
-        setMessage({ type: 'success', text: 'Configuration saved successfully!' });
-      } else {
-        setMessage({ type: 'error', text: response.error || 'Failed to save configuration' });
-      }
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleReset = async () => {
     if (!confirm('Are you sure you want to reset to default settings?')) {
       return;
@@ -120,6 +134,7 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
       if (response.success) {
         await loadConfig();
         setMessage({ type: 'success', text: 'Configuration reset to defaults' });
+        setTimeout(() => setMessage(null), 3000);
       } else {
         setMessage({ type: 'error', text: response.error || 'Failed to reset configuration' });
       }
@@ -210,8 +225,7 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
             </label>
             <p className="rule-description">If checked, viewers with gifted subscriptions cannot use TTS.</p>
           </div>
-          
-          <div className="rule-item">
+            <div className="rule-item">
             <label className="checkbox-label">
               <input 
                 type="checkbox"
@@ -223,6 +237,18 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
             <p className="rule-description">VIP viewers can use TTS even if not subscribed.</p>
           </div>
           
+          <div className="rule-item">
+            <label className="checkbox-label">
+              <input 
+                type="checkbox"
+                checked={config.limited_allow_mod === 1}
+                onChange={(e) => updateConfig('limited_allow_mod', e.target.checked ? 1 : 0)}
+              />
+              <span className="checkbox-text">Allow Mod</span>
+            </label>
+            <p className="rule-description">Moderators can use TTS even if not subscribed.</p>
+          </div>
+          
           <div className="rule-item redeem-rule">
             <label className="checkbox-label">
               <input 
@@ -232,6 +258,9 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
                   if (!e.target.checked) {
                     updateConfig('limited_redeem_name', null);
                     updateConfig('limited_redeem_duration_mins', null);
+                  } else {
+                    updateConfig('limited_redeem_name', '');
+                    updateConfig('limited_redeem_duration_mins', 60);
                   }
                 }}
               />
@@ -306,8 +335,7 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
               </label>
               <p className="rule-description">If checked, viewers with gifted subscriptions cannot use premium voices.</p>
             </div>
-            
-            <div className="rule-item">
+              <div className="rule-item">
               <label className="checkbox-label">
                 <input 
                   type="checkbox"
@@ -317,6 +345,18 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
                 <span className="checkbox-text">Allow VIP</span>
               </label>
               <p className="rule-description">VIP viewers can use premium voices even if not subscribed.</p>
+            </div>
+            
+            <div className="rule-item">
+              <label className="checkbox-label">
+                <input 
+                  type="checkbox"
+                  checked={config.premium_allow_mod === 1}
+                  onChange={(e) => updateConfig('premium_allow_mod', e.target.checked ? 1 : 0)}
+                />
+                <span className="checkbox-text">Allow Mod</span>
+              </label>
+              <p className="rule-description">Moderators can use premium voices even if not subscribed.</p>
             </div>
             
             <div className="rule-item redeem-rule">
@@ -362,26 +402,15 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
                 Viewers can redeem channel points to get temporary premium voice access.
                 <br/><em>Note: Requires EventSub event "channel.channel_points_custom_reward_redemption.add" to be enabled.</em>
               </p>
-            </div>
-          </div>
+            </div>          </div>
         </>
       )}
 
-      <div className="button-group">
-        <button 
-          onClick={handleSave} 
-          disabled={saving}
-          className="button button-primary"
-        >
-          {saving ? 'Saving...' : 'Save Configuration'}
-        </button>
-        <button 
-          onClick={handleReset}
-          disabled={saving}        className="button button-secondary"
-        >
-          Reset to Defaults
-        </button>
-      </div>
+      {saving && (
+        <div className="saving-indicator">
+          <em>Saving...</em>
+        </div>
+      )}
     </div>
   );
 };

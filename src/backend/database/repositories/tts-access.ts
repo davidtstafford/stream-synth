@@ -8,6 +8,7 @@ export interface TTSAccessConfig {
   limited_allow_subscribers: number;
   limited_deny_gifted_subs: number;
   limited_allow_vip: number;
+  limited_allow_mod: number;
   limited_redeem_name: string | null;
   limited_redeem_duration_mins: number | null;
   
@@ -15,6 +16,7 @@ export interface TTSAccessConfig {
   premium_allow_subscribers: number;
   premium_deny_gifted_subs: number;
   premium_allow_vip: number;
+  premium_allow_mod: number;
   premium_redeem_name: string | null;
   premium_redeem_duration_mins: number | null;
   

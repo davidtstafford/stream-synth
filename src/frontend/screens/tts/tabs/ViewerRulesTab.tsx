@@ -149,7 +149,6 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
       [field]: value
     });
   };
-
   const handleSaveRule = async () => {
     if (!editingRule || !editingRule.viewer_id || !editingRule.voice_id) {
       setMessage({ type: 'error', text: 'Please select a voice' });
@@ -163,7 +162,8 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
       const response = await ipcRenderer.invoke('viewer-rules:save', editingRule);
       
       if (response.success) {
-        setMessage({ type: 'success', text: 'Viewer rule saved successfully!' });
+        setMessage({ type: 'success', text: 'Rule saved successfully!' });
+        setTimeout(() => setMessage(null), 2000);
         await loadRules();
         setEditingRule(null);
         setSelectedViewer(null);
@@ -177,7 +177,6 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
       setSaving(false);
     }
   };
-
   const handleDeleteRule = async (viewerId: string, viewerName: string) => {
     if (!confirm(`Delete custom voice rule for ${viewerName}?`)) {
       return;
@@ -188,6 +187,7 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
       
       if (response.success) {
         setMessage({ type: 'success', text: 'Rule deleted successfully' });
+        setTimeout(() => setMessage(null), 2000);
         await loadRules();
       } else {
         setMessage({ type: 'error', text: response.error || 'Failed to delete rule' });
@@ -292,23 +292,25 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               onChange={(e) => setSearchTerm(e.target.value)}
               className="search-input"
             />
-            
-            {searchResults.length > 0 && (
+              {searchResults.length > 0 && (
               <ul className="autocomplete-results">
-                {searchResults.map(viewer => (
-                  <li 
-                    key={viewer.id}
-                    onClick={() => selectViewer(viewer)}
-                    className="autocomplete-item"
-                  >
-                    <span className="viewer-name">
-                      {viewer.display_name || viewer.username}
-                    </span>
-                    {viewer.hasRule && (
-                      <span className="has-rule-badge">Has Rule</span>
-                    )}
-                  </li>
-                ))}
+                {searchResults.map(viewer => {
+                  const hasRule = rules.some(r => r.viewer_id === viewer.id);
+                  return (
+                    <li 
+                      key={viewer.id}
+                      onClick={() => selectViewer(viewer)}
+                      className="autocomplete-item"
+                    >
+                      <span className="viewer-name">
+                        {viewer.display_name || viewer.username}
+                      </span>
+                      {hasRule && (
+                        <span className="has-rule-badge">Has Rule</span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -377,17 +379,21 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               ))}
             </select>
           </div>
-          
-          {/* Voice Selection */}
+            {/* Voice Selection */}
           <div className="voice-selector">
             <label>Voice:</label>
             <select 
               value={editingRule.voice_id || ''}
               onChange={(e) => {
                 const selectedVoice = filteredVoices.find(v => v.voice_id === e.target.value);
-                updateRule('voice_id', e.target.value);
                 if (selectedVoice) {
-                  updateRule('provider', selectedVoice.provider);
+                  setEditingRule({
+                    ...editingRule,
+                    voice_id: e.target.value,
+                    provider: selectedVoice.provider
+                  });
+                } else {
+                  updateRule('voice_id', e.target.value);
                 }
               }}
               className="voice-select"
@@ -444,14 +450,13 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               <span>Faster</span>
             </div>
           </div>
-          
-          <div className="button-group">
+            <div className="button-group">
             <button 
               onClick={handleSaveRule} 
               disabled={saving || !editingRule.voice_id}
               className="button button-primary"
             >
-              {saving ? 'Saving...' : 'Save Rule'}
+              {saving ? 'Saving...' : 'Add/Update Rule'}
             </button>
             <button 
               onClick={handleCancelEdit}

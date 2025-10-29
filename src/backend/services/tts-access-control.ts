@@ -167,7 +167,6 @@ export class TTSAccessControlService {
       };
     }
   }
-
   /**
    * Check if viewer passes access mode rules
    */
@@ -182,6 +181,9 @@ export class TTSAccessControlService {
     const allowVIP = mode === 'limited_access'
       ? config.limited_allow_vip
       : config.premium_allow_vip;
+    const allowMod = mode === 'limited_access'
+      ? config.limited_allow_mod
+      : config.premium_allow_mod;
     const redeemName = mode === 'limited_access'
       ? config.limited_redeem_name
       : config.premium_redeem_name;
@@ -194,6 +196,12 @@ export class TTSAccessControlService {
     if (allowVIP) {
       const isVIP = this.checkVIPEligibility(viewerId);
       if (isVIP) return true;
+    }
+
+    // Check Moderator status
+    if (allowMod) {
+      const isMod = this.checkModeratorEligibility(viewerId);
+      if (isMod) return true;
     }
 
     // Check channel point grant
@@ -222,12 +230,18 @@ export class TTSAccessControlService {
 
     return true;
   }
-
   /**
    * Check if viewer has VIP role
    */
   private checkVIPEligibility(viewerId: string): boolean {
     return this.rolesRepo.isViewerVIP(viewerId);
+  }
+
+  /**
+   * Check if viewer has Moderator role
+   */
+  private checkModeratorEligibility(viewerId: string): boolean {
+    return this.rolesRepo.isViewerModerator(viewerId);
   }
 
   /**

@@ -16,6 +16,7 @@ import { authenticateWithTwitch } from '../../auth/twitch-oauth';
 import { exportSettings, importSettings, getExportPreview } from '../../services/export-import';
 import { TwitchSubscriptionsService } from '../../services/twitch-subscriptions';
 import { TwitchVIPService } from '../../services/twitch-vip';
+import { TwitchModeratorsService } from '../../services/twitch-moderators';
 import { getDatabase } from '../../database/connection';
 
 let mainWindow: BrowserWindow | null = null;
@@ -76,13 +77,12 @@ export function setupTwitchHandlers(): void {
         return getExportPreview();
       }
     }
-  );
-  // ===== Subscriptions & VIPs =====
-  ipcRegistry.register<void, { success: boolean; subCount?: number; vipCount?: number; error?: string }>(
+  );  // ===== Subscriptions & VIPs & Moderators =====
+  ipcRegistry.register<void, { success: boolean; subCount?: number; vipCount?: number; modCount?: number; error?: string }>(
     'twitch:sync-subscriptions-from-twitch',
     {
       execute: async () => {
-        console.log('[Twitch] Syncing subscriptions and VIPs from Twitch API...');
+        console.log('[Twitch] Syncing subscriptions, VIPs, and moderators from Twitch API...');
         const db = getDatabase();
         const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
         const session = new sessionsRepo().getCurrentSession();
@@ -105,11 +105,16 @@ export function setupTwitchHandlers(): void {
           session.user_id
         );
 
+        // Sync Moderators
+        const modService = new TwitchModeratorsService();
+        const modResult = await modService.syncModerators(session.channel_id);
+
         return {
-          success: subResult.success && vipResult.success,
+          success: subResult.success && vipResult.success && modResult.success,
           subCount: subResult.count,
           vipCount: vipResult.count,
-          error: subResult.error || vipResult.error
+          modCount: modResult.count,
+          error: subResult.error || vipResult.error || modResult.error
         };
       }
     }

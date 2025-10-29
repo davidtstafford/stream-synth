@@ -30,6 +30,22 @@ export class ViewerRolesRepository extends BaseRepository<ViewerRole> {
   }
 
   /**
+   * Check if a viewer currently has Moderator status
+   */
+  isViewerModerator(viewerId: string): boolean {
+    const db = this.getDatabase();
+    const result = db.prepare(`
+      SELECT COUNT(*) as count 
+      FROM viewer_roles 
+      WHERE viewer_id = ? 
+        AND role_type = 'moderator' 
+        AND revoked_at IS NULL
+    `).get(viewerId) as { count: number };
+    
+    return result.count > 0;
+  }
+
+  /**
    * Check if a viewer has a specific role
    */
   hasRole(viewerId: string, roleType: 'vip' | 'moderator' | 'broadcaster'): boolean {
@@ -96,7 +112,6 @@ export class ViewerRolesRepository extends BaseRepository<ViewerRole> {
       WHERE viewer_id = ? AND role_type = ? AND revoked_at IS NULL
     `).run(viewerId, roleType);
   }
-
   /**
    * Sync VIP list from Twitch
    * Grants VIP to all viewers in the list, revokes VIP from others
@@ -129,6 +144,48 @@ export class ViewerRolesRepository extends BaseRepository<ViewerRole> {
           UPDATE viewer_roles 
           SET revoked_at = CURRENT_TIMESTAMP
           WHERE role_type = 'vip' AND revoked_at IS NULL
+        `).run();
+      }
+
+      db.prepare('COMMIT').run();
+    } catch (error) {
+      db.prepare('ROLLBACK').run();
+      throw error;
+    }
+  }
+
+  /**
+   * Sync Moderator list from Twitch
+   * Grants moderator to all viewers in the list, revokes moderator from others
+   */
+  syncModerators(viewerIds: string[]): void {
+    const db = this.getDatabase();
+    
+    // Start transaction for atomic operation
+    db.prepare('BEGIN').run();
+    
+    try {
+      // Grant moderator to all viewers in the list
+      for (const viewerId of viewerIds) {
+        this.grantRole(viewerId, 'moderator');
+      }
+
+      // Revoke moderator from viewers not in the list
+      if (viewerIds.length > 0) {
+        const placeholders = viewerIds.map(() => '?').join(',');
+        db.prepare(`
+          UPDATE viewer_roles 
+          SET revoked_at = CURRENT_TIMESTAMP
+          WHERE role_type = 'moderator' 
+            AND revoked_at IS NULL
+            AND viewer_id NOT IN (${placeholders})
+        `).run(...viewerIds);
+      } else {
+        // No moderators - revoke all
+        db.prepare(`
+          UPDATE viewer_roles 
+          SET revoked_at = CURRENT_TIMESTAMP
+          WHERE role_type = 'moderator' AND revoked_at IS NULL
         `).run();
       }
 

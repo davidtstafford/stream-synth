@@ -423,10 +423,24 @@ export function runMigrations(db: Database.Database): void {
   `);
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_grants_expiry ON channel_point_grants(expires_at)
-  `);
-  db.exec(`
+  `);  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_grants_active ON channel_point_grants(viewer_id, expires_at)
   `);
+
+  // Migration: Add moderator columns to tts_access_config (if not exist)
+  const columns = db.prepare(`PRAGMA table_info(tts_access_config)`).all() as any[];
+  const hasModColumns = columns.some(col => col.name === 'limited_allow_mod');
+  
+  if (!hasModColumns) {
+    console.log('Migrating tts_access_config: Adding moderator columns...');
+    db.exec(`
+      ALTER TABLE tts_access_config ADD COLUMN limited_allow_mod INTEGER DEFAULT 0
+    `);
+    db.exec(`
+      ALTER TABLE tts_access_config ADD COLUMN premium_allow_mod INTEGER DEFAULT 0
+    `);
+    console.log('Moderator columns added successfully');
+  }
 
   console.log('Database migrations completed');
 }

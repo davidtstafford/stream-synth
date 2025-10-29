@@ -1,0 +1,106 @@
+I need this solution to be future proof, modular and avoid code being dispersed and mutiple place, but rather other screens and handlers and access this new framework
+
+i will want two new tabs within the TTS screen
+
+1. TTS access
+2. Viewer Rules
+
+
+there are three providers fro voices.. Webspeech, Azure and Google.  
+But Azure and Google cost the App owner money once they are used enough.
+therefore these are known as premium voices
+
+as such i want to build either one or two servies be able to handle the following kinds of scenerios:
+
+
+1. User has set a toggle to only allow viewers with twitch subscriptions uses TTS.
+2. User has set a toggle that denies viewers with gifted subs from using TTS. this
+is appicable if the first rule is set.  Is essence of subbed and not gifted viewers
+get TTS
+
+3. User has set a toggle to only allow viewers with twitch subscriptions uses premimum TTS voices.
+4. User has set a toggle that denies viewers with gifted subs from using TTS premimum voices. this
+is appicable if the third rule is set.  Is essence it's subbed and not gifted viewers
+get TTS voices.
+
+
+in the case of rule 1 & 2 and 3 & 4 .. 1 & 2 cannot be used at the same time as 3 & 4
+i.e.  either you are locking down TTS usage completely, or restricting TTS voices. but not both at the same time
+
+
+this needs to be future proofed for also allowing VIPs access within those two groups
+allow need future proofing the allow X amount of time granted to these categories based on a redeem
+
+
+
+
+if it where a UI screen i would picture it has.
+
+
+
+Apply TTS Restrictions:
+dropdownlist
+ - Access to All
+ - Limited Access
+ - Premium Voice Access
+
+
+ When "Access to ALL" is selected, no need to shown anything else on the UI
+
+ When "Limited Access" is selected then show the following
+
+ [] Allow Subscribers - *this option will be forced on and cannot be turned off. as it's essential to the dropdown 
+   [] Deny Gifted Subscribers (this would only appear if the above was selected)
+ [] Allow VIP
+ [] If Redeem [Enter redeem name] is activated, allocate [00] mins of access 
+
+ * there might be more rules in the future. e.g using an in app currency
+
+
+  When "Premium Voice Access" is selected then show the following
+
+ [] Allow Subscribers - *this option will be forced on and cannot be turned off. as it's essential to the dropdown
+   [] Deny Gifted Subscribers (this would only appear if the above was selected)
+ [] Allow VIP
+ [] If Redeem [Enter redeem name] is activated, allocate [00] mins of access 
+
+ * there might be more rules in the future. e.g using an in app currency
+
+
+Therefore there will need to be a table that maps Viewers to customer voices.
+This would be seen in a Viewer Rules screen.  This screen should have the same looks at feel as the 
+voices seetings screen.
+i.e. search for voice, filter by provider, filter languages, filter genders, pick voice
+
+any error with the voice selection would be displayed under the voice selection
+
+also slider for pitch and speed.
+
+
+
+
+
+
+If the user attempt to toggle on the Premium voice, the system should reject that toggle 
+if it sees the the global voices is set either to Azure or Google and should advise the user
+to pick a web speech voice first and then return to this screen
+
+If the user attempo to toogle on Premium voice
+
+
+now for the part i struggling to think of.
+if either the Limited Access or Premium Voice Access is enabled, before TTS reads the message
+if you need to word out if the person is either allowed to use the voice they have set, if not it will default
+to the globally set one or it will determine whether the person can even use TTS
+
+
+
+the the future the will be a command system the will read chat messages and allow viewers to issue commands
+from chat.  one command will allow them to choose their voice.  this is how a viewer can do it
+without require the app user to set it.  hence why it's important the before TTS is read aloud
+it needs to be verified first
+
+
+I'll also be having a twitch BOT that will allow user to query TTS setting.
+
+but the chat and twitch bot is future design, just something to beware of
