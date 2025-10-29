@@ -1,29 +1,10 @@
 import Database from 'better-sqlite3';
 
 export function runMigrations(db: Database.Database): void {
-  // Migration: Handle voice tables schema change (numeric_id as PRIMARY KEY AUTOINCREMENT)
-  // Check if webspeech_voices needs migration
-  try {
-    const tableInfo = db.prepare("PRAGMA table_info(webspeech_voices)").all() as any[];
-    const hasNumericIdPrimaryKey = tableInfo.some(col => col.name === 'numeric_id' && col.pk === 1);
-    
-    if (tableInfo.length > 0 && !hasNumericIdPrimaryKey) {
-      console.log('[Migration] Recreating voice tables with new schema...');
-      
-      // Drop old tables and recreate with new schema
-      db.exec(`
-        DROP TABLE IF EXISTS webspeech_voices;
-        DROP TABLE IF EXISTS azure_voices;
-        DROP TABLE IF EXISTS google_voices;
-        DROP VIEW IF EXISTS all_voices;
-      `);
-      
-      console.log('[Migration] Voice tables dropped, will be recreated');
-    }
-  } catch (error) {
-    console.log('[Migration] Checking voice table schema:', error);
-  }
+  console.log('[Migrations] Starting database schema initialization...');
 
+  // ===== Core Tables =====
+  
   // Create app_settings table
   db.exec(`
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -199,8 +180,8 @@ export function runMigrations(db: Database.Database): void {
       ('min_message_length', '0'),
       ('max_message_length', '500'),
       ('skip_duplicate_messages', 'true'),
-      ('duplicate_message_window', '300'),
-      ('user_cooldown_enabled', 'true'),
+      ('duplicate_message_window', '30'),
+      ('user_cooldown_enabled', 'false'),
       ('user_cooldown_seconds', '30'),
       ('global_cooldown_enabled', 'false'),
       ('global_cooldown_seconds', '5'),
@@ -299,8 +280,7 @@ export function runMigrations(db: Database.Database): void {
     )  `);
 
   // ===== TTS Access & Enablement Tables =====
-  
-  // Create tts_access_config table
+    // Create tts_access_config table
   db.exec(`
     CREATE TABLE IF NOT EXISTS tts_access_config (
       id INTEGER PRIMARY KEY DEFAULT 1,
@@ -310,6 +290,7 @@ export function runMigrations(db: Database.Database): void {
       limited_allow_subscribers INTEGER DEFAULT 1,
       limited_deny_gifted_subs INTEGER DEFAULT 0,
       limited_allow_vip INTEGER DEFAULT 0,
+      limited_allow_mod INTEGER DEFAULT 0,
       limited_redeem_name TEXT,
       limited_redeem_duration_mins INTEGER,
       
@@ -317,6 +298,7 @@ export function runMigrations(db: Database.Database): void {
       premium_allow_subscribers INTEGER DEFAULT 1,
       premium_deny_gifted_subs INTEGER DEFAULT 0,
       premium_allow_vip INTEGER DEFAULT 0,
+      premium_allow_mod INTEGER DEFAULT 0,
       premium_redeem_name TEXT,
       premium_redeem_duration_mins INTEGER,
       
@@ -356,38 +338,7 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_viewer_voice_prefs ON viewer_voice_preferences(viewer_id)
   `);
-
-  // Migrate existing tts_voice_id data from viewers table to viewer_voice_preferences
-  try {
-    const viewersWithVoices = db.prepare(`
-      SELECT id, tts_voice_id 
-      FROM viewers 
-      WHERE tts_voice_id IS NOT NULL AND tts_voice_id != ''
-    `).all() as Array<{ id: string; tts_voice_id: string }>;
-
-    console.log(`[Migration] Found ${viewersWithVoices.length} viewers with custom voices to migrate`);
-
-    for (const viewer of viewersWithVoices) {
-      // Determine provider from voice_id pattern
-      let provider = 'webspeech';
-      if (viewer.tts_voice_id.includes('azure:') || viewer.tts_voice_id.includes('Neural')) {
-        provider = 'azure';
-      } else if (viewer.tts_voice_id.includes('google:')) {
-        provider = 'google';
-      }
-
-      db.prepare(`
-        INSERT OR IGNORE INTO viewer_voice_preferences (viewer_id, voice_id, provider, pitch, speed)
-        VALUES (?, ?, ?, 1.0, 1.0)
-      `).run(viewer.id, viewer.tts_voice_id, provider);
-    }
-
-    console.log(`[Migration] Migrated ${viewersWithVoices.length} viewer voice preferences`);
-  } catch (error) {
-    console.log('[Migration] Note: Could not migrate viewer voices (may not exist yet):', error);
-  }
-
-  // Create viewer_roles table for VIP tracking
+  // Create viewer_roles table for role tracking (VIP, Moderator, Broadcaster)
   db.exec(`
     CREATE TABLE IF NOT EXISTS viewer_roles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -432,21 +383,10 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_grants_expiry ON channel_point_grants(expires_at)
   `);  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_grants_active ON channel_point_grants(viewer_id, expires_at)
-  `);  // Migration: Add moderator columns to tts_access_config (if not exist)
-  const columns = db.prepare(`PRAGMA table_info(tts_access_config)`).all() as any[];
-  const hasModColumns = columns.some(col => col.name === 'limited_allow_mod');
-  
-  if (!hasModColumns) {
-    console.log('Migrating tts_access_config: Adding moderator columns...');
-    db.exec(`
-      ALTER TABLE tts_access_config ADD COLUMN limited_allow_mod INTEGER DEFAULT 0
-    `);
-    db.exec(`
-      ALTER TABLE tts_access_config ADD COLUMN premium_allow_mod INTEGER DEFAULT 0
-    `);
-    console.log('Moderator columns added successfully');
-  }
+  `);
 
+  // ===== Twitch API Polling Configuration =====
+  
   // Create twitch_polling_config table for flexible API polling intervals
   db.exec(`
     CREATE TABLE IF NOT EXISTS twitch_polling_config (

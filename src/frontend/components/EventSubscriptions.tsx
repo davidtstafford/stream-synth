@@ -63,10 +63,15 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
             if (!MANDATORY_SUBSCRIPTIONS.includes(eventType as keyof EventSubscriptionsType)) {
               subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);
             }
-          });
-        } else {
+          });        } else {
           // No saved preferences, enable all events by default (already in initial state)
           const allEvents = Object.values(EVENT_GROUPS).flat();
+          
+          // Save ALL events as enabled to database (first-time setup)
+          console.log('First-time setup: Saving all events as enabled to database');
+          for (const eventType of allEvents) {
+            await db.saveSubscription(userId, broadcasterId, eventType, true);
+          }
           
           // Subscribe to all non-mandatory EventSub events
           allEvents.forEach(eventType => {
