@@ -129,7 +129,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   };
 
   return (
-    <>
+    <div className="voice-settings-tab">
       {/* Voice Statistics Bar */}
       <div className="stats-bar">
         <div className="stat">
@@ -612,6 +612,6 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           onComplete={handleGoogleGuideComplete}
         />
       )}
-    </>
+    </div>
   );
 };

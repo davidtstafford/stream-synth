@@ -152,7 +152,6 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
   if (!config) {
     return <div className="error">Failed to load configuration</div>;
   }
-
   const canEnablePremiumMode = globalVoiceProvider === 'webspeech';
 
   return (
@@ -167,6 +166,18 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
       {message && (
         <div className={`message message-${message.type}`}>
           {message.text}
+        </div>
+      )}
+
+      {/* Warning: Premium Voice Access mode with Azure/Google global voice */}
+      {config && config.access_mode === 'premium_voice_access' && globalVoiceProvider !== 'webspeech' && (
+        <div className="warning-box">
+          <strong>⚠️ Configuration Warning:</strong> 
+          Premium Voice Access mode should only be used when the global voice is set to WebSpeech.
+          Your current global voice is set to {globalVoiceProvider === 'azure' ? 'Azure' : 'Google'}. 
+          Non-eligible viewers will have no voice to fall back to.
+          <br/><br/>
+          <strong>Recommendation:</strong> Change the global voice to WebSpeech in the Voice Settings tab, or switch to "Access to All" mode.
         </div>
       )}
 
@@ -286,28 +297,16 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
                   className="number-input"
                 />
                 <label>minutes of TTS access</label>
-              </div>
-            )}
+              </div>            )}
             <p className="rule-description">
               Viewers can redeem channel points to get temporary TTS access.
-              <br/><em>Note: Requires EventSub event "channel.channel_points_custom_reward_redemption.add" to be enabled.</em>
+              <br/><em>Note: Requires EventSub event "channel.channel_points_custom_reward_redemption.add" (automatically enabled).</em>
             </p>
           </div>
         </div>
-      )}
-
-      {/* Premium Voice Access Rules */}
+      )}      {/* Premium Voice Access Rules */}
       {config.access_mode === 'premium_voice_access' && (
-        <>
-          {!canEnablePremiumMode && (
-            <div className="warning-box">
-              <strong>⚠️ Warning:</strong> Global voice is currently set to {globalVoiceProvider}.
-              Premium Voice Access mode should only be used when the global voice is set to WebSpeech.
-              Otherwise, non-eligible viewers will have no voice to fall back to.
-            </div>
-          )}
-          
-          <div className="access-rules">
+        <div className="access-rules">
             <h3>Premium Voice Access Rules</h3>
             <p className="rules-info">Configure who can use premium voices (Azure/Google):</p>
             
@@ -394,16 +393,12 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
                     value={config.premium_redeem_duration_mins || 0}
                     onChange={(e) => updateConfig('premium_redeem_duration_mins', parseInt(e.target.value) || null)}
                     className="number-input"
-                  />
-                  <label>minutes of premium voice access</label>
-                </div>
-              )}
-              <p className="rule-description">
+                  />                  <label>minutes of premium voice access</label>
+                </div>              )}              <p className="rule-description">
                 Viewers can redeem channel points to get temporary premium voice access.
-                <br/><em>Note: Requires EventSub event "channel.channel_points_custom_reward_redemption.add" to be enabled.</em>
+                <br/><em>Note: Requires EventSub event "channel.channel_points_custom_reward_redemption.add" (automatically enabled).</em>
               </p>
             </div>          </div>
-        </>
       )}
 
       {saving && (

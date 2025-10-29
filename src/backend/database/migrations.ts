@@ -110,10 +110,13 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_subscriptions_viewer ON viewer_subscriptions(viewer_id)
   `);
-
   // Create view combining viewer info with subscription status
   db.exec(`
-    CREATE VIEW IF NOT EXISTS viewer_subscription_status AS
+    DROP VIEW IF EXISTS viewer_subscription_status
+  `);
+  
+  db.exec(`
+    CREATE VIEW viewer_subscription_status AS
     SELECT 
       v.id,
       v.display_name,
@@ -132,7 +135,11 @@ export function runMigrations(db: Database.Database): void {
             ELSE vs.tier || ' Subscriber'
           END
         ELSE 'Not Subscribed'
-      END AS subscription_status
+      END AS subscription_status,
+      -- Add role information
+      (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'vip' AND revoked_at IS NULL) AS is_vip,
+      (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'moderator' AND revoked_at IS NULL) AS is_moderator,
+      (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'broadcaster' AND revoked_at IS NULL) AS is_broadcaster
     FROM viewers v
     LEFT JOIN viewer_subscriptions vs ON v.id = vs.viewer_id
   `);

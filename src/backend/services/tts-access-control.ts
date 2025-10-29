@@ -166,8 +166,7 @@ export class TTSAccessControlService {
         reason: `Error: ${error.message}`
       };
     }
-  }
-  /**
+  }  /**
    * Check if viewer passes access mode rules
    */
   private checkAccessEligibility(
@@ -175,6 +174,8 @@ export class TTSAccessControlService {
     mode: 'limited_access' | 'premium_voice_access',
     config: any
   ): boolean {
+    console.log(`[TTSAccessControl] Checking eligibility for viewer ${viewerId} in ${mode} mode`);
+    
     const denyGifted = mode === 'limited_access'
       ? config.limited_deny_gifted_subs
       : config.premium_deny_gifted_subs;
@@ -188,46 +189,56 @@ export class TTSAccessControlService {
       ? config.limited_redeem_name
       : config.premium_redeem_name;
 
+    console.log(`[TTSAccessControl] Config: denyGifted=${denyGifted}, allowVIP=${allowVIP}, allowMod=${allowMod}, redeemName=${redeemName}`);
+
     // Check subscriber status (always checked first - required)
     const isSubEligible = this.checkSubscriptionEligibility(viewerId, denyGifted);
+    console.log(`[TTSAccessControl] Subscriber check: ${isSubEligible}`);
     if (isSubEligible) return true;
 
     // Check VIP status
     if (allowVIP) {
       const isVIP = this.checkVIPEligibility(viewerId);
+      console.log(`[TTSAccessControl] VIP check: ${isVIP}`);
       if (isVIP) return true;
     }
 
     // Check Moderator status
     if (allowMod) {
       const isMod = this.checkModeratorEligibility(viewerId);
+      console.log(`[TTSAccessControl] Moderator check: ${isMod}`);
       if (isMod) return true;
     }
 
     // Check channel point grant
     if (redeemName) {
       const hasGrant = this.checkRedeemEligibility(viewerId, mode);
+      console.log(`[TTSAccessControl] Channel point grant check: ${hasGrant}`);
       if (hasGrant) return true;
     }
 
+    console.log(`[TTSAccessControl] All eligibility checks failed for viewer ${viewerId}`);
     return false;
   }
-
   /**
    * Check if viewer is subscribed (and if gifted subs are allowed)
    */
   private checkSubscriptionEligibility(viewerId: string, denyGifted: boolean): boolean {
     const subscription = this.subscriptionsRepo.getByViewerId(viewerId);
+    console.log(`[TTSAccessControl] Subscription for viewer ${viewerId}:`, subscription);
     
     if (!subscription) {
+      console.log(`[TTSAccessControl] No subscription found for viewer ${viewerId}`);
       return false;
     }
 
     // If denying gifted subs, check if this is a gift
     if (denyGifted && subscription.is_gift === 1) {
+      console.log(`[TTSAccessControl] Viewer ${viewerId} has gifted sub and denyGifted is enabled`);
       return false;
     }
 
+    console.log(`[TTSAccessControl] Viewer ${viewerId} passes subscription check`);
     return true;
   }
   /**
@@ -236,12 +247,13 @@ export class TTSAccessControlService {
   private checkVIPEligibility(viewerId: string): boolean {
     return this.rolesRepo.isViewerVIP(viewerId);
   }
-
   /**
    * Check if viewer has Moderator role
    */
   private checkModeratorEligibility(viewerId: string): boolean {
-    return this.rolesRepo.isViewerModerator(viewerId);
+    const isMod = this.rolesRepo.isViewerModerator(viewerId);
+    console.log(`[TTSAccessControl] isViewerModerator(${viewerId}) returned: ${isMod}`);
+    return isMod;
   }
 
   /**

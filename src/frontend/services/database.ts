@@ -232,6 +232,9 @@ export interface ViewerWithSubscription {
   start_date: string | null;
   end_date: string | null;
   subscription_status: string;
+  is_vip: number | null;
+  is_moderator: number | null;
+  is_broadcaster: number | null;
 }
 
 export async function upsertSubscription(

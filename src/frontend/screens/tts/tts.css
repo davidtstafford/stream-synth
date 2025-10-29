@@ -776,6 +776,11 @@
   padding: 20px;
 }
 
+/* Voice Settings Tab Styles */
+.voice-settings-tab {
+  padding: 20px;
+}
+
 .tab-header {
   margin-bottom: 30px;
 }

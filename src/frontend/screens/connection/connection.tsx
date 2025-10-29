@@ -240,13 +240,30 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
       channel_id: userIdValue,
       channel_login: userLoginValue,
       is_broadcaster: true
-    });
-
-    // Save settings for auto-reconnect
+    });    // Save settings for auto-reconnect
     await db.setSetting('last_connected_user_id', userIdValue);
     await db.setSetting('last_connected_channel_id', userIdValue);
     await db.setSetting('last_connected_channel_login', userLoginValue);
     await db.setSetting('last_is_broadcaster', 'true');
+    
+    // Sync viewer roles from Twitch (subscriptions, VIPs, moderators)
+    setStatusMessage({
+      type: 'info',
+      message: 'Syncing viewer roles from Twitch...'
+    });
+    
+    try {
+      const { ipcRenderer } = window.require('electron');
+      const syncResult = await ipcRenderer.invoke('twitch:sync-subscriptions-from-twitch');
+      if (syncResult.success) {
+        console.log(`✅ Role sync complete: ${syncResult.subCount} subs, ${syncResult.vipCount} VIPs, ${syncResult.modCount} mods`);
+      } else {
+        console.warn('⚠️ Role sync had errors:', syncResult.error);
+      }
+    } catch (error) {
+      console.error('❌ Role sync failed:', error);
+      // Don't block connection on sync failure
+    }
     
     // Initialize WebSocket immediately
     setStatusMessage({

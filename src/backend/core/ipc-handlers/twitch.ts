@@ -14,9 +14,7 @@ import { BrowserWindow } from 'electron';
 import { ipcRegistry } from '../ipc/ipc-framework';
 import { authenticateWithTwitch } from '../../auth/twitch-oauth';
 import { exportSettings, importSettings, getExportPreview } from '../../services/export-import';
-import { TwitchSubscriptionsService } from '../../services/twitch-subscriptions';
-import { TwitchVIPService } from '../../services/twitch-vip';
-import { TwitchModeratorsService } from '../../services/twitch-moderators';
+import { TwitchRoleSyncService } from '../../services/twitch-role-sync';
 import { getDatabase } from '../../database/connection';
 
 let mainWindow: BrowserWindow | null = null;
@@ -82,8 +80,6 @@ export function setupTwitchHandlers(): void {
     'twitch:sync-subscriptions-from-twitch',
     {
       execute: async () => {
-        console.log('[Twitch] Syncing subscriptions, VIPs, and moderators from Twitch API...');
-        const db = getDatabase();
         const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
         const session = new sessionsRepo().getCurrentSession();
 
@@ -91,30 +87,20 @@ export function setupTwitchHandlers(): void {
           throw new Error('Not connected to Twitch. Please connect first.');
         }
 
-        // Sync subscriptions
-        const subscriptionService = new TwitchSubscriptionsService();
-        const subResult = await subscriptionService.syncSubscriptionsFromTwitch(
+        // Use centralized sync service
+        const roleSyncService = new TwitchRoleSyncService();
+        const result = await roleSyncService.syncAllRoles(
           session.channel_id,
-          session.user_id
+          session.user_id,
+          'manual-ui'
         );
-
-        // Sync VIPs
-        const vipService = new TwitchVIPService();
-        const vipResult = await vipService.syncVIPsFromTwitch(
-          session.channel_id,
-          session.user_id
-        );
-
-        // Sync Moderators
-        const modService = new TwitchModeratorsService();
-        const modResult = await modService.syncModerators(session.channel_id);
 
         return {
-          success: subResult.success && vipResult.success && modResult.success,
-          subCount: subResult.count,
-          vipCount: vipResult.count,
-          modCount: modResult.count,
-          error: subResult.error || vipResult.error || modResult.error
+          success: result.success,
+          subCount: result.subCount,
+          vipCount: result.vipCount,
+          modCount: result.modCount,
+          error: result.errors.length > 0 ? result.errors.join(', ') : undefined
         };
       }
     }

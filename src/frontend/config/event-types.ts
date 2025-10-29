@@ -142,7 +142,8 @@ export const DEFAULT_SUBSCRIPTIONS: (keyof EventSubscriptions)[] = [
 ];
 
 export const MANDATORY_SUBSCRIPTIONS: (keyof EventSubscriptions)[] = [
-  'channel.chat.message'
+  'channel.chat.message',
+  'channel.channel_points_custom_reward_redemption.add' // Required for TTS channel point grants
 ];
 
 // Events that require broadcaster permissions (not available to moderators)
