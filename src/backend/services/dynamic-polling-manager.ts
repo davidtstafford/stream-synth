@@ -5,11 +5,11 @@
  * Supports dynamic interval updates without restarting the app.
  */
 
-import { TwitchPollingConfigRepository, TwitchPollingConfig } from '../database/repositories/twitch-polling-config';
+import { TwitchPollingConfigRepository, TwitchPollingConfig, ApiType } from '../database/repositories/twitch-polling-config';
 import { SessionsRepository } from '../database/repositories/sessions';
 import { TwitchRoleSyncService } from './twitch-role-sync';
+import { EventsRepository } from '../database/repositories/events';
 
-type ApiType = TwitchPollingConfig['api_type'];
 type PollingCallback = () => Promise<void>;
 
 interface ActivePoller {
@@ -23,14 +23,16 @@ export class DynamicPollingManager {
   private activePollers: Map<ApiType, ActivePoller> = new Map();
   private pollingConfigRepo: TwitchPollingConfigRepository;
   private sessionsRepo: SessionsRepository;
+  private eventsRepo: EventsRepository;
   private roleSyncService: TwitchRoleSyncService;
+  private lastFollowerId: string | null = null;
 
   constructor() {
     this.pollingConfigRepo = new TwitchPollingConfigRepository();
     this.sessionsRepo = new SessionsRepository();
+    this.eventsRepo = new EventsRepository();
     this.roleSyncService = new TwitchRoleSyncService();
   }
-
   /**
    * Initialize all polling timers based on database config
    */
@@ -40,8 +42,11 @@ export class DynamicPollingManager {
     const configs = this.pollingConfigRepo.getAllConfigs();
     
     for (const config of configs) {
-      if (config.enabled && config.interval_minutes > 0) {
-        this.startPoller(config.api_type, config.interval_minutes);
+      if (config.enabled) {
+        const intervalMs = this.pollingConfigRepo.getIntervalMs(config.api_type);
+        if (intervalMs > 0) {
+          this.startPoller(config.api_type, intervalMs);
+        }
       } else {
         console.log(`[PollingManager] Skipping disabled poller: ${config.api_type}`);
       }
@@ -53,14 +58,13 @@ export class DynamicPollingManager {
   /**
    * Start a polling timer for a specific API type
    */
-  private startPoller(apiType: ApiType, intervalMinutes: number): void {
+  private startPoller(apiType: ApiType, intervalMs: number): void {
     // Stop existing poller if running
     this.stopPoller(apiType);
 
-    const intervalMs = intervalMinutes * 60 * 1000;
     const callback = this.getPollingCallback(apiType);
 
-    console.log(`[PollingManager] Starting poller for ${apiType} (every ${intervalMinutes} minutes)`);
+    console.log(`[PollingManager] Starting poller for ${apiType} (every ${intervalMs}ms)`);
 
     const intervalId = setInterval(async () => {
       try {
@@ -90,7 +94,6 @@ export class DynamicPollingManager {
       this.activePollers.delete(apiType);
     }
   }
-
   /**
    * Get the polling callback function for a specific API type
    */
@@ -109,12 +112,28 @@ export class DynamicPollingManager {
             currentSession.channel_id,
             currentSession.user_id,
             'scheduled-poll'
-          );          if (!result.success) {
+          );
+
+          if (!result.success) {
             console.warn('[PollingManager] Role sync had errors:', result.errors);
           } else {
             const total = result.subCount + result.vipCount + result.modCount;
             console.log(`[PollingManager] Role sync completed successfully (${total} total: ${result.subCount} subs, ${result.vipCount} VIPs, ${result.modCount} mods)`);
-          }        };
+          }
+        };
+
+      case 'followers':
+        return async () => {
+          const currentSession = this.sessionsRepo.getCurrentSession();
+          if (!currentSession) {
+            console.log('[PollingManager] Skipping followers - no active session');
+            return;
+          }
+
+          console.log('[PollingManager] Checking for new followers...');
+          // TODO: Implement follower detection logic
+          // This is a placeholder for now
+        };
 
       default:
         return async () => {
@@ -122,18 +141,20 @@ export class DynamicPollingManager {
         };
     }
   }
-
   /**
    * Update polling interval for a specific API type (dynamic update)
    */
-  updateInterval(apiType: ApiType, intervalMinutes: number): void {
-    console.log(`[PollingManager] Updating interval for ${apiType} to ${intervalMinutes} minutes`);
+  updateInterval(apiType: ApiType, intervalValue: number): void {
+    console.log(`[PollingManager] Updating interval for ${apiType} to ${intervalValue}`);
 
-    // Update database
-    this.pollingConfigRepo.updateInterval(apiType, intervalMinutes);
+    // Update database (validates against min/max)
+    this.pollingConfigRepo.updateInterval(apiType, intervalValue);
 
     // Restart poller with new interval
-    this.startPoller(apiType, intervalMinutes);
+    const intervalMs = this.pollingConfigRepo.getIntervalMs(apiType);
+    if (intervalMs > 0) {
+      this.startPoller(apiType, intervalMs);
+    }
   }
 
   /**
@@ -146,9 +167,9 @@ export class DynamicPollingManager {
     this.pollingConfigRepo.setEnabled(apiType, enabled);
 
     if (enabled) {
-      const config = this.pollingConfigRepo.getConfig(apiType);
-      if (config) {
-        this.startPoller(apiType, config.interval_minutes);
+      const intervalMs = this.pollingConfigRepo.getIntervalMs(apiType);
+      if (intervalMs > 0) {
+        this.startPoller(apiType, intervalMs);
       }
     } else {
       this.stopPoller(apiType);
@@ -161,7 +182,8 @@ export class DynamicPollingManager {
   getStatus(): Array<{
     apiType: ApiType;
     enabled: boolean;
-    intervalMinutes: number;
+    intervalValue: number;
+    intervalUnits: string;
     lastPollAt: string | null;
     isRunning: boolean;
   }> {
@@ -170,7 +192,8 @@ export class DynamicPollingManager {
     return configs.map(config => ({
       apiType: config.api_type,
       enabled: config.enabled,
-      intervalMinutes: config.interval_minutes,
+      intervalValue: config.interval_value,
+      intervalUnits: config.interval_units,
       lastPollAt: config.last_poll_at,
       isRunning: this.activePollers.has(config.api_type),
     }));

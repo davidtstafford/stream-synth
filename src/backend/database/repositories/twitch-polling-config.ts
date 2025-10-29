@@ -1,8 +1,15 @@
 import { BaseRepository } from '../base-repository';
 
+export type ApiType = 'role_sync' | 'followers';
+export type IntervalUnit = 'seconds' | 'minutes' | 'hours';
+
 export interface TwitchPollingConfig {
-  api_type: 'role_sync';
-  interval_minutes: number;
+  api_type: ApiType;
+  interval_value: number;
+  min_interval: number;
+  max_interval: number;
+  interval_units: IntervalUnit;
+  step: number;
   enabled: boolean;
   last_poll_at: string | null;
   description: string | null;
@@ -18,7 +25,7 @@ export class TwitchPollingConfigRepository extends BaseRepository<TwitchPollingC
   /**
    * Get polling config for a specific API type
    */
-  getConfig(apiType: TwitchPollingConfig['api_type']): TwitchPollingConfig | null {
+  getConfig(apiType: ApiType): TwitchPollingConfig | null {
     return this.getById(apiType, 'api_type');
   }
 
@@ -34,20 +41,28 @@ export class TwitchPollingConfigRepository extends BaseRepository<TwitchPollingC
   /**
    * Update polling interval for a specific API type
    */
-  updateInterval(apiType: TwitchPollingConfig['api_type'], intervalMinutes: number): void {
-    if (intervalMinutes < 5 || intervalMinutes > 120) {
-      throw new Error('Interval must be between 5 and 120 minutes');
+  updateInterval(apiType: ApiType, intervalValue: number): void {
+    // Get config to validate against its specific min/max
+    const config = this.getConfig(apiType);
+    if (!config) {
+      throw new Error(`API type '${apiType}' not found`);
+    }
+
+    if (intervalValue < config.min_interval || intervalValue > config.max_interval) {
+      throw new Error(
+        `Interval must be between ${config.min_interval} and ${config.max_interval} ${config.interval_units} for ${apiType}`
+      );
     }
 
     const db = this.getDatabase();
     const stmt = db.prepare(`
       UPDATE ${this.tableName}
-      SET interval_minutes = ?,
+      SET interval_value = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE api_type = ?
     `);
     
-    const result = stmt.run(intervalMinutes, apiType);
+    const result = stmt.run(intervalValue, apiType);
     
     if (result.changes === 0) {
       throw new Error(`API type '${apiType}' not found`);
@@ -57,7 +72,7 @@ export class TwitchPollingConfigRepository extends BaseRepository<TwitchPollingC
   /**
    * Enable or disable polling for a specific API type
    */
-  setEnabled(apiType: TwitchPollingConfig['api_type'], enabled: boolean): void {
+  setEnabled(apiType: ApiType, enabled: boolean): void {
     const db = this.getDatabase();
     const stmt = db.prepare(`
       UPDATE ${this.tableName}
@@ -72,7 +87,7 @@ export class TwitchPollingConfigRepository extends BaseRepository<TwitchPollingC
   /**
    * Update last poll timestamp
    */
-  updateLastPoll(apiType: TwitchPollingConfig['api_type']): void {
+  updateLastPoll(apiType: ApiType): void {
     const db = this.getDatabase();
     const stmt = db.prepare(`
       UPDATE ${this.tableName}
@@ -87,11 +102,24 @@ export class TwitchPollingConfigRepository extends BaseRepository<TwitchPollingC
   /**
    * Get interval in milliseconds for a specific API type
    */
-  getIntervalMs(apiType: TwitchPollingConfig['api_type']): number {
+  getIntervalMs(apiType: ApiType): number {
     const config = this.getConfig(apiType);
     if (!config || !config.enabled) {
       return 0; // Disabled
     }
-    return config.interval_minutes * 60 * 1000;
+
+    // Convert to milliseconds based on units
+    let ms = config.interval_value;
+    switch (config.interval_units) {
+      case 'seconds':
+        ms *= 1000;
+        break;      case 'minutes':
+        ms *= 60 * 1000;
+        break;
+      case 'hours':
+        ms *= 60 * 60 * 1000;
+        break;
+    }
+    return ms;
   }
 }

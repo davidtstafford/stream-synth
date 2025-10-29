@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Connection } from '../../components/Connection';
-import { EventSubscriptions } from '../../components/EventSubscriptions';
 import { createWebSocketConnection } from '../../services/websocket';
 import * as db from '../../services/database';
 
@@ -400,31 +399,20 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
     setBroadcasterLogin('');
     setIsBroadcaster(false);    setSessionId('');
     setStatusMessage(null);
-  };
-
-  return (
+  };  return (
     <div className="content">
       {isAutoReconnecting ? (
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <h2>Restoring previous session...</h2>
           <p style={{ color: '#888' }}>Please wait</p>
-        </div>      ) : (
+        </div>
+      ) : (
         <Connection 
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           isConnected={!!accessToken}
           connectedUserLogin={userLogin}
           connectedUserId={userId}
-        />
-      )}{accessToken && broadcasterId && sessionId && (
-        <EventSubscriptions
-          clientId={clientId}
-          accessToken={accessToken}
-          sessionId={sessionId}
-          broadcasterId={broadcasterId}
-          broadcasterLogin={broadcasterLogin}
-          userId={userId}
-          isBroadcaster={isBroadcaster}
         />
       )}
     </div>

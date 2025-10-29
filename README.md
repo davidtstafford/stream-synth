@@ -12,11 +12,12 @@ Stream Synth provides streamers with a centralized hub to manage Twitch events, 
 - **Text-to-Speech (TTS)**: Multi-provider support (WebSpeech, Azure, Google) with voice customization per viewer
 - **TTS Access Control**: Three-tier access system (All Access, Limited Access, Premium Voice Access)
 - **Channel Point Redeems**: Temporary TTS access via Channel Point redemptions with configurable duration
+- **Dynamic Polling Framework**: User-configurable Twitch API polling with flexible units (seconds/minutes/hours), enable/disable toggles, and real-time updates
+- **Event Subscriptions**: All Twitch events enabled by default with granular control; managed in Advanced settings
 - **Discord Integration**: Webhook-based voice catalogue publishing and auto-updates
 - **IRC Chat**: Real-time chat monitoring and message sending via tmi.js
-- **Event Subscriptions**: Granular control over which Twitch events trigger actions
 - **Viewer Management**: Track subscribers, VIPs, moderators, and custom TTS voice preferences
-- **Settings Management**: Export/import configuration, backup and restore functionality
+- **Settings Management**: Comprehensive export/import including configs, voice preferences, polling settings, and TTS access rules
 - **Database-Backed**: SQLite with structured repositories for all data
 
 ---
@@ -54,14 +55,15 @@ Stream Synth provides streamers with a centralized hub to manage Twitch events, 
     ┌────▼─────────────────────────────┐
     │   RENDERER PROCESS (React)       │
     │   (src/frontend/app.tsx)         │
-    │                                  │
-    │  • Connection (Twitch Auth)      │
-    │  • Event Subscriptions           │
+    │                                  │    │  • Connection (Twitch Auth)      │
     │  • Chat Management               │
     │  • TTS Configuration             │
     │  • Discord Webhooks              │
     │  • Viewers & Subscriptions       │
-    │  • Advanced Settings             │
+    │  • Advanced Settings:            │
+    │    - Backup & Restore            │
+    │    - Polling Configuration       │
+    │    - Event Subscriptions         │
     └──────────────────────────────────┘
 ```
 
@@ -266,11 +268,19 @@ Located in `src/backend/core/ipc-handlers/discord.ts`
 `discord:test-webhook`, `discord:generate-voice-catalogue`, `discord:post-voice-catalogue`, `discord:delete-webhook-messages`, `discord:auto-update-catalogue`
 
 ### TTS Access Handlers (4)
+
 Located in `src/backend/core/ipc-handlers/tts-access.ts`
 
 `tts-access:get-config`, `tts-access:save-config`, `tts-access:reset-config`, `tts-access:check-viewer-access`
 
+### Twitch Polling Handlers (5)
+
+Located in `src/backend/core/ipc-handlers/twitch-polling.ts`
+
+`twitch-polling:get-configs`, `twitch-polling:save-config`, `twitch-polling:reset-config`, `twitch-polling:get-status`, `twitch-polling:trigger-sync`
+
 ### Startup Handlers (2)
+
 Located in `src/backend/core/ipc-handlers/startup.ts`
 
 `startup:sync-roles`, `periodic-sync:start`
@@ -324,21 +334,85 @@ Viewer roles (Subscribers, VIPs, Moderators) are automatically synced from Twitc
 
 **Customization:** Configure sync frequency in **Advanced Settings** (5-120 minutes, default: 30 minutes).
 
-### Dynamic Polling Framework
+### Twitch API Polling Configuration
 
-Stream Synth includes a **flexible polling framework** for managing Twitch Helix API request intervals. Users can customize how often the app syncs data from Twitch.
+Stream Synth includes a **flexible, user-configurable polling framework** for managing Twitch Helix API request intervals. Users can customize how often the app syncs data from Twitch with dynamic, real-time updates.
 
 **Features:**
-- 🎚️ **Configurable Intervals** - Adjust polling frequency from 5 to 120 minutes
-- ⚡ **Dynamic Updates** - Changes take effect immediately without app restart
+
+- 🎚️ **Units-Based Intervals** - Configure polling in seconds, minutes, or hours with smart UI formatting
+- 📏 **Configurable Ranges** - Each API type has custom min/max intervals with step controls
+- ⚡ **Dynamic Updates** - Changes take effect immediately without app restart; no database recreation needed
 - 🔘 **Enable/Disable Toggle** - Turn polling on/off per API type
 - 📊 **Real-Time Status** - See which pollers are active and when they last ran
 - 🔮 **Future-Proof** - Easily extensible for new API endpoints
 
-**Available in:** Advanced Settings → Twitch API Polling Settings
-
 **Current API Types:**
-- `role_sync` - Combined sync for Subscribers, VIPs, and Moderators (active)
+
+- **Role Sync** - Combined sync for Subscribers, VIPs, and Moderators
+  - Default: 30 minutes
+  - Range: 5-120 minutes
+  - Step: 5 minutes
+  - Status: Active
+
+**Configuration Location:** Advanced Settings → Twitch API Polling Settings
+
+**Database Schema:**
+
+```sql
+CREATE TABLE twitch_polling_config (
+  api_type TEXT PRIMARY KEY,
+  interval_value INTEGER NOT NULL,      -- The numeric value (e.g., 30)
+  interval_units TEXT NOT NULL,          -- 'seconds', 'minutes', or 'hours'
+  enabled INTEGER NOT NULL DEFAULT 1,
+  min_interval INTEGER NOT NULL,         -- Minimum allowed value
+  max_interval INTEGER NOT NULL,         -- Maximum allowed value
+  step INTEGER NOT NULL                  -- UI step increment
+);
+```
+
+**Technical Details:**
+
+- Repository method `getIntervalMs()` converts units to milliseconds
+- Dynamic polling manager restarts timers on configuration changes
+- IPC handlers: `twitch-polling:get-configs`, `twitch-polling:save-config`, `twitch-polling:get-status`
+- UI automatically formats display: "2 minutes", "120 seconds", "1 hour"
+
+### Event Subscription Management
+
+Stream Synth provides **granular control over Twitch EventSub subscriptions** with all events enabled by default for maximum functionality.
+
+**Default Behavior:**
+
+- ✅ **All events enabled** - Every supported Twitch event is active by default
+- 🔒 **Locked events** - Chat and Channel Points events are required and cannot be disabled
+- ⚠️ **Warning system** - UI warns when disabling events may reduce functionality
+
+**Configuration Location:** Advanced Settings → Event Subscriptions (collapsible section)
+
+**Event Categories:**
+
+1. **Channel Activity** - Follows, raids, stream status changes
+2. **Subscriber Events** - New subs, resubs, gifted subs, subscription messages
+3. **Channel Points** - Redemptions, reward updates (🔒 locked, always enabled)
+4. **Chat Events** - Messages, clear events, moderation (🔒 locked, always enabled)
+5. **Hype Train** - Begin, progress, end events
+6. **Polls & Predictions** - Begin, progress, end events
+
+**User Experience:**
+
+- Section is collapsed by default to reduce visual clutter
+- Requires active Twitch connection to configure
+- Shows "Connect to Twitch first" message when not connected
+- Orange warning banner appears when section is expanded and connected
+- Locked events display 🔒 icon to indicate they cannot be disabled
+
+**Technical Implementation:**
+
+- Event preferences stored in `event_subscriptions` table
+- Changes sync immediately via IPC handlers
+- Export/import includes event subscription preferences
+- Integration with WebSocket event handler for real-time updates
 
 ### Premium Voice Mutual Exclusion
 
@@ -528,8 +602,10 @@ The application uses **SQLite** with the following tables:
 - **viewers**: User/streamer data
 - **viewer_roles**: Viewer role tracking (Subscriber, VIP, Moderator status)
 - **viewer_rules**: Per-viewer TTS overrides (custom voices, enabled/disabled)
+- **viewer_voice_preferences**: Individual pitch/speed settings per viewer
 - **subscriptions**: Subscription tracking
 - **channel_point_grants**: Temporary TTS access via Channel Point redemptions
+- **twitch_polling_config**: Configurable Twitch API polling intervals with units support
 - **event_subscriptions**: User's event preferences
 - **connection_sessions**: OAuth and connection history
 - **oauth_tokens**: Twitch tokens (encrypted)
@@ -555,26 +631,35 @@ The application uses **SQLite** with the following tables:
 
 ## 📊 Current Status
 
-**Latest Updates (October 2025)**:
+**Latest Updates (January 2025)**:
+
+- ✅ **Units-Based Polling Framework** - User-configurable API polling with seconds/minutes/hours, dynamic updates, and enable/disable toggles
+- ✅ **Event Subscriptions Refactor** - Moved from Connection screen to Advanced settings; all events enabled by default
+- ✅ **Enhanced Export/Import** - Now includes TTS access config, polling configs, and viewer voice preferences
 - ✅ **TTS Access Control** - Three-tier system (All Access, Limited, Premium Voice Access)
 - ✅ **Channel Point Redeems** - Temporary TTS access with configurable duration (1-60 mins)
-- ✅ **Automatic Role Syncing** - Subscribers, VIPs, Moderators synced on startup, OAuth, and every 30 minutes
+- ✅ **Automatic Role Syncing** - Subscribers, VIPs, Moderators synced on startup, OAuth, and configurable intervals
 - ✅ **Premium Voice Mutual Exclusion** - Prevents invalid configurations between voice selection and access modes
 - ✅ **Voice Settings Improvements** - Enhanced UI with dark containers and better error messaging
 
 **Technical Status**:
-- **IPC Handlers**: ✅ 80+ handlers migrated to centralized framework
-- **Build**: ✅ Passing (0 errors, 363 KiB)
-- **Coverage**: ✅ Database, TTS, TTS Access, Twitch, IRC, Discord, Startup operations
+
+- **IPC Handlers**: ✅ 85+ handlers migrated to centralized framework
+- **Build**: ✅ Passing (0 errors, 369 KiB)
+- **Coverage**: ✅ Database, TTS, TTS Access, Twitch Polling, Twitch, IRC, Discord, Startup operations
 - **Code Quality**: ✅ 100% TypeScript, zero boilerplate IPC code
 - **Error Handling**: ✅ 8-second error display with manual dismiss capability
 
 **Recent Implementations**:
-1. TTS Access Control system with rule evaluation
-2. Channel Point temporary access grants
-3. Centralized role sync service (3x faster with parallel API calls)
-4. Premium voice mutual exclusion validation
-5. Enhanced Voice Settings tab styling
+
+1. Units-based polling framework with dynamic configuration UI
+2. Event subscription management moved to Advanced screen
+3. Comprehensive export/import system with all user preferences
+4. TTS Access Control system with rule evaluation
+5. Channel Point temporary access grants
+6. Centralized role sync service (3x faster with parallel API calls)
+7. Premium voice mutual exclusion validation
+8. Enhanced Voice Settings tab styling
 
 ---
 

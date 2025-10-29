@@ -12,6 +12,8 @@ export interface ExportData {
   };
   settings: Array<{ key: string; value: string }>;
   tts_settings: Array<{ key: string; value: string }>;
+  tts_access_config?: any; // TTS access configuration
+  polling_configs?: Array<any>; // Twitch API polling configurations
   viewers: Array<{
     id: string;
     username: string;
@@ -19,6 +21,7 @@ export interface ExportData {
     tts_voice_id?: string;
     tts_enabled: boolean;
   }>;
+  viewer_voice_preferences?: Array<any>; // Individual viewer voice preferences
   event_profiles: Array<{
     user_id: string;
     user_login?: string;
@@ -80,13 +83,29 @@ export async function exportSettings(): Promise<string> {
       is_enabled: sub.is_enabled === 1
     });
   });
-
   // Get connection history (last 20 sessions)
   const sessions = db.prepare(`
     SELECT user_login, channel_login, is_broadcaster, connected_at
     FROM connection_sessions
     ORDER BY connected_at DESC
     LIMIT 20
+  `).all() as Array<any>;
+
+  // Get TTS access config
+  const ttsAccessConfig = db.prepare(`
+    SELECT * FROM tts_access_config WHERE id = 1
+  `).get() as any;
+
+  // Get polling configs (user-customizable settings only)
+  const pollingConfigs = db.prepare(`
+    SELECT api_type, interval_value, enabled
+    FROM twitch_polling_config
+  `).all() as Array<any>;
+
+  // Get viewer voice preferences
+  const voicePreferences = db.prepare(`
+    SELECT viewer_id, voice_id, provider, pitch, speed
+    FROM viewer_voice_preferences
   `).all() as Array<any>;
 
   const exportData: ExportData = {
@@ -98,6 +117,8 @@ export async function exportSettings(): Promise<string> {
     },
     settings: settings.filter(s => !s.key.includes('password') && !s.key.includes('secret')),
     tts_settings: ttsSettings,
+    tts_access_config: ttsAccessConfig,
+    polling_configs: pollingConfigs,
     viewers: viewers.map(v => ({
       id: v.id,
       username: v.username,
@@ -105,6 +126,7 @@ export async function exportSettings(): Promise<string> {
       tts_voice_id: v.tts_voice_id,
       tts_enabled: v.tts_enabled === 1
     })),
+    viewer_voice_preferences: voicePreferences,
     event_profiles: Array.from(eventProfiles.values()),
     connection_history: sessions.map(s => ({
       user_login: s.user_login,
@@ -206,9 +228,7 @@ export async function importSettings(): Promise<{ success: boolean; message: str
         ttsStmt.run(setting.key, setting.value);
         importedCount++;
       });
-    }
-
-    // Import viewer TTS preferences
+    }    // Import viewer TTS preferences
     if (importData.viewers) {
       const viewerStmt = db.prepare(`
         INSERT INTO viewers (id, username, display_name, tts_voice_id, tts_enabled)
@@ -227,6 +247,91 @@ export async function importSettings(): Promise<{ success: boolean; message: str
           viewer.display_name || null,
           viewer.tts_voice_id || null,
           viewer.tts_enabled ? 1 : 0
+        );
+        importedCount++;
+      });
+    }
+
+    // Import viewer voice preferences
+    if (importData.viewer_voice_preferences) {
+      const voicePrefStmt = db.prepare(`
+        INSERT INTO viewer_voice_preferences (viewer_id, voice_id, provider, pitch, speed)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(viewer_id) DO UPDATE SET
+          voice_id = excluded.voice_id,
+          provider = excluded.provider,
+          pitch = excluded.pitch,
+          speed = excluded.speed,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+
+      importData.viewer_voice_preferences.forEach(pref => {
+        voicePrefStmt.run(
+          pref.viewer_id,
+          pref.voice_id,
+          pref.provider,
+          pref.pitch,
+          pref.speed
+        );
+        importedCount++;
+      });
+    }
+
+    // Import TTS access config
+    if (importData.tts_access_config) {
+      const config = importData.tts_access_config;
+      const ttsAccessStmt = db.prepare(`
+        UPDATE tts_access_config SET
+          access_mode = ?,
+          limited_allow_subscribers = ?,
+          limited_deny_gifted_subs = ?,
+          limited_allow_vip = ?,
+          limited_allow_mod = ?,
+          limited_redeem_name = ?,
+          limited_redeem_duration_mins = ?,
+          premium_allow_subscribers = ?,
+          premium_deny_gifted_subs = ?,
+          premium_allow_vip = ?,
+          premium_allow_mod = ?,
+          premium_redeem_name = ?,
+          premium_redeem_duration_mins = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = 1
+      `);
+
+      ttsAccessStmt.run(
+        config.access_mode,
+        config.limited_allow_subscribers,
+        config.limited_deny_gifted_subs,
+        config.limited_allow_vip,
+        config.limited_allow_mod || 0,
+        config.limited_redeem_name,
+        config.limited_redeem_duration_mins,
+        config.premium_allow_subscribers,
+        config.premium_deny_gifted_subs,
+        config.premium_allow_vip,
+        config.premium_allow_mod || 0,
+        config.premium_redeem_name,
+        config.premium_redeem_duration_mins
+      );
+      importedCount++;
+    }
+
+    // Import polling configs (only user-customizable settings)
+    if (importData.polling_configs) {
+      const pollingStmt = db.prepare(`
+        UPDATE twitch_polling_config SET
+          interval_value = ?,
+          enabled = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE api_type = ?
+      `);
+
+      importData.polling_configs.forEach(config => {
+        pollingStmt.run(
+          config.interval_value,
+          config.enabled,
+          config.api_type
         );
         importedCount++;
       });
@@ -253,15 +358,16 @@ export async function importSettings(): Promise<{ success: boolean; message: str
       });
     });
 
-    db.exec('COMMIT');
-
-    return {
+    db.exec('COMMIT');    return {
       success: true,
       message: `Successfully imported ${importedCount} items`,
       imported: {
         settings: importData.settings.length,
         tts_settings: importData.tts_settings?.length || 0,
+        tts_access_config: importData.tts_access_config ? 1 : 0,
+        polling_configs: importData.polling_configs?.length || 0,
         viewers: importData.viewers?.length || 0,
+        viewer_voice_preferences: importData.viewer_voice_preferences?.length || 0,
         event_profiles: importData.event_profiles.length,
         events: importData.event_profiles.reduce((sum, p) => sum + p.events.length, 0)
       }
@@ -281,6 +387,12 @@ export function getExportPreview(): ExportData {
   const ttsSettings = db.prepare('SELECT key, value FROM tts_settings WHERE key NOT LIKE \'%api_key%\'').all() as Array<{ key: string; value: string }>;
 
   const viewers = db.prepare('SELECT id, username, display_name, tts_voice_id, tts_enabled FROM viewers').all() as Array<any>;
+
+  const ttsAccessConfig = db.prepare('SELECT * FROM tts_access_config WHERE id = 1').get() as any;
+
+  const pollingConfigs = db.prepare('SELECT api_type, interval_value, enabled FROM twitch_polling_config').all() as Array<any>;
+
+  const voicePreferences = db.prepare('SELECT viewer_id, voice_id, provider, pitch, speed FROM viewer_voice_preferences').all() as Array<any>;
 
   const eventSubs = db.prepare(`
     SELECT 
@@ -327,6 +439,8 @@ export function getExportPreview(): ExportData {
     },
     settings: settings,
     tts_settings: ttsSettings,
+    tts_access_config: ttsAccessConfig,
+    polling_configs: pollingConfigs,
     viewers: viewers.map(v => ({
       id: v.id,
       username: v.username,
@@ -334,6 +448,7 @@ export function getExportPreview(): ExportData {
       tts_voice_id: v.tts_voice_id,
       tts_enabled: v.tts_enabled === 1
     })),
+    viewer_voice_preferences: voicePreferences,
     event_profiles: Array.from(eventProfiles.values()),
     connection_history: sessions.map(s => ({
       user_login: s.user_login,

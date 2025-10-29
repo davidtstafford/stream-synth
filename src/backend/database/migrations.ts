@@ -432,8 +432,7 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_grants_expiry ON channel_point_grants(expires_at)
   `);  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_grants_active ON channel_point_grants(viewer_id, expires_at)
-  `);
-  // Migration: Add moderator columns to tts_access_config (if not exist)
+  `);  // Migration: Add moderator columns to tts_access_config (if not exist)
   const columns = db.prepare(`PRAGMA table_info(tts_access_config)`).all() as any[];
   const hasModColumns = columns.some(col => col.name === 'limited_allow_mod');
   
@@ -446,29 +445,43 @@ export function runMigrations(db: Database.Database): void {
       ALTER TABLE tts_access_config ADD COLUMN premium_allow_mod INTEGER DEFAULT 0
     `);
     console.log('Moderator columns added successfully');
-  }  // Create twitch_polling_config table for flexible API polling intervals
+  }
+
+  // Create twitch_polling_config table for flexible API polling intervals
   db.exec(`
     CREATE TABLE IF NOT EXISTS twitch_polling_config (
       api_type TEXT PRIMARY KEY,
-      interval_minutes INTEGER NOT NULL DEFAULT 30,
+      interval_value INTEGER NOT NULL DEFAULT 30,
+      min_interval INTEGER NOT NULL DEFAULT 5,
+      max_interval INTEGER NOT NULL DEFAULT 120,
+      interval_units TEXT NOT NULL DEFAULT 'minutes',
+      step INTEGER NOT NULL DEFAULT 5,
       enabled INTEGER DEFAULT 1,
       last_poll_at DATETIME,
       description TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       
-      CHECK (interval_minutes >= 5 AND interval_minutes <= 120),
-      CHECK (api_type IN ('role_sync'))
+      CHECK (interval_value >= min_interval AND interval_value <= max_interval),
+      CHECK (interval_units IN ('seconds', 'minutes', 'hours')),
+      CHECK (api_type IN ('role_sync', 'followers'))
     )
   `);
 
-  // Upsert default polling config for role_sync
-  // Only updates description (build-controlled), preserves user settings (interval_minutes, enabled)
+  // Upsert default polling configs
+  // Only updates description/min/max/units/step (build-controlled), preserves user settings (interval_value, enabled)
   db.exec(`
-    INSERT INTO twitch_polling_config (api_type, interval_minutes, description) 
-    VALUES ('role_sync', 30, 'Combined sync for Subscribers, VIPs, and Moderators')
+    INSERT INTO twitch_polling_config (
+      api_type, interval_value, min_interval, max_interval, interval_units, step, description
+    ) VALUES 
+      ('role_sync', 30, 5, 120, 'minutes', 5, 'Combined sync for Subscribers, VIPs, and Moderators'),
+      ('followers', 120, 60, 600, 'seconds', 10, 'Detect new followers and trigger alerts')
     ON CONFLICT(api_type) DO UPDATE SET 
       description = excluded.description,
+      min_interval = excluded.min_interval,
+      max_interval = excluded.max_interval,
+      interval_units = excluded.interval_units,
+      step = excluded.step,
       updated_at = CURRENT_TIMESTAMP
   `);
 

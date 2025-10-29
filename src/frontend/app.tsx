@@ -16,6 +16,15 @@ const { ipcRenderer } = window.require('electron');
 const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<string>('connection');
   const [channelId, setChannelId] = useState<string>('');
+  const [connectionState, setConnectionState] = useState({
+    userId: '',
+    clientId: '',
+    accessToken: '',
+    sessionId: '',
+    broadcasterId: '',
+    broadcasterLogin: '',
+    isBroadcaster: false
+  });
 
   // Initialize voice syncing on app startup
   useEffect(() => {
@@ -32,12 +41,33 @@ const App: React.FC = () => {
     initializeVoiceSync();
   }, []);
 
-  // Load current session to get channel ID
+  // Load current session to get channel ID and connection state
   useEffect(() => {
     const loadSession = async () => {
       const session = await db.getCurrentSession();
       if (session) {
         setChannelId(session.channel_id);
+        
+        // Try to restore connection state
+        const lastUserId = await db.getSetting('last_connected_user_id');
+        const lastChannelId = await db.getSetting('last_connected_channel_id');
+        const lastChannelLogin = await db.getSetting('last_connected_channel_login');
+        const lastIsBroadcaster = await db.getSetting('last_is_broadcaster');
+        
+        if (lastUserId) {
+          const token = await db.getToken(lastUserId);
+          if (token && token.isValid) {
+            setConnectionState({
+              userId: lastUserId,
+              clientId: token.clientId,
+              accessToken: token.accessToken,
+              sessionId: session.id?.toString() || '',
+              broadcasterId: lastChannelId || session.channel_id,
+              broadcasterLogin: lastChannelLogin || session.channel_login,
+              isBroadcaster: lastIsBroadcaster === 'true'
+            });
+          }
+        }
       }
     };
     loadSession();
@@ -55,8 +85,7 @@ const App: React.FC = () => {
     { id: 'tts', label: 'TTS' },
     { id: 'discord', label: 'Discord' },
     { id: 'advanced', label: 'Advanced', isBottom: true }
-  ];
-  const renderScreen = () => {
+  ];  const renderScreen = () => {
     switch (activeScreen) {
       case 'connection':
         return <ConnectionScreen />;
@@ -71,7 +100,15 @@ const App: React.FC = () => {
       case 'discord':
         return <Discord />;
       case 'advanced':
-        return <AdvancedScreen />;
+        return <AdvancedScreen 
+          userId={connectionState.userId}
+          clientId={connectionState.clientId}
+          accessToken={connectionState.accessToken}
+          sessionId={connectionState.sessionId}
+          broadcasterId={connectionState.broadcasterId}
+          broadcasterLogin={connectionState.broadcasterLogin}
+          isBroadcaster={connectionState.isBroadcaster}
+        />;
       default:
         return <ConnectionScreen />;
     }

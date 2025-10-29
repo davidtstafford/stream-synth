@@ -55,17 +55,17 @@ ipcMain.handle('twitch-polling:get-config', async (_, apiType: string) => {
 /**
  * Update polling interval
  */
-ipcMain.handle('twitch-polling:update-interval', async (_, apiType: string, intervalMinutes: number) => {
+ipcMain.handle('twitch-polling:update-interval', async (_, apiType: string, intervalValue: number) => {
   try {
-    console.log(`[IPC] Updating polling interval for ${apiType} to ${intervalMinutes} minutes`);
+    console.log(`[IPC] Updating polling interval for ${apiType} to ${intervalValue}`);
     
-    // Update database
-    pollingConfigRepo.updateInterval(apiType as any, intervalMinutes);
+    // Update database (validates against min/max)
+    pollingConfigRepo.updateInterval(apiType as any, intervalValue);
     
     // Update runtime polling manager
     const manager = getPollingManager();
     if (manager) {
-      manager.updateInterval(apiType as any, intervalMinutes);
+      manager.updateInterval(apiType as any, intervalValue);
       console.log(`[IPC] Polling manager updated for ${apiType}`);
     } else {
       console.warn('[IPC] Polling manager not initialized yet');
