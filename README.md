@@ -8,12 +8,14 @@ Stream Synth provides streamers with a centralized hub to manage Twitch events, 
 
 ### Core Features
 
-- **Twitch Integration**: OAuth authentication, EventSub WebSocket real-time events, subscription syncing
-- **Text-to-Speech (TTS)**: Multi-provider support (Azure, Google) with voice customization per viewer
+- **Twitch Integration**: OAuth authentication, EventSub WebSocket real-time events, automatic role syncing (Subscribers, VIPs, Moderators)
+- **Text-to-Speech (TTS)**: Multi-provider support (WebSpeech, Azure, Google) with voice customization per viewer
+- **TTS Access Control**: Three-tier access system (All Access, Limited Access, Premium Voice Access)
+- **Channel Point Redeems**: Temporary TTS access via Channel Point redemptions with configurable duration
 - **Discord Integration**: Webhook-based voice catalogue publishing and auto-updates
 - **IRC Chat**: Real-time chat monitoring and message sending via tmi.js
 - **Event Subscriptions**: Granular control over which Twitch events trigger actions
-- **Viewer Management**: Track subscribers, subscriptions, and custom TTS voice preferences
+- **Viewer Management**: Track subscribers, VIPs, moderators, and custom TTS voice preferences
 - **Settings Management**: Export/import configuration, backup and restore functionality
 - **Database-Backed**: SQLite with structured repositories for all data
 
@@ -37,15 +39,16 @@ Stream Synth provides streamers with a centralized hub to manage Twitch events, 
     │   IPC   │  │ Files │  │ Database  │
     │Framework│  │System │  │ (SQLite)  │
     └────┬────┘  └───────┘  └───┬──────┘
-         │                       │
-    ┌────▼────────────────────────▼───┐
-    │  IPC Handlers (71 handlers)     │
+         │                       │    ┌────▼────────────────────────▼───┐
+    │  IPC Handlers (80+ handlers)    │
     │  • Database (30)                │
     │  • TTS (20)                     │
-    │  • Twitch (6)                   │
+    │  • TTS Access (4)               │
+    │  • Twitch (8)                   │
     │  • IRC (6)                      │
     │  • Discord (5)                  │
-    │  • Other (4)                    │
+    │  • Startup (2)                  │
+    │  • Other (5)                    │
     └────┬─────────────────────────────┘
          │
     ┌────▼─────────────────────────────┐
@@ -76,9 +79,11 @@ src/backend/
 │   └── ipc-handlers/
 │       ├── database.ts              # Database operations (30 handlers)
 │       ├── tts.ts                   # Text-to-speech (20 handlers)
-│       ├── twitch.ts                # Twitch integration (6 handlers)
+│       ├── tts-access.ts            # TTS access control (4 handlers)
+│       ├── twitch.ts                # Twitch integration (8 handlers)
 │       ├── irc.ts                   # IRC chat (6 handlers)
 │       ├── discord.ts               # Discord webhooks (5 handlers)
+│       ├── startup.ts               # Startup operations (2 handlers)
 │       └── index.ts                 # Handler initialization
 ├── database/
 │   ├── connection.ts                # SQLite connection & init
@@ -89,14 +94,22 @@ src/backend/
 │       ├── sessions.ts              # Connection sessions
 │       ├── tokens.ts                # OAuth tokens
 │       ├── viewers.ts               # Viewer data
+│       ├── viewer-roles.ts          # Viewer role tracking (VIP, Mod, Sub)
+│       ├── viewer-rules.ts          # Per-viewer TTS overrides
 │       ├── subscriptions.ts         # Subscription tracking
 │       ├── events.ts                # Event history
 │       ├── voices.ts                # TTS voice cache
-│       └── tts.ts                   # TTS provider settings
+│       ├── tts.ts                   # TTS provider settings
+│       ├── tts-access.ts            # TTS access control configuration
+│       └── channel-point-grants.ts  # Channel point redemption tracking
 ├── services/
 │   ├── export-import.ts             # Settings backup/restore
 │   ├── twitch-subscriptions.ts      # Sync subscriptions from Twitch
+│   ├── twitch-vip.ts                # Sync VIPs from Twitch
+│   ├── twitch-moderators.ts         # Sync moderators from Twitch
+│   ├── twitch-role-sync.ts          # Centralized role sync service
 │   ├── twitch-irc.ts                # IRC management via tmi.js
+│   ├── tts-access-control.ts        # TTS access rule evaluation
 │   └── tts/
 │       ├── manager.ts               # TTS orchestration
 │       ├── base.ts                  # Provider interface
@@ -233,10 +246,10 @@ Located in `src/backend/core/ipc-handlers/tts.ts`
 **Settings**: `tts:get-settings`, `tts:save-settings`, `tts:get-grouped-voices`  
 **Metadata**: `tts:get-voices`, `tts:get-voice-by-id`, `tts:get-voice-stats`, `tts:get-providers`  
 
-### Twitch Handlers (6)
+### Twitch Handlers (8)
 Located in `src/backend/core/ipc-handlers/twitch.ts`
 
-`twitch-oauth`, `connect-websocket`, `export-settings`, `import-settings`, `get-export-preview`, `twitch:sync-subscriptions-from-twitch`
+`twitch-oauth`, `connect-websocket`, `export-settings`, `import-settings`, `get-export-preview`, `twitch:sync-subscriptions-from-twitch`, `twitch:sync-vips`, `twitch:sync-moderators`
 
 ### IRC Handlers (6)
 Located in `src/backend/core/ipc-handlers/irc.ts`
@@ -247,6 +260,76 @@ Located in `src/backend/core/ipc-handlers/irc.ts`
 Located in `src/backend/core/ipc-handlers/discord.ts`
 
 `discord:test-webhook`, `discord:generate-voice-catalogue`, `discord:post-voice-catalogue`, `discord:delete-webhook-messages`, `discord:auto-update-catalogue`
+
+### TTS Access Handlers (4)
+Located in `src/backend/core/ipc-handlers/tts-access.ts`
+
+`tts-access:get-config`, `tts-access:save-config`, `tts-access:reset-config`, `tts-access:check-viewer-access`
+
+### Startup Handlers (2)
+Located in `src/backend/core/ipc-handlers/startup.ts`
+
+`startup:sync-roles`, `periodic-sync:start`
+
+---
+
+## 🎛️ TTS Access Control System
+
+Stream Synth includes a sophisticated **three-tier access control system** for Text-to-Speech with automatic role syncing.
+
+### Access Modes
+
+#### 1. **Access to All** (Default)
+Everyone can use TTS with any voice - no restrictions.
+
+#### 2. **Limited Access**
+Only specific viewers can use TTS at all. Non-eligible viewers are completely blocked.
+
+**Eligible Users:**
+- ✅ Subscribers (required, cannot be disabled)
+- ✅ VIPs (optional)
+- ✅ Moderators (optional)
+- ✅ Channel Point Redeem Users (temporary access with configurable duration)
+
+**Configuration:**
+- Option to deny gifted subscribers
+- Channel Point Redeem: Custom redeem name + duration (1-60 minutes)
+
+#### 3. **Premium Voice Access**
+Everyone can use TTS, but only specific viewers can use premium voices (Azure/Google). Non-eligible viewers fall back to WebSpeech voices.
+
+**Eligible for Premium Voices:**
+- ✅ Subscribers
+- ✅ VIPs (optional)
+- ✅ Moderators (optional)
+- ✅ Channel Point Redeem Users (temporary access)
+
+**Requirements:**
+- Global voice must be set to WebSpeech (enforced via mutual exclusion)
+- Azure/Google voices reserved for eligible users only
+
+### Automatic Role Syncing
+
+Viewer roles (Subscribers, VIPs, Moderators) are automatically synced:
+- ✅ **On Startup** - When app launches
+- ✅ **On OAuth Connection** - After successful authentication
+- ✅ **Every 30 Minutes** - Background periodic sync
+- ✅ **Manual Sync** - Via "Sync Viewer Roles" button
+
+**Implementation:** Centralized `twitch-role-sync.ts` service with parallel API execution for 3x speed improvement.
+
+### Premium Voice Mutual Exclusion
+
+To prevent invalid configurations, the system enforces mutual exclusion:
+
+**Rule 1:** Cannot select "Premium Voice Access" mode if a premium voice (Azure/Google) is currently selected as global voice.
+
+**Rule 2:** Cannot select a premium voice (Azure/Google) as global voice if "Premium Voice Access" mode is enabled.
+
+**User Flow:**
+- Error messages display for 8 seconds with dismiss button
+- Clear instructions on which setting to change
+- Validation happens in both Voice Settings and TTS Access tabs
 
 ---
 
@@ -418,9 +501,13 @@ The application uses **SQLite** with the following tables:
 
 - **app_settings**: Application configuration
 - **tts_settings**: TTS provider settings
-- **voices**: TTS voice cache
+- **tts_access_config**: TTS access control configuration (Limited/Premium modes)
+- **voices**: TTS voice cache (WebSpeech, Azure, Google)
 - **viewers**: User/streamer data
+- **viewer_roles**: Viewer role tracking (Subscriber, VIP, Moderator status)
+- **viewer_rules**: Per-viewer TTS overrides (custom voices, enabled/disabled)
 - **subscriptions**: Subscription tracking
+- **channel_point_grants**: Temporary TTS access via Channel Point redemptions
 - **event_subscriptions**: User's event preferences
 - **connection_sessions**: OAuth and connection history
 - **oauth_tokens**: Twitch tokens (encrypted)
@@ -438,7 +525,7 @@ The application uses **SQLite** with the following tables:
 | **Bundler** | Webpack 5+ | Module bundling |
 | **Database** | SQLite 3+ | Persistent storage |
 | **Twitch API** | EventSub, OAuth 2.0 | Real-time events |
-| **TTS** | Azure Cognitive Services, Google Cloud TTS | Speech synthesis |
+| **TTS** | WebSpeech API, Azure Cognitive Services, Google Cloud TTS | Speech synthesis |
 | **IRC** | tmi.js | Twitch chat |
 | **Discord** | Webhooks | Channel notifications |
 
@@ -446,10 +533,26 @@ The application uses **SQLite** with the following tables:
 
 ## 📊 Current Status
 
-**Phase 3 Complete**: ✅ All 71 IPC handlers migrated to centralized framework  
-**Build**: ✅ Passing (0 errors)  
-**Coverage**: ✅ Database, TTS, Twitch, IRC, Discord operations  
-**Code Quality**: ✅ 100% TypeScript, zero boilerplate IPC code  
+**Latest Updates (October 2025)**:
+- ✅ **TTS Access Control** - Three-tier system (All Access, Limited, Premium Voice Access)
+- ✅ **Channel Point Redeems** - Temporary TTS access with configurable duration (1-60 mins)
+- ✅ **Automatic Role Syncing** - Subscribers, VIPs, Moderators synced on startup, OAuth, and every 30 minutes
+- ✅ **Premium Voice Mutual Exclusion** - Prevents invalid configurations between voice selection and access modes
+- ✅ **Voice Settings Improvements** - Enhanced UI with dark containers and better error messaging
+
+**Technical Status**:
+- **IPC Handlers**: ✅ 80+ handlers migrated to centralized framework
+- **Build**: ✅ Passing (0 errors, 363 KiB)
+- **Coverage**: ✅ Database, TTS, TTS Access, Twitch, IRC, Discord, Startup operations
+- **Code Quality**: ✅ 100% TypeScript, zero boilerplate IPC code
+- **Error Handling**: ✅ 8-second error display with manual dismiss capability
+
+**Recent Implementations**:
+1. TTS Access Control system with rule evaluation
+2. Channel Point temporary access grants
+3. Centralized role sync service (3x faster with parallel API calls)
+4. Premium voice mutual exclusion validation
+5. Enhanced Voice Settings tab styling
 
 ---
 
@@ -460,9 +563,10 @@ This usually means invalid data is being rendered. Ensure objects are properly u
 
 ### IPC handler not responding?
 Check that:
-1. Handler is registered in the appropriate file (database.ts, tts.ts, etc.)
-2. `setupXxxHandlers()` is called in `src/backend/core/ipc-handlers.ts`
+1. Handler is registered in the appropriate file (database.ts, tts.ts, tts-access.ts, twitch.ts, etc.)
+2. `setupXxxHandlers()` is called in `src/backend/core/ipc-handlers/index.ts`
 3. Handler returns proper type (not wrapped in extra object)
+4. For TTS Access handlers, ensure `tts_access_config` table exists in database
 
 ### Double-wrapping response errors?
 The IPC Framework automatically wraps returns in `{ success, data }`. Don't manually wrap—return raw data instead.
