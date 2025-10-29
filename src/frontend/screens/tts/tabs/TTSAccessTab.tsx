@@ -258,50 +258,50 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
               <span className="checkbox-text">Allow Mod</span>
             </label>
             <p className="rule-description">Moderators can use TTS even if not subscribed.</p>
-          </div>
-          
-          <div className="rule-item redeem-rule">
-            <label className="checkbox-label">
+          </div>          <div className="rule-item redeem-rule">
+            <div className="redeem-header">
+              <span className="rule-title">Channel Point Redeem Access</span>
+            </div>
+            
+            <div className="redeem-config">
+              <label>Redeem Name:</label>
+              <input 
+                type="text" 
+                placeholder="Enter redeem name"
+                value={config.limited_redeem_name || ''}
+                onChange={(e) => updateConfig('limited_redeem_name', e.target.value)}
+                className="text-input"
+              />              <label>Duration: {config.limited_redeem_duration_mins || 0} minutes</label>
+              <input 
+                type="range" 
+                min="1"
+                max="60"
+                step="1"
+                value={config.limited_redeem_duration_mins || 30}
+                onChange={(e) => updateConfig('limited_redeem_duration_mins', parseInt(e.target.value))}
+                className="slider"
+              />
+            </div>
+            
+            <label className="checkbox-label" style={{ marginTop: '10px' }}>
               <input 
                 type="checkbox" 
-                checked={!!config.limited_redeem_name}
+                checked={!!config.limited_redeem_name && config.limited_redeem_duration_mins !== null}
                 onChange={(e) => {
                   if (!e.target.checked) {
                     updateConfig('limited_redeem_name', null);
                     updateConfig('limited_redeem_duration_mins', null);
                   } else {
-                    updateConfig('limited_redeem_name', '');
-                    updateConfig('limited_redeem_duration_mins', 60);
+                    // Only enable if fields are filled
+                    if (!config.limited_redeem_name || !config.limited_redeem_duration_mins) {
+                      alert('Please fill in both the redeem name and duration before enabling.');
+                      return;
+                    }
                   }
                 }}
               />
-              <span className="checkbox-text">Channel Point Redeem Access</span>
+              <span className="checkbox-text">Enable Channel Point Redeem Access</span>
             </label>
-            
-            {config.limited_redeem_name !== null && (
-              <div className="redeem-config">
-                <label>If redeem named</label>
-                <input 
-                  type="text" 
-                  placeholder="Redeem name"
-                  value={config.limited_redeem_name || ''}
-                  onChange={(e) => updateConfig('limited_redeem_name', e.target.value)}
-                  className="text-input"
-                />
-                <label>is activated, grant</label>
-                <input 
-                  type="number" 
-                  min="1"
-                  value={config.limited_redeem_duration_mins || 0}
-                  onChange={(e) => updateConfig('limited_redeem_duration_mins', parseInt(e.target.value) || null)}
-                  className="number-input"
-                />
-                <label>minutes of TTS access</label>
-              </div>            )}
-            <p className="rule-description">
-              Viewers can redeem channel points to get temporary TTS access.
-              <br/><em>Note: Requires EventSub event "channel.channel_points_custom_reward_redemption.add" (automatically enabled).</em>
-            </p>
           </div>
         </div>
       )}      {/* Premium Voice Access Rules */}
@@ -356,49 +356,51 @@ export const TTSAccessTab: React.FC<Props> = ({ globalVoiceProvider }) => {
                 <span className="checkbox-text">Allow Mod</span>
               </label>
               <p className="rule-description">Moderators can use premium voices even if not subscribed.</p>
-            </div>
-            
-            <div className="rule-item redeem-rule">
-              <label className="checkbox-label">
+            </div>            <div className="rule-item redeem-rule">
+              <div className="redeem-header">
+                <span className="rule-title">Channel Point Redeem Access</span>
+              </div>
+              
+              <div className="redeem-config">
+                <label>Redeem Name:</label>
+                <input 
+                  type="text" 
+                  placeholder="Enter redeem name"
+                  value={config.premium_redeem_name || ''}
+                  onChange={(e) => updateConfig('premium_redeem_name', e.target.value)}
+                  className="text-input"
+                />                <label>Duration: {config.premium_redeem_duration_mins || 0} minutes</label>
+                <input 
+                  type="range" 
+                  min="1"
+                  max="60"
+                  step="1"
+                  value={config.premium_redeem_duration_mins || 30}
+                  onChange={(e) => updateConfig('premium_redeem_duration_mins', parseInt(e.target.value))}
+                  className="slider"
+                />
+              </div>
+              
+              <label className="checkbox-label" style={{ marginTop: '10px' }}>
                 <input 
                   type="checkbox" 
-                  checked={!!config.premium_redeem_name}
+                  checked={!!config.premium_redeem_name && config.premium_redeem_duration_mins !== null}
                   onChange={(e) => {
                     if (!e.target.checked) {
                       updateConfig('premium_redeem_name', null);
                       updateConfig('premium_redeem_duration_mins', null);
                     } else {
-                      updateConfig('premium_redeem_name', '');
-                      updateConfig('premium_redeem_duration_mins', 60);
+                      // Only enable if fields are filled
+                      if (!config.premium_redeem_name || !config.premium_redeem_duration_mins) {
+                        alert('Please fill in both the redeem name and duration before enabling.');
+                        return;
+                      }
                     }
                   }}
                 />
-                <span className="checkbox-text">Channel Point Redeem Access</span>
+                <span className="checkbox-text">Enable Channel Point Redeem Access</span>
               </label>
-              
-              {config.premium_redeem_name !== null && (
-                <div className="redeem-config">
-                  <label>If redeem named</label>
-                  <input 
-                    type="text" 
-                    placeholder="Redeem name"
-                    value={config.premium_redeem_name || ''}
-                    onChange={(e) => updateConfig('premium_redeem_name', e.target.value)}
-                    className="text-input"
-                  />
-                  <label>is activated, grant</label>
-                  <input 
-                    type="number" 
-                    min="1"
-                    value={config.premium_redeem_duration_mins || 0}
-                    onChange={(e) => updateConfig('premium_redeem_duration_mins', parseInt(e.target.value) || null)}
-                    className="number-input"
-                  />                  <label>minutes of premium voice access</label>
-                </div>              )}              <p className="rule-description">
-                Viewers can redeem channel points to get temporary premium voice access.
-                <br/><em>Note: Requires EventSub event "channel.channel_points_custom_reward_redemption.add" (automatically enabled).</em>
-              </p>
-            </div>          </div>
+            </div></div>
       )}
 
       {saving && (

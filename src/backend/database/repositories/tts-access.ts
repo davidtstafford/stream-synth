@@ -94,16 +94,10 @@ export class TTSAccessRepository extends BaseRepository<TTSAccessConfig> {
         config.premium_redeem_duration_mins !== null &&
         config.premium_redeem_duration_mins < 1) {
       return 'Premium redeem duration must be at least 1 minute';
-    }
-
-    // Validate redeem name (if duration is set, name must be set too)
-    if (config.limited_redeem_duration_mins && !config.limited_redeem_name) {
-      return 'Limited redeem name is required when duration is set';
-    }
-
-    if (config.premium_redeem_duration_mins && !config.premium_redeem_name) {
-      return 'Premium redeem name is required when duration is set';
-    }
+    }    // Note: We don't validate redeem name/duration here because the UI
+    // uses empty strings as placeholders when enabling the feature.
+    // The actual validation happens at runtime when checking viewer permissions.
+    // This allows the UI to save partial/incomplete states during configuration.
 
     return null;
   }
