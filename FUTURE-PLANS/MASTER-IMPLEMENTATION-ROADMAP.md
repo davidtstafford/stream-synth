@@ -31,6 +31,607 @@ This document provides the **definitive implementation order** for all future St
 
 ---
 
+## 🏗️ Architecture Quick Reference
+
+**IMPORTANT**: Before implementing ANY phase, you MUST understand Stream Synth's core architecture patterns. These patterns are documented in detail in the main **README.md** file.
+
+### Core Patterns Overview
+
+#### 1. **IPC Framework Pattern** (Centralized Handler Registration)
+
+All frontend-backend communication uses a centralized IPC framework that eliminates boilerplate and provides consistent error handling.
+
+```typescript
+// Backend: Register handler in src/backend/core/ipc-handlers/*.ts
+ipcRegistry.register<InputType, OutputType>(
+  'channel-name',
+  {
+    // Optional: Validate input
+    validate: (input) => {
+      if (!input.required_field) return 'Field is required';
+      return null; // null = valid
+    },
+    
+    // Required: Execute handler
+    execute: async (input) => {
+      // Your logic here
+      return result; // Framework auto-wraps as { success: true, data: result }
+    },
+    
+    // Optional: Transform output
+    transform: (output) => ({
+      ...output,
+      transformed: true
+    })
+  }
+);
+
+// Frontend: Call handler in React component
+const response = await ipcRenderer.invoke('channel-name', inputData);
+if (response.success) {
+  const data = response.data; // Use typed data
+} else {
+  console.error('Error:', response.error);
+}
+```
+
+**Key Points**:
+- ✅ All handlers return `{ success: boolean; data?: T; error?: string }`
+- ✅ Framework handles error wrapping automatically
+- ✅ Never manually wrap returns in `{ success, data }` - return raw data
+- ✅ Register handlers in appropriate file: `database.ts`, `tts.ts`, `twitch.ts`, etc.
+- ✅ Call `setupXxxHandlers()` in `src/backend/core/ipc-handlers/index.ts`
+
+**Documentation**: See README.md section "🔧 IPC Framework (Centralized Handler Pattern)"
+
+---
+
+#### 2. **Repository Pattern** (Database Operations)
+
+All database operations use `BaseRepository<T>` which provides standard CRUD methods.
+
+```typescript
+// Extend BaseRepository for new tables
+export class MyRepository extends BaseRepository<MyEntity> {
+  constructor(db: Database.Database) {
+    super(db, 'my_table', (row) => ({
+      id: row.id,
+      name: row.name,
+      // ... map database row to typed entity
+    }));
+  }
+  
+  // Add custom methods
+  async getByName(name: string): Promise<MyEntity | null> {
+    return this.getByColumn('name', name);
+  }
+  
+  // Batch operations
+  async insertMany(entities: MyEntity[]): Promise<void> {
+    const stmt = this.db.prepare(`INSERT INTO my_table ...`);
+    const transaction = this.db.transaction((items) => {
+      for (const item of items) {
+        stmt.run(item.id, item.name);
+      }
+    });
+    transaction(entities);
+  }
+}
+```
+
+**Key Points**:
+- ✅ Always extend `BaseRepository<T>` from `src/backend/database/base-repository.ts`
+- ✅ Provides: `getById()`, `getAll()`, `create()`, `update()`, `delete()`, `getByColumn()`
+- ✅ Use `mapRow` function in constructor to convert database rows to typed entities
+- ✅ Add table-specific methods as needed
+- ✅ Export repository from `src/backend/database/repositories/index.ts`
+
+**Documentation**: See `src/backend/database/base-repository.ts`
+
+---
+
+#### 3. **Service Pattern** (Business Logic)
+
+Services contain business logic and orchestrate repositories, APIs, and other services.
+
+```typescript
+// Create service in src/backend/services/
+export class MyService {
+  constructor(
+    private myRepo: MyRepository,
+    private otherService: OtherService
+  ) {}
+  
+  async processData(input: Input): Promise<Result> {
+    // 1. Validate
+    if (!input.isValid) throw new Error('Invalid input');
+    
+    // 2. Fetch data
+    const data = await this.myRepo.getById(input.id);
+    
+    // 3. Business logic
+    const processed = this.transform(data);
+    
+    // 4. Call other services
+    await this.otherService.notify(processed);
+    
+    // 5. Return result
+    return processed;
+  }
+}
+```
+
+**Key Points**:
+- ✅ Services live in `src/backend/services/`
+- ✅ Services orchestrate repositories and external APIs
+- ✅ Keep business logic OUT of repositories (repositories = data access only)
+- ✅ Initialize services in `src/backend/main.ts`
+- ✅ Pass services to IPC handlers as needed
+
+**Examples**: 
+- `twitch-role-sync.ts` - Orchestrates subscriber/VIP/moderator syncing
+- `dynamic-polling-manager.ts` - Manages polling intervals
+- `tts-access-control.ts` - Evaluates TTS access rules
+
+---
+
+#### 4. **Frontend Service Pattern** (IPC Wrapper)
+
+Frontend services wrap IPC calls and normalize responses for React components.
+
+```typescript
+// Create service in src/frontend/services/
+export async function myOperation(input: any): Promise<{ 
+  success: boolean; 
+  result?: any; 
+  error?: string 
+}> {
+  const response = await ipcRenderer.invoke('my-handler', input);
+  
+  if (response.success && response.data) {
+    return { success: true, result: response.data };
+  }
+  return { success: false, error: response.error };
+}
+
+// Use in React component
+const handleClick = async () => {
+  const result = await myService.myOperation(data);
+  if (result.success) {
+    setData(result.result);
+  } else {
+    setError(result.error);
+  }
+};
+```
+
+**Key Points**:
+- ✅ Always create frontend service wrappers (don't call IPC directly in components)
+- ✅ Extract `response.data` and return normalized format
+- ✅ Handle errors gracefully
+- ✅ Export from `src/frontend/services/`
+
+**Examples**:
+- `database.ts` - Wraps database IPC handlers
+- `tts.ts` - Wraps TTS IPC handlers
+- `twitch-api.ts` - Wraps Twitch IPC handlers
+
+---
+
+#### 5. **Database Migration Pattern**
+
+All database schema changes go through migrations in `src/backend/database/migrations.ts`.
+
+```typescript
+// Add to migrations array
+export const migrations: Migration[] = [
+  // ...existing migrations...
+  
+  {
+    version: 14, // Increment version
+    description: 'Add my_table for new feature',
+    up: (db: Database.Database) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS my_table (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_my_table_name 
+        ON my_table(name);
+      `);
+    },
+    down: (db: Database.Database) => {
+      db.exec(`DROP TABLE IF EXISTS my_table;`);
+    }
+  }
+];
+```
+
+**Key Points**:
+- ✅ Always increment version number
+- ✅ Provide descriptive `description`
+- ✅ Implement both `up` (create) and `down` (rollback)
+- ✅ Use `IF NOT EXISTS` for idempotency
+- ✅ Create indexes for frequently queried columns
+- ✅ Use TEXT for IDs, INTEGER for booleans (0/1), TEXT for timestamps (ISO 8601)
+
+**Documentation**: See `src/backend/database/migrations.ts`
+
+---
+
+### Standard File Structure for Each Feature
+
+Every feature typically requires these files:
+
+```
+Backend:
+  src/backend/database/repositories/my-feature.ts    # Repository class
+  src/backend/services/my-feature.ts                 # Service class
+  src/backend/core/ipc-handlers/my-feature.ts        # IPC handlers
+  
+Frontend:
+  src/frontend/services/my-feature.ts                # IPC wrapper
+  src/frontend/screens/my-feature/my-feature.tsx     # React component
+  
+Database:
+  src/backend/database/migrations.ts                 # Add migration
+```
+
+**Integration Points**:
+- Register IPC handlers in `src/backend/core/ipc-handlers/index.ts`
+- Export repository from `src/backend/database/repositories/index.ts`
+- Initialize service in `src/backend/main.ts`
+- Add navigation in `src/frontend/components/Menu.tsx`
+
+---
+
+## 📋 Standard Implementation Checklist
+
+Use this checklist for **EVERY** phase to ensure consistent implementation:
+
+### ✅ Step 1: Database Layer (if new tables needed)
+
+- [ ] Add migration to `src/backend/database/migrations.ts`
+  - [ ] Increment version number
+  - [ ] Define table schema with appropriate types
+  - [ ] Add indexes for performance
+  - [ ] Implement `up` and `down` functions
+- [ ] Create repository in `src/backend/database/repositories/`
+  - [ ] Extend `BaseRepository<T>`
+  - [ ] Implement `mapRow` function
+  - [ ] Add table-specific query methods
+  - [ ] Export from `repositories/index.ts`
+- [ ] Test repository methods work correctly
+
+### ✅ Step 2: Service Layer (business logic)
+
+- [ ] Create service in `src/backend/services/`
+  - [ ] Import required repositories
+  - [ ] Implement business logic methods
+  - [ ] Handle edge cases and errors
+  - [ ] Add logging for important operations
+- [ ] Initialize service in `src/backend/main.ts`
+  - [ ] Instantiate service with dependencies
+  - [ ] Pass to IPC handlers if needed
+- [ ] Test service methods work correctly
+
+### ✅ Step 3: IPC Handlers (frontend-backend bridge)
+
+- [ ] Create handler file in `src/backend/core/ipc-handlers/` (or add to existing)
+  - [ ] Use `ipcRegistry.register()` for each handler
+  - [ ] Add `validate` function for input validation
+  - [ ] Implement `execute` function with service calls
+  - [ ] Return raw data (framework handles wrapping)
+- [ ] Register handlers in `src/backend/core/ipc-handlers/index.ts`
+  - [ ] Import handler setup function
+  - [ ] Call `setupXxxHandlers()` in `setupAllHandlers()`
+- [ ] Test IPC handlers via Electron DevTools console
+
+### ✅ Step 4: Frontend Service (IPC wrapper)
+
+- [ ] Create service in `src/frontend/services/`
+  - [ ] Import `ipcRenderer` from electron
+  - [ ] Wrap each IPC handler in a function
+  - [ ] Extract `response.data` from IPC response
+  - [ ] Return normalized format `{ success, result?, error? }`
+  - [ ] Export all functions
+- [ ] Test frontend service calls work correctly
+
+### ✅ Step 5: Frontend UI (React component)
+
+- [ ] Create screen component in `src/frontend/screens/`
+  - [ ] Import frontend service
+  - [ ] Use React hooks (useState, useEffect)
+  - [ ] Call service methods on user actions
+  - [ ] Display data and handle errors
+  - [ ] Add loading states
+- [ ] Add navigation in `src/frontend/components/Menu.tsx`
+  - [ ] Add menu item with route
+  - [ ] Import screen component
+  - [ ] Add route to router
+- [ ] Test UI renders and functions correctly
+
+### ✅ Step 6: Integration Testing
+
+- [ ] Test full flow: UI → Frontend Service → IPC → Backend Service → Repository → Database
+- [ ] Test error handling at each layer
+- [ ] Test edge cases (empty data, invalid input, API failures)
+- [ ] Test performance with realistic data volumes
+- [ ] Verify no regressions in existing features
+
+### ✅ Step 7: Documentation
+
+- [ ] Update feature documentation with actual implementation notes
+- [ ] Document any deviations from original plan
+- [ ] Add comments for complex business logic
+- [ ] Update README.md if new patterns introduced
+
+---
+
+## ⚠️ Common Pitfalls & How to Avoid Them
+
+### ❌ Pitfall 1: Double-Wrapping IPC Responses
+
+**WRONG**:
+```typescript
+ipcRegistry.register('my-handler', {
+  execute: async (input) => {
+    const data = await myService.getData();
+    return { success: true, data }; // ❌ Manual wrapping
+  }
+});
+```
+
+**CORRECT**:
+```typescript
+ipcRegistry.register('my-handler', {
+  execute: async (input) => {
+    return await myService.getData(); // ✅ Return raw data
+  }
+});
+```
+
+**Why**: The IPC Framework automatically wraps returns in `{ success, data }`. Manual wrapping creates `{ success: true, data: { success: true, data: ... } }`.
+
+---
+
+### ❌ Pitfall 2: Business Logic in Repositories
+
+**WRONG**:
+```typescript
+class MyRepository extends BaseRepository<MyEntity> {
+  async processAndSave(data: Data): Promise<void> {
+    // ❌ Business logic in repository
+    const processed = this.validateAndTransform(data);
+    await this.create(processed);
+  }
+}
+```
+
+**CORRECT**:
+```typescript
+// Repository: Data access only
+class MyRepository extends BaseRepository<MyEntity> {
+  async save(entity: MyEntity): Promise<void> {
+    await this.create(entity);
+  }
+}
+
+// Service: Business logic
+class MyService {
+  async processAndSave(data: Data): Promise<void> {
+    const processed = this.validateAndTransform(data); // ✅ Logic in service
+    await this.myRepo.save(processed);
+  }
+}
+```
+
+**Why**: Repositories should only handle data access. Business logic belongs in services for testability and reusability.
+
+---
+
+### ❌ Pitfall 3: Direct IPC Calls in React Components
+
+**WRONG**:
+```tsx
+const MyComponent = () => {
+  const handleClick = async () => {
+    // ❌ Direct IPC call in component
+    const response = await ipcRenderer.invoke('my-handler', data);
+    if (response.success) setData(response.data);
+  };
+};
+```
+
+**CORRECT**:
+```tsx
+// src/frontend/services/my-service.ts
+export async function getData(input: any) {
+  const response = await ipcRenderer.invoke('my-handler', input);
+  return response.success ? 
+    { success: true, result: response.data } : 
+    { success: false, error: response.error };
+}
+
+// Component
+const MyComponent = () => {
+  const handleClick = async () => {
+    const result = await myService.getData(data); // ✅ Use service wrapper
+    if (result.success) setData(result.result);
+  };
+};
+```
+
+**Why**: Service wrappers provide abstraction, type safety, and consistent error handling.
+
+---
+
+### ❌ Pitfall 4: Forgetting to Register IPC Handlers
+
+**WRONG**:
+```typescript
+// Created handlers but forgot to register
+// src/backend/core/ipc-handlers/my-feature.ts
+export function setupMyFeatureHandlers(registry: IPCRegistry) {
+  ipcRegistry.register(...);
+}
+
+// ❌ Not called in index.ts
+```
+
+**CORRECT**:
+```typescript
+// src/backend/core/ipc-handlers/index.ts
+import { setupMyFeatureHandlers } from './my-feature';
+
+export function setupAllHandlers(registry: IPCRegistry, deps: Dependencies) {
+  // ...existing handlers...
+  setupMyFeatureHandlers(registry, deps); // ✅ Register new handlers
+}
+```
+
+**Why**: Handlers must be registered in `index.ts` to be available to frontend.
+
+---
+
+### ❌ Pitfall 5: Missing Database Migration
+
+**WRONG**:
+```typescript
+// Created repository but no migration
+class MyRepository extends BaseRepository<MyEntity> {
+  constructor(db: Database.Database) {
+    super(db, 'my_table', mapRow); // ❌ Table doesn't exist
+  }
+}
+```
+
+**CORRECT**:
+```typescript
+// 1. First add migration
+export const migrations: Migration[] = [
+  {
+    version: 14,
+    description: 'Add my_table',
+    up: (db) => {
+      db.exec(`CREATE TABLE my_table (...)`); // ✅ Create table first
+    },
+    down: (db) => {
+      db.exec(`DROP TABLE my_table`);
+    }
+  }
+];
+
+// 2. Then create repository
+class MyRepository extends BaseRepository<MyEntity> {
+  constructor(db: Database.Database) {
+    super(db, 'my_table', mapRow); // ✅ Now table exists
+  }
+}
+```
+
+**Why**: Tables must exist before repositories can use them. Migrations create tables.
+
+---
+
+### ❌ Pitfall 6: Not Reusing Existing Repositories
+
+**WRONG**:
+```typescript
+// Duplicating viewer lookup logic
+class MyService {
+  async getViewerByUsername(username: string): Promise<Viewer | null> {
+    // ❌ Direct database query duplicates ViewersRepository logic
+    const row = this.db.prepare(`SELECT * FROM viewers WHERE ...`).get();
+    return row ? this.mapViewer(row) : null;
+  }
+}
+```
+
+**CORRECT**:
+```typescript
+class MyService {
+  constructor(private viewersRepo: ViewersRepository) {}
+  
+  async getViewerByUsername(username: string): Promise<Viewer | null> {
+    // ✅ Reuse existing repository method
+    return await this.viewersRepo.getByColumn('user_login', username);
+  }
+}
+```
+
+**Why**: Reusing repositories ensures consistency and reduces duplication. Example: Discord TTS Bot should reuse `ViewersRepository`, `VoicesRepository`, `ViewerRulesRepository` instead of duplicating logic.
+
+---
+
+### ❌ Pitfall 7: Incorrect TypeScript Types in IPC Handlers
+
+**WRONG**:
+```typescript
+ipcRegistry.register<any, any>('my-handler', { // ❌ any loses type safety
+  execute: async (input) => {
+    return input.data; // No autocomplete, no compile-time checks
+  }
+});
+```
+
+**CORRECT**:
+```typescript
+interface MyInput {
+  id: string;
+  name: string;
+}
+
+interface MyOutput {
+  success: boolean;
+  result: string;
+}
+
+ipcRegistry.register<MyInput, MyOutput>('my-handler', { // ✅ Typed
+  execute: async (input) => {
+    // input.id and input.name have autocomplete
+    return { success: true, result: `Processed ${input.name}` };
+  }
+});
+```
+
+**Why**: TypeScript types provide autocomplete, compile-time checks, and documentation.
+
+---
+
+### ❌ Pitfall 8: Not Handling Async Errors
+
+**WRONG**:
+```typescript
+const handleClick = async () => {
+  const result = await myService.getData(); // ❌ No error handling
+  setData(result.result); // Crashes if result.result is undefined
+};
+```
+
+**CORRECT**:
+```typescript
+const handleClick = async () => {
+  try {
+    const result = await myService.getData();
+    if (result.success) {
+      setData(result.result);
+    } else {
+      setError(result.error || 'Unknown error'); // ✅ Handle failure
+    }
+  } catch (err) {
+    console.error('Unexpected error:', err);
+    setError('An unexpected error occurred');
+  }
+};
+```
+
+**Why**: Always handle both service failures (`result.success === false`) and unexpected errors (network issues, etc.).
+
+---
+
 ## Implementation Phases
 
 ### 🚀 Phase 1: Polling Infrastructure Enhancement (8-12 hours)
