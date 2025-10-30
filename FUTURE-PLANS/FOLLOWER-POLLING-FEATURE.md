@@ -1,12 +1,18 @@
 # Follower Polling Feature
 
+**Status:** ✅ **IMPLEMENTED** (October 30, 2025)
+
+**Implementation Summary:** See [PHASE-2-IMPLEMENTATION-SUMMARY.md](./PHASE-2-IMPLEMENTATION-SUMMARY.md)
+
+---
+
 ## Overview
 
 This feature completes the follower polling system by implementing automatic detection of new followers via the Twitch Helix API. When a new follower is detected, the system will:
 
-1. **Create Event**: Store a `channel.follow` event in the `events` table
+1. **Create Event**: Store follower history in the `follower_history` table
 2. **Create/Update Viewer**: Ensure viewer exists in `viewers` table
-3. **Track Follow State**: Record follow/unfollow history in new `follower_history` table
+3. **Track Follow State**: Record follow/unfollow history
 4. **Trigger Alerts**: Make follower events available to Event Actions system (future integration)
 
 ## Why This Feature?

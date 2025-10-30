@@ -6,6 +6,7 @@
  * - WebSocket connection
  * - Export/Import settings
  * - Subscription syncing
+ * - Follower syncing
  * 
  * Phase 3: Migrated to use IPCRegistry for consistent error handling
  */
@@ -15,6 +16,7 @@ import { ipcRegistry } from '../ipc/ipc-framework';
 import { authenticateWithTwitch } from '../../auth/twitch-oauth';
 import { exportSettings, importSettings, getExportPreview } from '../../services/export-import';
 import { TwitchRoleSyncService } from '../../services/twitch-role-sync';
+import { TwitchFollowersService } from '../../services/twitch-followers';
 import { getDatabase } from '../../database/connection';
 
 let mainWindow: BrowserWindow | null = null;
@@ -101,6 +103,194 @@ export function setupTwitchHandlers(): void {
           vipCount: result.vipCount,
           modCount: result.modCount,
           error: result.errors.length > 0 ? result.errors.join(', ') : undefined
+        };
+      }
+    }
+  );
+  // ===== Followers =====
+  ipcRegistry.register<void, { success: boolean; newFollowers?: number; unfollowers?: number; total?: number; error?: string }>(
+    'twitch:sync-followers-from-twitch',
+    {
+      execute: async () => {
+        const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
+        const session = new sessionsRepo().getCurrentSession();
+
+        if (!session) {
+          throw new Error('Not connected to Twitch. Please connect first.');
+        }
+
+        // Use centralized followers sync service
+        const followersService = new TwitchFollowersService();
+        const result = await followersService.syncFollowersFromTwitch(
+          session.user_id, // broadcasterId
+          session.user_id, // userId (for token)
+          session.channel_id
+        );
+
+        return {
+          success: result.success,
+          newFollowers: result.newFollowers,
+          unfollowers: result.unfollowers,
+          total: result.total,
+          error: result.error
+        };
+      }
+    }
+  );
+
+  ipcRegistry.register<void, any[]>(
+    'twitch:get-current-followers',
+    {
+      execute: async () => {
+        const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
+        const session = new sessionsRepo().getCurrentSession();
+
+        if (!session) {
+          throw new Error('Not connected to Twitch. Please connect first.');
+        }
+
+        // Use centralized followers service to get current followers
+        const followersService = new TwitchFollowersService();
+        return followersService.getCurrentFollowers(session.channel_id);
+      }
+    }
+  );
+
+  ipcRegistry.register<void, number>(
+    'twitch:get-follower-count',
+    {
+      execute: async () => {
+        const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
+        const session = new sessionsRepo().getCurrentSession();
+
+        if (!session) {
+          throw new Error('Not connected to Twitch. Please connect first.');
+        }
+
+        const followersService = new TwitchFollowersService();
+        return followersService.getFollowerCount(session.channel_id);
+      }
+    }
+  );
+  ipcRegistry.register<{ limit?: number }, any[]>(
+    'twitch:get-recent-follower-events',
+    {
+      execute: async (args) => {
+        const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
+        const session = new sessionsRepo().getCurrentSession();
+
+        if (!session) {
+          throw new Error('Not connected to Twitch. Please connect first.');
+        }
+
+        const followersService = new TwitchFollowersService();
+        const limit = args?.limit || 50;
+        return followersService.getRecentFollowerEvents(session.channel_id, limit);
+      }
+    }
+  );
+
+  // ===== Moderation Status Handlers =====
+  ipcRegistry.register<void, void>(
+    'twitch:sync-moderation-status',
+    {
+      execute: async () => {
+        const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
+        const tokensRepo = require('../../database/repositories/tokens').TokensRepository;
+        const session = new sessionsRepo().getCurrentSession();
+        const tokens = new tokensRepo().getTokens();
+
+        if (!session) {
+          throw new Error('Not connected to Twitch. Please connect first.');
+        }
+
+        if (!tokens?.access_token || !tokens?.client_id) {
+          throw new Error('No valid access token found. Please reconnect.');
+        }
+
+        const { TwitchModerationService } = require('../../services/twitch-moderation');
+        const moderationService = new TwitchModerationService();
+        
+        const result = await moderationService.syncModerationStatus(
+          session.channel_id,
+          session.user_id,
+          tokens.access_token,
+          tokens.client_id
+        );
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to sync moderation status');
+        }
+      }
+    }
+  );
+
+  ipcRegistry.register<void, any[]>(
+    'twitch:get-active-moderations',
+    {
+      execute: async () => {
+        const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
+        const session = new sessionsRepo().getCurrentSession();
+
+        if (!session) {
+          throw new Error('Not connected to Twitch. Please connect first.');
+        }
+
+        const { ModerationHistoryRepository } = require('../../database/repositories/moderation-history');
+        const moderationRepo = new ModerationHistoryRepository();
+        const result = moderationRepo.getActiveModerations(session.channel_id);
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to get active moderations');
+        }
+
+        return result.moderations || [];
+      }
+    }
+  );
+
+  ipcRegistry.register<{ limit?: number }, any[]>(
+    'twitch:get-recent-moderation-events',
+    {
+      execute: async (args) => {
+        const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
+        const session = new sessionsRepo().getCurrentSession();
+
+        if (!session) {
+          throw new Error('Not connected to Twitch. Please connect first.');
+        }
+
+        const { ModerationHistoryRepository } = require('../../database/repositories/moderation-history');
+        const moderationRepo = new ModerationHistoryRepository();
+        const limit = args?.limit || 50;
+        const result = moderationRepo.getRecentEvents(session.channel_id, limit);
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to get recent moderation events');
+        }
+
+        return result.events || [];
+      }
+    }
+  );
+
+  ipcRegistry.register<void, { bans: number; timeouts: number }>(
+    'twitch:get-moderation-counts',
+    {
+      execute: async () => {
+        const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
+        const session = new sessionsRepo().getCurrentSession();
+
+        if (!session) {
+          throw new Error('Not connected to Twitch. Please connect first.');
+        }
+
+        const { ModerationHistoryRepository } = require('../../database/repositories/moderation-history');
+        const moderationRepo = new ModerationHistoryRepository();
+        
+        return {
+          bans: moderationRepo.getActiveBansCount(session.channel_id),
+          timeouts: moderationRepo.getActiveTimeoutsCount(session.channel_id)
         };
       }
     }

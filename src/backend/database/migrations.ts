@@ -398,16 +398,15 @@ export function runMigrations(db: Database.Database): void {
       step INTEGER NOT NULL DEFAULT 5,
       enabled INTEGER DEFAULT 1,
       last_poll_at DATETIME,
-      description TEXT,
+            description TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       
       CHECK (interval_value >= min_interval AND interval_value <= max_interval),
       CHECK (interval_units IN ('seconds', 'minutes', 'hours')),
-      CHECK (api_type IN ('role_sync', 'followers'))
+      CHECK (api_type IN ('role_sync', 'followers', 'moderation'))
     )
   `);
-
   // Upsert default polling configs
   // Only updates description/min/max/units/step (build-controlled), preserves user settings (interval_value, enabled)
   db.exec(`
@@ -415,7 +414,8 @@ export function runMigrations(db: Database.Database): void {
       api_type, interval_value, min_interval, max_interval, interval_units, step, description
     ) VALUES 
       ('role_sync', 30, 5, 120, 'minutes', 5, 'Combined sync for Subscribers, VIPs, and Moderators'),
-      ('followers', 120, 60, 600, 'seconds', 10, 'Detect new followers and trigger alerts')
+      ('followers', 60, 10, 600, 'seconds', 10, 'Detect new followers and trigger alerts'),
+      ('moderation', 60, 10, 600, 'seconds', 10, 'Track ban/timeout/unban moderation actions')
     ON CONFLICT(api_type) DO UPDATE SET 
       description = excluded.description,
       min_interval = excluded.min_interval,
@@ -425,5 +425,211 @@ export function runMigrations(db: Database.Database): void {
       updated_at = CURRENT_TIMESTAMP
   `);
 
-  console.log('Database migrations completed');
+  // ===== Follower History Table (Phase 2: Follower Polling) =====
+  
+  // Create follower_history table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS follower_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT NOT NULL,
+      viewer_id TEXT NOT NULL,
+      follower_user_id TEXT NOT NULL,
+      follower_user_login TEXT NOT NULL,
+      follower_user_name TEXT,
+      
+      action TEXT NOT NULL,
+      followed_at TEXT,
+      detected_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE,
+      CHECK (action IN ('follow', 'unfollow'))
+    )
+  `);
+
+  // Create indexes for follower_history
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_follower_history_channel 
+    ON follower_history(channel_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_follower_history_viewer 
+    ON follower_history(viewer_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_follower_history_user_id 
+    ON follower_history(follower_user_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_follower_history_action 
+    ON follower_history(action)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_follower_history_detected 
+    ON follower_history(detected_at)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_follower_history_followed 
+    ON follower_history(followed_at)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_follower_current_state 
+    ON follower_history(channel_id, follower_user_id, detected_at DESC)
+  `);
+
+  // Create view for current followers
+  db.exec(`
+    CREATE VIEW IF NOT EXISTS current_followers AS
+    SELECT 
+      fh.channel_id,
+      fh.viewer_id,
+      fh.follower_user_id,
+      fh.follower_user_login,
+      fh.follower_user_name,
+      fh.followed_at,
+      fh.detected_at,
+      v.display_name,
+      v.tts_voice_id,
+      v.tts_enabled
+    FROM (
+      SELECT 
+        channel_id,
+        viewer_id,
+        follower_user_id,
+        follower_user_login,
+        follower_user_name,
+        followed_at,
+        detected_at,
+        action,
+        ROW_NUMBER() OVER (
+          PARTITION BY channel_id, follower_user_id 
+          ORDER BY detected_at DESC
+        ) as rn
+      FROM follower_history
+    ) fh
+    INNER JOIN viewers v ON fh.viewer_id = v.id
+    WHERE fh.rn = 1 
+      AND fh.action = 'follow'
+    ORDER BY fh.followed_at DESC
+  `);
+
+  // ===== Moderation History Table (Phase 3: Moderation Status Polling) =====
+  
+  // Create moderation_history table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS moderation_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT NOT NULL,
+      viewer_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      user_login TEXT NOT NULL,
+      user_name TEXT,
+      
+      action TEXT NOT NULL,
+      reason TEXT,
+      duration_seconds INTEGER,
+      
+      moderator_id TEXT,
+      moderator_login TEXT,
+      
+      action_at TEXT NOT NULL,
+      detected_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE,
+      CHECK (action IN ('ban', 'timeout', 'unban', 'timeout_lifted'))
+    )
+  `);
+
+  // Create indexes for moderation_history
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_moderation_history_channel 
+    ON moderation_history(channel_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_moderation_history_viewer 
+    ON moderation_history(viewer_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_moderation_history_user_id 
+    ON moderation_history(user_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_moderation_history_action 
+    ON moderation_history(action)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_moderation_history_detected 
+    ON moderation_history(detected_at)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_moderation_current_state 
+    ON moderation_history(channel_id, user_id, detected_at DESC)
+  `);
+
+  // Create view for current moderation status
+  db.exec(`
+    CREATE VIEW IF NOT EXISTS current_moderation_status AS
+    SELECT 
+      mh.channel_id,
+      mh.viewer_id,
+      mh.user_id,
+      mh.user_login,
+      mh.user_name,
+      mh.action,
+      mh.reason,
+      mh.duration_seconds,
+      mh.moderator_id,
+      mh.moderator_login,
+      mh.action_at,
+      mh.detected_at,
+      v.display_name,
+      v.tts_voice_id,
+      v.tts_enabled,
+      CASE 
+        WHEN mh.action = 'ban' THEN 'banned'
+        WHEN mh.action = 'unban' THEN 'active'
+        WHEN mh.action = 'timeout' THEN 'timed_out'
+        WHEN mh.action = 'timeout_lifted' THEN 'active'
+        ELSE 'unknown'
+      END AS current_status,
+      CASE 
+        WHEN mh.action = 'timeout' THEN 
+          datetime(mh.action_at, '+' || mh.duration_seconds || ' seconds')
+        ELSE NULL
+      END AS timeout_expires_at
+    FROM (
+      SELECT 
+        channel_id,
+        viewer_id,
+        user_id,
+        user_login,
+        user_name,
+        action,
+        reason,
+        duration_seconds,
+        moderator_id,
+        moderator_login,
+        action_at,
+        detected_at,
+        ROW_NUMBER() OVER (
+          PARTITION BY channel_id, user_id 
+          ORDER BY detected_at DESC
+        ) as rn
+      FROM moderation_history
+    ) mh
+    INNER JOIN viewers v ON mh.viewer_id = v.id
+    WHERE mh.rn = 1
+    ORDER BY mh.detected_at DESC
+  `);
+
+  console.log('[Migrations] Database schema initialization complete');
 }

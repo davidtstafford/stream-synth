@@ -1,6 +1,6 @@
 import { BaseRepository } from '../base-repository';
 
-export type ApiType = 'role_sync' | 'followers';
+export type ApiType = 'role_sync' | 'followers' | 'moderation';
 export type IntervalUnit = 'seconds' | 'minutes' | 'hours';
 
 export interface TwitchPollingConfig {

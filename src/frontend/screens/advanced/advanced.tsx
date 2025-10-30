@@ -101,7 +101,6 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
     };
     return names[apiType] || apiType;
   };
-
   // Helper to format interval with units
   const formatInterval = (value: number, units: string): string => {
     const unitLabels: Record<string, string> = {
@@ -123,12 +122,14 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
     }
     
     if (units === 'seconds') {
-      if (value >= 60) {
-        const minutes = Math.floor(value / 60);
-        const secs = value % 60;
-        return secs === 0 ? `${minutes}m` : `${minutes}m ${secs}s`;
+      // Always show seconds value without conversion for values < 60
+      if (value < 60) {
+        return `${value}s`;
       }
-      return `${value}s`;
+      // For values >= 60, show both minutes and seconds for clarity
+      const minutes = Math.floor(value / 60);
+      const secs = value % 60;
+      return secs === 0 ? `${minutes}m` : `${minutes}m ${secs}s`;
     }
     
     return `${value}${label}`;

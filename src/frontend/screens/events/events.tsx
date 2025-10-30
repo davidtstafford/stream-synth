@@ -642,14 +642,95 @@ export const EventsScreen: React.FC<EventsScreenProps> = ({ channelId }) => {
           <span>
             📢 <strong>Shouted out {shoutoutTo}</strong> to {formatNumber(shoutoutViewers)} viewer{shoutoutViewers !== 1 ? 's' : ''}
           </span>
-        );
-      
-      case 'channel.shoutout.receive':
+        );      case 'channel.shoutout.receive':
         const shoutoutFrom = data.from_broadcaster_user_name || data.from_broadcaster_user_login || 'Broadcaster';
         const fromViewers = data.viewer_count || 0;
         return (
           <span>
             📢 <strong>Received shoutout from {shoutoutFrom}</strong> ({formatNumber(fromViewers)} viewers)
+          </span>
+        );
+
+      // ===== Polling Events (Phase 1 & 2) =====
+      case 'channel.follow':
+        const followedAt = data.followed_at ? new Date(data.followed_at).toLocaleString() : '';
+        return (
+          <span>
+            💜 <strong>{displayName}</strong> followed the channel{followedAt && ` (${followedAt})`}
+          </span>
+        );
+      
+      case 'channel.unfollow':
+        return (
+          <span>
+            💔 <strong>{displayName}</strong> unfollowed the channel
+          </span>
+        );
+      
+      case 'channel.vip.add':
+        return (
+          <span>
+            ⭐ <strong>{displayName}</strong> was granted VIP status
+          </span>
+        );
+      
+      case 'channel.vip.remove':
+        return (
+          <span>
+            ⭐ <strong>{displayName}</strong> had VIP status removed
+          </span>
+        );
+      
+      case 'channel.moderator.add':
+        return (
+          <span>
+            🛡️ <strong>{displayName}</strong> was granted moderator status
+          </span>
+        );
+        case 'channel.moderator.remove':
+        return (
+          <span>
+            🛡️ <strong>{displayName}</strong> had moderator status removed
+          </span>
+        );
+
+      // ===== Moderation Events (Phase 3) =====
+      case 'channel.ban':
+        const banReason = data.reason ? ` (Reason: ${data.reason})` : '';
+        const banModerator = data.moderator_username ? ` by ${data.moderator_username}` : '';
+        return (
+          <span>
+            🚫 <strong>{displayName}</strong> was banned{banModerator}{banReason}
+          </span>
+        );
+      
+      case 'channel.unban':
+        return (
+          <span>
+            ✅ <strong>{displayName}</strong> was unbanned
+          </span>
+        );
+      
+      case 'channel.timeout':
+        const duration = data.duration_seconds 
+          ? data.duration_seconds < 60 
+            ? `${data.duration_seconds}s`
+            : data.duration_seconds < 3600
+            ? `${Math.floor(data.duration_seconds / 60)}m`
+            : `${Math.floor(data.duration_seconds / 3600)}h`
+          : 'unknown duration';
+        const timeoutReason = data.reason ? ` (Reason: ${data.reason})` : '';
+        const timeoutModerator = data.moderator_username ? ` by ${data.moderator_username}` : '';
+        return (
+          <span>
+            ⏰ <strong>{displayName}</strong> was timed out for {duration}{timeoutModerator}{timeoutReason}
+          </span>
+        );
+      
+      case 'channel.timeout_lifted':
+        return (
+          <span>
+            ⏰ <strong>{displayName}</strong>'s timeout was lifted
           </span>
         );
 
