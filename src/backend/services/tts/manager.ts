@@ -88,12 +88,10 @@ export class TTSManager {
     }
     
     console.log('[TTS] Manager initialized. Providers ready:', Array.from(this.providers.keys()).join(', '));
-  }
-
-    /**
+  }  /**
    * Load settings from database
    */
-  private async loadSettings(): Promise<void> {
+  async loadSettings(): Promise<void> {
     const dbSettings = this.repository.getSettings();
     this.settings = SettingsMapper.fromDatabase(dbSettings);
   }

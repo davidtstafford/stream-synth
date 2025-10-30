@@ -4,6 +4,7 @@ import { Menu } from './components/Menu';
 import { ConnectionScreen } from './screens/connection/connection';
 import { EventsScreen } from './screens/events/events';
 import { ChatScreen } from './screens/chat/chat';
+import { ChatCommandsScreen } from './screens/chat/chat-commands';
 import { ViewersScreen } from './screens/viewers/viewers';
 import { TTS } from './screens/tts/tts';
 import { Discord } from './screens/discord/discord';
@@ -75,12 +76,12 @@ const App: React.FC = () => {
     // Also listen for session changes
     const interval = setInterval(loadSession, 5000);
     return () => clearInterval(interval);
-  }, []);
-  // Note: TTS speak handler is registered in services/tts.ts to prevent duplicate listeners
+  }, []);  // Note: TTS speak handler is registered in services/tts.ts to prevent duplicate listeners
   const menuItems = [
     { id: 'connection', label: 'Connection' },
     { id: 'events', label: 'Events' },
     { id: 'chat', label: 'Chat' },
+    { id: 'chat-commands', label: 'Chat Commands' },
     { id: 'viewers', label: 'Viewers' },
     { id: 'tts', label: 'TTS' },
     { id: 'discord', label: 'Discord' },
@@ -93,6 +94,8 @@ const App: React.FC = () => {
         return <EventsScreen channelId={channelId} />;
       case 'chat':
         return <ChatScreen channelId={channelId} />;
+      case 'chat-commands':
+        return <ChatCommandsScreen />;
       case 'viewers':
         return <ViewersScreen />;
       case 'tts':

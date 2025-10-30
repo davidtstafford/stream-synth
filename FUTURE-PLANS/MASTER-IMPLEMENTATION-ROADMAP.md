@@ -21,8 +21,8 @@ This document provides the **definitive implementation order** for all future St
 | 2 | Follower Polling | 8-12h | ✅ COMPLETE | #1 |
 | 3 | Moderation Status Polling | 10-14h | ✅ COMPLETE | #1 |
 | 4 | Enhanced Viewer TTS Rules | 6-10h | ✅ COMPLETE | None (standalone UI) |
-| 5 | Chat Commands System | 10-14h | 🟡 IN PROGRESS | #4 (backend done, frontend pending) |
-| 6 | **Polling → EventSub Conversion** | **12-18h** | 🔴 **CRITICAL** | **#1-5 complete** |
+| 5 | Chat Commands System | 10-14h | ✅ **COMPLETE** | #4 |
+| 6 | **Polling → EventSub Conversion** | **12-18h** | 🔴 **NEXT** | **#1-5 complete** |
 | 7 | Clip Polling | 11-17h | Medium | #1 |
 | 8 | Event Actions | 20-30h | Medium | #1, #2, #3, #7 |
 | 9 | Discord Webhooks | 6-10h | Medium | None (standalone) |

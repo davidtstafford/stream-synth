@@ -14,6 +14,7 @@ import { VoicesRepository } from '../database/repositories/voices';
 import { ViewerRulesRepository } from '../database/repositories/viewer-rules';
 import { ViewerTTSRulesRepository, MuteConfig, CooldownConfig } from '../database/repositories/viewer-tts-rules';
 import { TTSRepository } from '../database/repositories/tts';
+import { reloadTTSSettings } from '../core/ipc-handlers/tts';
 
 export interface ChatCommandContext {
   username: string;
@@ -178,9 +179,7 @@ export class ChatCommandHandler {
         return this.handleMuteVoice(args, context);
       
       case 'unmutevoice':
-        return this.handleUnmuteVoice(args, context);
-      
-      case 'cooldownvoice':
+        return this.handleUnmuteVoice(args, context);      case 'cooldownvoice':
         return this.handleCooldownVoice(args, context);
       
       case 'mutetts':
@@ -250,8 +249,7 @@ export class ChatCommandHandler {
 
     const gender = voice.gender ? ` (${voice.gender})` : '';
     return `✅ @${context.username}, your TTS voice has been set to ${voice.name}${gender}`;
-  }
-  /**
+  }  /**
    * Command: ~mutevoice @user [mins]
    */
   private async handleMuteVoice(args: string[], context: ChatCommandContext): Promise<string> {
@@ -272,6 +270,19 @@ export class ChatCommandHandler {
       throw new Error(`User @${targetUsername} not found in the database`);
     }
 
+    // Ensure viewer rule exists
+    let viewerRule = this.voicePrefsRepo.getByViewerId(targetViewer.id);
+    if (!viewerRule) {
+      // Create a default viewer rule if it doesn't exist
+      this.voicePrefsRepo.upsert({
+        viewer_id: targetViewer.id,
+        voice_id: 'alloy', // Default voice
+        provider: 'openai',
+        pitch: 1.0,
+        speed: 1.0
+      });
+    }
+
     // Add/update mute rule
     const config: MuteConfig = {
       mute_period_mins: minutes === 0 ? null : minutes
@@ -284,7 +295,6 @@ export class ChatCommandHandler {
       return `🔇 @${targetUsername} has been muted from TTS for ${minutes} minute(s)`;
     }
   }
-
   /**
    * Command: ~unmutevoice @user
    */
@@ -299,6 +309,19 @@ export class ChatCommandHandler {
     const targetViewer = this.viewersRepo.getByUsername(targetUsername);
     if (!targetViewer) {
       throw new Error(`User @${targetUsername} not found in the database`);
+    }
+
+    // Ensure viewer rule exists
+    let viewerRule = this.voicePrefsRepo.getByViewerId(targetViewer.id);
+    if (!viewerRule) {
+      // Create a default viewer rule if it doesn't exist
+      this.voicePrefsRepo.upsert({
+        viewer_id: targetViewer.id,
+        voice_id: 'alloy', // Default voice
+        provider: 'openai',
+        pitch: 1.0,
+        speed: 1.0
+      });
     }
 
     // Remove mute rule
@@ -325,12 +348,23 @@ export class ChatCommandHandler {
 
     if (isNaN(periodMins) || periodMins < 0) {
       throw new Error('Period must be >= 0 minutes (0 = permanent)');
-    }
-
-    // Get target viewer
+    }    // Get target viewer
     const targetViewer = this.viewersRepo.getByUsername(targetUsername);
     if (!targetViewer) {
       throw new Error(`User @${targetUsername} not found in the database`);
+    }
+
+    // Ensure viewer rule exists
+    let viewerRule = this.voicePrefsRepo.getByViewerId(targetViewer.id);
+    if (!viewerRule) {
+      // Create a default viewer rule if it doesn't exist
+      this.voicePrefsRepo.upsert({
+        viewer_id: targetViewer.id,
+        voice_id: 'alloy', // Default voice
+        provider: 'openai',
+        pitch: 1.0,
+        speed: 1.0
+      });
     }
 
     // Add/update cooldown rule
@@ -345,35 +379,50 @@ export class ChatCommandHandler {
     } else {
       return `⏰ @${targetUsername} now has a ${gapSeconds} second TTS cooldown for ${periodMins} minute(s)`;
     }
-  }
-
-  /**
-   * Command: ~mutetts (global TTS disable)
+  }  /**
+   * Command: ~mutetts (globally disable TTS)
    */
   private async handleMuteTTS(context: ChatCommandContext): Promise<string> {
     const settings = this.ttsRepo.getSettings();
     
-    if (!settings?.enabled) {
+    console.log('[ChatCommand] ~mutetts - Current settings:', settings);
+    console.log('[ChatCommand] ~mutetts - tts_enabled value:', settings?.tts_enabled, 'type:', typeof settings?.tts_enabled);
+    
+    // Check if TTS is already disabled (check the actual database field name)
+    if (settings && settings.tts_enabled === false) {
       return '🔇 TTS is already disabled';
     }
 
-    this.ttsRepo.saveSettings({ enabled: false });
-
+    // Disable TTS (use the correct database field name)
+    this.ttsRepo.saveSettings({ tts_enabled: false });
+    
+    console.log('[ChatCommand] ~mutetts - Settings saved, reloading TTS manager...');
+    
+    // Reload TTS manager settings
+    await reloadTTSSettings();
+    
+    console.log('[ChatCommand] ~mutetts - TTS manager settings reloaded');
+    
     return '🔇 TTS has been globally disabled';
   }
 
   /**
-   * Command: ~unmutetts (global TTS enable)
+   * Command: ~unmutetts (globally enable TTS)
    */
   private async handleUnmuteTTS(context: ChatCommandContext): Promise<string> {
     const settings = this.ttsRepo.getSettings();
     
-    if (settings?.enabled) {
+    // Check if TTS is already enabled (check the actual database field name)
+    if (settings && settings.tts_enabled === true) {
       return '🔊 TTS is already enabled';
     }
 
-    this.ttsRepo.saveSettings({ enabled: true });
-
+    // Enable TTS (use the correct database field name)
+    this.ttsRepo.saveSettings({ tts_enabled: true });
+    
+    // Reload TTS manager settings
+    await reloadTTSSettings();
+    
     return '🔊 TTS has been globally enabled';
   }
 
