@@ -17,17 +17,18 @@ This document provides the **definitive implementation order** for all future St
 
 | # | Feature | Time | Priority | Dependencies |
 |---|---------|------|----------|--------------|
-| 1 | Polling Events Integration | 8-12h | High | Existing polling framework |
-| 2 | Follower Polling | 8-12h | High | #1 |
-| 3 | Moderation Status Polling | 10-14h | High | #1 |
-| 4 | Enhanced Viewer TTS Rules | 6-10h | High | None (standalone UI) |
-| 5 | Chat Commands System | 10-14h | High | #4 |
-| 6 | Clip Polling | 11-17h | Medium | #1 |
-| 7 | Event Actions | 20-30h | Medium | #1, #2, #3, #6 |
-| 8 | Discord Webhooks | 6-10h | Medium | None (standalone) |
-| 9 | Discord TTS Bot | 12-16h | Medium | #8 (optional), #5 (integration) |
+| 1 | Polling Events Integration | 8-12h | ✅ COMPLETE | Existing polling framework |
+| 2 | Follower Polling | 8-12h | ✅ COMPLETE | #1 |
+| 3 | Moderation Status Polling | 10-14h | ✅ COMPLETE | #1 |
+| 4 | Enhanced Viewer TTS Rules | 6-10h | ✅ COMPLETE | None (standalone UI) |
+| 5 | Chat Commands System | 10-14h | 🟡 IN PROGRESS | #4 (backend done, frontend pending) |
+| 6 | **Polling → EventSub Conversion** | **12-18h** | 🔴 **CRITICAL** | **#1-5 complete** |
+| 7 | Clip Polling | 11-17h | Medium | #1 |
+| 8 | Event Actions | 20-30h | Medium | #1, #2, #3, #7 |
+| 9 | Discord Webhooks | 6-10h | Medium | None (standalone) |
+| 10 | Discord TTS Bot | 12-16h | Medium | #9 (optional), #5 (integration) |
 
-**Total Time:** 91-135 hours (base features) + 49-65 hours (Discord features) = **140-200 hours**
+**Total Time:** 91-135 hours (base features) + 49-65 hours (Discord features) + 12-18 hours (optimization) = **152-218 hours**
 
 ---
 

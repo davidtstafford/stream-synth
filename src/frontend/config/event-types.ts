@@ -1,7 +1,7 @@
 export interface EventSubscriptions {
   // Channel Events
   'channel.update': boolean;
-  // 'channel.follow': boolean; - DEPRECATED by Twitch (410 Gone)
+  'channel.follow': boolean; // Testing if it works via WebSocket despite docs
   'channel.subscribe': boolean;
   'channel.subscription.end': boolean;
   'channel.subscription.gift': boolean;
@@ -66,7 +66,7 @@ export interface EventSubscriptions {
 export const EVENT_GROUPS: Record<string, string[]> = {
   'Channel Events': [
     'channel.update',
-    // 'channel.follow', - DEPRECATED by Twitch (410 Gone)
+    'channel.follow', // Testing if it works via WebSocket
     'channel.subscribe',
     'channel.subscription.end',
     'channel.subscription.gift',
@@ -131,7 +131,7 @@ export const EVENT_GROUPS: Record<string, string[]> = {
 
 export const DEFAULT_SUBSCRIPTIONS: (keyof EventSubscriptions)[] = [
   'channel.chat.message', // Mandatory for app to work
-  // 'channel.follow', - DEPRECATED by Twitch (410 Gone)
+  'channel.follow', // Testing if it works
   'channel.subscribe',
   'channel.subscription.gift',
   'channel.cheer',
@@ -192,7 +192,10 @@ export const EVENT_DISPLAY_INFO: Record<keyof EventSubscriptions, { name: string
     name: 'Channel Update', 
     description: 'Channel information (title, category, language) is updated' 
   },
-  // 'channel.follow' - DEPRECATED by Twitch (410 Gone - no longer available)
+  'channel.follow': { 
+    name: 'New Follower', 
+    description: 'User follows the channel (TESTING - may not work via WebSocket)' 
+  },
   'channel.subscribe': { 
     name: 'New Subscription', 
     description: 'User subscribes to the channel' 

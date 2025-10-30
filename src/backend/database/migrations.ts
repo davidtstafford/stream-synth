@@ -676,10 +676,80 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_viewer_tts_rules_mute_expires 
     ON viewer_tts_rules(mute_expires_at)
   `);
-
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_viewer_tts_rules_cooldown_expires 
     ON viewer_tts_rules(cooldown_expires_at)
+  `);
+
+  // ===== Phase 5: Chat Commands System =====
+
+  // Chat commands configuration table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_commands_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      command_name TEXT UNIQUE NOT NULL,
+      command_prefix TEXT NOT NULL DEFAULT '~',
+      enabled INTEGER DEFAULT 1,
+      permission_level TEXT NOT NULL CHECK (permission_level IN ('viewer', 'moderator', 'broadcaster')),
+      rate_limit_seconds INTEGER DEFAULT 5,
+      custom_response TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Chat command usage tracking table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_command_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      command_name TEXT NOT NULL,
+      viewer_id TEXT NOT NULL,
+      viewer_username TEXT NOT NULL,
+      executed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      success INTEGER DEFAULT 1,
+      error_message TEXT,
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Indexes for chat commands
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_chat_commands_enabled 
+    ON chat_commands_config(enabled)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_chat_commands_permission 
+    ON chat_commands_config(permission_level)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_command_usage_viewer 
+    ON chat_command_usage(viewer_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_command_usage_executed 
+    ON chat_command_usage(executed_at)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_command_usage_command 
+    ON chat_command_usage(command_name)
+  `);
+
+  // Seed default command configurations
+  db.exec(`
+    INSERT OR IGNORE INTO chat_commands_config (command_name, command_prefix, enabled, permission_level, rate_limit_seconds)
+    VALUES 
+      ('hello', '~', 1, 'viewer', 30),
+      ('voices', '~', 1, 'viewer', 60),
+      ('setvoice', '~', 1, 'viewer', 10),
+      ('mutevoice', '~', 1, 'moderator', 5),
+      ('unmutevoice', '~', 1, 'moderator', 5),
+      ('cooldownvoice', '~', 1, 'moderator', 5),
+      ('mutetts', '~', 1, 'moderator', 30),
+      ('unmutetts', '~', 1, 'moderator', 30)
   `);
 
   console.log('[Migrations] Database schema initialization complete');

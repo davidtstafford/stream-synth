@@ -1,8 +1,31 @@
 # Follower Polling Feature
 
-**Status:** ✅ **IMPLEMENTED** (October 30, 2025)
+**Status:** ✅ **IMPLEMENTED** (October 30, 2025)  
+**Migration Status:** 🔄 **SCHEDULED FOR EVENTSUB CONVERSION** (Phase 6)
 
 **Implementation Summary:** See [PHASE-2-IMPLEMENTATION-SUMMARY.md](./PHASE-2-IMPLEMENTATION-SUMMARY.md)
+
+---
+
+## ⚠️ Phase 6 Migration Notice
+
+This feature is scheduled for conversion from polling to EventSub in **Phase 6: Polling → EventSub Conversion**.
+
+### Current State (Phase 2)
+- ✅ Polls Twitch API every 2 minutes
+- ✅ Detects new followers and unfollows
+- ✅ Stores events in database
+- ✅ Works reliably
+
+### Future State (Phase 6)
+- 🎯 Real-time EventSub subscription (`channel.follow` v2)
+- 🎯 Initial fetch on startup
+- 🎯 Reconciliation polling every 2 hours (backup)
+- 🎯 98% reduction in API calls (~720/day → ~12/day)
+
+**Proof:** `channel.follow` v2 has been tested and proven to work via WebSocket (October 30, 2025)
+
+See: [PHASE-6-POLLING-TO-SUBSCRIPTIONS.md](./PHASE-6-POLLING-TO-SUBSCRIPTIONS.md)
 
 ---
 

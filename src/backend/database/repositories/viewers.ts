@@ -95,6 +95,17 @@ export class ViewersRepository extends BaseRepository<Viewer> {
       LIMIT ?
     `).all(searchParam, searchParam, limit) as Viewer[];
   }
+  /**
+   * Get viewer by username
+   */
+  getByUsername(username: string): Viewer | null {
+    const db = this.getDatabase();
+    const row = db.prepare(`
+      SELECT * FROM viewers WHERE username = ? COLLATE NOCASE
+    `).get(username);
+    
+    return row as Viewer | null;
+  }
 
   /**
    * Delete all viewers

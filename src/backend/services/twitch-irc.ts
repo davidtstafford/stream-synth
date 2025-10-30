@@ -4,6 +4,7 @@
  * Handles Twitch IRC/TMI connection for events not available via EventSub:
  * - JOIN events (user enters chat)
  * - PART events (user leaves chat)
+ * - Chat messages (for TTS and chat commands)
  * - Sending chat messages (bot functionality)
  * 
  * This service is designed to work alongside EventSub WebSocket,
@@ -12,6 +13,7 @@
 
 import tmi from 'tmi.js';
 import { EventEmitter } from 'events';
+import { ChatCommandHandler, ChatCommandContext } from './chat-command-handler';
 
 interface IRCChatEvent {
   type: 'irc.chat.join' | 'irc.chat.part' | 'irc.chat.message';
@@ -20,6 +22,7 @@ interface IRCChatEvent {
   timestamp: string;
   message?: string;  // For message events
   userId?: string;   // For message events
+  userstate?: any;   // Full userstate for command context
 }
 
 interface IRCConnectionStatus {
@@ -33,12 +36,18 @@ export class TwitchIRCService extends EventEmitter {
   private client: tmi.Client | null = null;
   private username: string | null = null;
   private currentChannel: string | null = null;
+  private commandHandler: ChatCommandHandler;
   private connectionStatus: IRCConnectionStatus = {
     connected: false,
     channel: null,
     username: null,
     error: null,
   };
+
+  constructor() {
+    super();
+    this.commandHandler = new ChatCommandHandler();
+  }
 
   /**
    * Connect to Twitch IRC
@@ -138,10 +147,8 @@ export class TwitchIRCService extends EventEmitter {
 
       this.emit('chat.part', event);
       console.log(`[IRC] User left: ${username}`);
-    });
-
-    // MESSAGE event - Chat messages for TTS
-    this.client.on('message', (channel: string, userstate: any, message: string, self: boolean) => {
+    });    // MESSAGE event - Chat messages for TTS and commands
+    this.client.on('message', async (channel: string, userstate: any, message: string, self: boolean) => {
       // Don't emit for our own messages
       if (self) return;
 
@@ -152,10 +159,16 @@ export class TwitchIRCService extends EventEmitter {
         userId: userstate['user-id'],
         message,
         timestamp: new Date().toISOString(),
+        userstate,
       };
 
       this.emit('chat.message', event);
       console.log(`[IRC] Message from ${event.username}: ${message}`);
+
+      // Phase 5: Handle chat commands
+      if (event.userId && message.startsWith('~')) {
+        await this.handleChatCommand(message, event.userId, event.username, userstate);
+      }
     });
 
     // Connection events
@@ -243,6 +256,37 @@ export class TwitchIRCService extends EventEmitter {
       throw error;
     }
   }
+  /**
+   * Handle chat commands (Phase 5)
+   */
+  private async handleChatCommand(
+    message: string,
+    userId: string,
+    username: string,
+    userstate: any
+  ): Promise<void> {
+    try {
+      // Build command context from userstate
+      const context: ChatCommandContext = {
+        username,
+        userId,
+        isModerator: userstate.mod || false,
+        isBroadcaster: userstate.badges?.broadcaster === '1',
+        isSubscriber: userstate.subscriber || false,
+        isVip: userstate.badges?.vip === '1',
+      };
+
+      // Process command
+      const response = await this.commandHandler.handleMessage(message, context);
+
+      // Send response to chat if command was executed
+      if (response) {
+        await this.sendMessage(response);
+      }
+    } catch (error: any) {
+      console.error('[IRC] Error handling chat command:', error);
+    }
+  }
 
   /**
    * Disconnect from IRC
@@ -290,12 +334,18 @@ export class TwitchIRCService extends EventEmitter {
   getCurrentChannel(): string | null {
     return this.currentChannel;
   }
-
   /**
    * Get username
    */
   getUsername(): string | null {
     return this.username;
+  }
+
+  /**
+   * Get command handler (for IPC handlers)
+   */
+  getCommandHandler(): ChatCommandHandler {
+    return this.commandHandler;
   }
 }
 

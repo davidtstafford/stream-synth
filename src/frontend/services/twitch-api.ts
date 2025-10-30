@@ -32,6 +32,10 @@ export async function subscribeToEvent(
       if (eventType.startsWith('channel.chat')) {
         condition.broadcaster_user_id = broadcasterId;
         condition.user_id = userId;
+      } else if (eventType === 'channel.follow') {
+        // channel.follow v2 requires moderator_user_id
+        condition.broadcaster_user_id = broadcasterId;
+        condition.moderator_user_id = userId;
       } else if (eventType === 'channel.raid') {
         condition.to_broadcaster_user_id = broadcasterId;
       } else if (eventType.includes('moderator') || eventType.includes('shield_mode')) {
@@ -46,7 +50,9 @@ export async function subscribeToEvent(
 
       // Set version based on event type
       let version = '1';
-      if (eventType === 'channel.chat.message') {
+      if (eventType === 'channel.follow') {
+        version = '2'; // v2 is current version for channel.follow
+      } else if (eventType === 'channel.chat.message') {
         version = '1';
       } else if (eventType === 'channel.chat.clear' || 
                  eventType === 'channel.chat.clear_user_messages' ||

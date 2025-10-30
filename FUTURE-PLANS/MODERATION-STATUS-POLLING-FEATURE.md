@@ -1,7 +1,34 @@
 # Moderation Status Polling Feature
 
 **Status:** ✅ **IMPLEMENTED** (October 30, 2025)  
+**Migration Status:** 🔄 **PARTIAL EVENTSUB AVAILABLE** (Phase 6)
+
 **Implementation:** See [PHASE-3-IMPLEMENTATION-SUMMARY.md](./PHASE-3-IMPLEMENTATION-SUMMARY.md)
+
+---
+
+## ⚠️ Phase 6 Migration Notice
+
+This feature will be **partially optimized** in **Phase 6: Polling → EventSub Conversion**.
+
+### Current State (Phase 3)
+- ✅ Polls Twitch API every 1 minute (bans/timeouts)
+- ✅ Detects bans, timeouts, unbans, timeout expirations
+- ✅ Stores events in database
+- ✅ Works reliably
+
+### Future State (Phase 6)
+- ⚠️ **Webhook-Only EventSub** - `channel.ban` and `channel.unban` require webhooks
+- 🎯 **Cannot use in Electron app** (no webhook server)
+- 🎯 **Reduced polling**: 1 minute → 5 minutes (5x reduction)
+- 🎯 **API savings**: ~1440/day → ~288/day (80% reduction)
+- 💡 **Alternative**: Already have `channel.chat.clear_user_messages` for deleted messages
+
+**Note:** Moderation events are webhook-only, so we'll keep polling but reduce frequency.
+
+See: [PHASE-6-POLLING-TO-SUBSCRIPTIONS.md](./PHASE-6-POLLING-TO-SUBSCRIPTIONS.md)
+
+---
 
 ## Overview
 
