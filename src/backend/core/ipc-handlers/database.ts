@@ -24,6 +24,7 @@ import { SubscriptionsRepository } from '../../database/repositories/subscriptio
 import { TwitchSubscriptionsService } from '../../services/twitch-subscriptions';
 import { TTSAccessRepository } from '../../database/repositories/tts-access';
 import { ChannelPointGrantsRepository } from '../../database/repositories/channel-point-grants';
+import { ViewerTTSRulesRepository } from '../../database/repositories/viewer-tts-rules';
 
 // Initialize repositories
 const settingsRepo = new SettingsRepository();
@@ -35,6 +36,7 @@ const subscriptionsRepo = new SubscriptionsRepository();
 const twitchSubsService = new TwitchSubscriptionsService();
 const ttsAccessRepo = new TTSAccessRepository();
 const channelPointGrantsRepo = new ChannelPointGrantsRepository();
+const viewerTTSRulesRepo = new ViewerTTSRulesRepository();
 
 export function setupDatabaseHandlers(): void {
   // ===== Database: Settings =====
@@ -493,11 +495,91 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
         }
       } catch (err) {
         console.warn('[TTS] Error while attempting to forward stored event to TTS:', err);
-      }
-
-      return { success: true, id };
+      }      return { success: true, id };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
   });
+
+  // ===== Phase 4: Viewer TTS Rules (Mute & Cooldown) =====
+  
+  ipcRegistry.register<{ viewerId: string }, any>(
+    'viewer-tts-rules:get',
+    {
+      validate: (input) => input?.viewerId ? null : 'Viewer ID is required',
+      execute: async (input) => viewerTTSRulesRepo.getByViewerId(input.viewerId)
+    }
+  );
+
+  ipcRegistry.register<{ viewerId: string; mutePeriodMins?: number | null }, { success: boolean; error?: string }>(
+    'viewer-tts-rules:set-mute',
+    {
+      validate: (input) => {
+        if (!input?.viewerId) return 'Viewer ID is required';
+        return null;
+      },
+      execute: async (input) => {
+        return viewerTTSRulesRepo.setMute(input.viewerId, {
+          mute_period_mins: input.mutePeriodMins
+        });
+      }
+    }
+  );
+
+  ipcRegistry.register<{ viewerId: string }, { success: boolean; error?: string }>(
+    'viewer-tts-rules:remove-mute',
+    {
+      validate: (input) => input?.viewerId ? null : 'Viewer ID is required',
+      execute: async (input) => viewerTTSRulesRepo.removeMute(input.viewerId)
+    }
+  );
+
+  ipcRegistry.register<{ viewerId: string; cooldownGapSeconds: number; cooldownPeriodMins?: number | null }, { success: boolean; error?: string }>(
+    'viewer-tts-rules:set-cooldown',
+    {
+      validate: (input) => {
+        if (!input?.viewerId) return 'Viewer ID is required';
+        if (typeof input.cooldownGapSeconds !== 'number' || input.cooldownGapSeconds < 1) {
+          return 'Cooldown gap must be at least 1 second';
+        }
+        return null;
+      },
+      execute: async (input) => {
+        return viewerTTSRulesRepo.setCooldown(input.viewerId, {
+          cooldown_gap_seconds: input.cooldownGapSeconds,
+          cooldown_period_mins: input.cooldownPeriodMins
+        });
+      }
+    }
+  );
+
+  ipcRegistry.register<{ viewerId: string }, { success: boolean; error?: string }>(
+    'viewer-tts-rules:remove-cooldown',
+    {
+      validate: (input) => input?.viewerId ? null : 'Viewer ID is required',
+      execute: async (input) => viewerTTSRulesRepo.removeCooldown(input.viewerId)
+    }
+  );
+
+  ipcRegistry.register<{ viewerId: string }, { success: boolean; error?: string }>(
+    'viewer-tts-rules:clear-all',
+    {
+      validate: (input) => input?.viewerId ? null : 'Viewer ID is required',
+      execute: async (input) => viewerTTSRulesRepo.clearRules(input.viewerId)
+    }
+  );
+
+  ipcRegistry.register<void, any[]>(
+    'viewer-tts-rules:get-all-muted',
+    {
+      execute: async () => viewerTTSRulesRepo.getAllMuted()
+    }
+  );
+
+  ipcRegistry.register<void, any[]>(
+    'viewer-tts-rules:get-all-cooldown',
+    {
+      execute: async () => viewerTTSRulesRepo.getAllWithCooldown()
+    }
+  );
 }

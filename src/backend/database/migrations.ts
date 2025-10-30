@@ -630,6 +630,57 @@ export function runMigrations(db: Database.Database): void {
     WHERE mh.rn = 1
     ORDER BY mh.detected_at DESC
   `);
+  // ===== Phase 4: Viewer TTS Rules (Mute & Cooldown) =====
+  
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_tts_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      viewer_id TEXT UNIQUE NOT NULL,
+      
+      -- Mute Settings
+      is_muted INTEGER DEFAULT 0,
+      mute_period_mins INTEGER,
+      muted_at TEXT,
+      mute_expires_at TEXT,
+      
+      -- Cooldown Settings
+      has_cooldown INTEGER DEFAULT 0,
+      cooldown_gap_seconds INTEGER,
+      cooldown_period_mins INTEGER,
+      cooldown_set_at TEXT,
+      cooldown_expires_at TEXT,
+      
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      
+      FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_tts_rules_viewer 
+    ON viewer_tts_rules(viewer_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_tts_rules_muted 
+    ON viewer_tts_rules(is_muted)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_tts_rules_cooldown 
+    ON viewer_tts_rules(has_cooldown)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_tts_rules_mute_expires 
+    ON viewer_tts_rules(mute_expires_at)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_tts_rules_cooldown_expires 
+    ON viewer_tts_rules(cooldown_expires_at)
+  `);
 
   console.log('[Migrations] Database schema initialization complete');
 }

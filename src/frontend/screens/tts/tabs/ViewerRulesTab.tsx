@@ -44,6 +44,22 @@ interface Message {
   text: string;
 }
 
+interface ViewerTTSRules {
+  id: number;
+  viewer_id: string;
+  is_muted: boolean;
+  mute_period_mins?: number | null;
+  muted_at?: string | null;
+  mute_expires_at?: string | null;
+  has_cooldown: boolean;
+  cooldown_gap_seconds?: number | null;
+  cooldown_period_mins?: number | null;
+  cooldown_set_at?: string | null;
+  cooldown_expires_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface Props {
   voiceGroups: VoiceGroup[];
   accessMode: 'access_all' | 'limited_access' | 'premium_voice_access';
@@ -58,6 +74,14 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
+  
+  // TTS Rules (Mute & Cooldown) - Phase 4
+  const [ttsRules, setTtsRules] = useState<ViewerTTSRules | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [mutePeriodMins, setMutePeriodMins] = useState(0);
+  const [hasCooldown, setHasCooldown] = useState(false);
+  const [cooldownGapSeconds, setCooldownGapSeconds] = useState(30);
+  const [cooldownPeriodMins, setCooldownPeriodMins] = useState(0);
   
   // Voice filters
   const [voiceSearchTerm, setVoiceSearchTerm] = useState('');
@@ -105,17 +129,45 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
       console.error('Error searching viewers:', error);
     }
   };
-
   const selectViewer = async (viewer: Viewer) => {
     setSelectedViewer(viewer);
     setSearchTerm(viewer.display_name || viewer.username);
     setSearchResults([]);
     
-    // Check if viewer has an existing rule
+    // Check if viewer has an existing voice rule
     const response = await ipcRenderer.invoke('viewer-rules:get', { viewerId: viewer.id });
     
     if (response.success && response.data) {
       setEditingRule(response.data);
+    }
+
+    // Load TTS rules (mute & cooldown) - Phase 4
+    await loadTTSRules(viewer.id);
+  };
+
+  const loadTTSRules = async (viewerId: string) => {
+    try {
+      const response = await ipcRenderer.invoke('viewer-tts-rules:get', { viewerId });
+      
+      if (response.success && response.data) {
+        const rules = response.data;
+        setTtsRules(rules);
+        setIsMuted(rules.is_muted);
+        setMutePeriodMins(rules.mute_period_mins || 0);
+        setHasCooldown(rules.has_cooldown);
+        setCooldownGapSeconds(rules.cooldown_gap_seconds || 30);
+        setCooldownPeriodMins(rules.cooldown_period_mins || 0);
+      } else {
+        // No rules exist yet - reset to defaults
+        setTtsRules(null);
+        setIsMuted(false);
+        setMutePeriodMins(0);
+        setHasCooldown(false);
+        setCooldownGapSeconds(30);
+        setCooldownPeriodMins(0);
+      }
+    } catch (error: any) {
+      console.error('Error loading TTS rules:', error);
     }
   };
 
@@ -148,8 +200,7 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
       ...editingRule,
       [field]: value
     });
-  };
-  const handleSaveRule = async () => {
+  };  const handleSaveRule = async () => {
     if (!editingRule || !editingRule.viewer_id || !editingRule.voice_id) {
       setMessage({ type: 'error', text: 'Please select a voice' });
       return;
@@ -159,18 +210,56 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
       setSaving(true);
       setMessage(null);
 
-      const response = await ipcRenderer.invoke('viewer-rules:save', editingRule);
+      // Save voice preference
+      const voiceResponse = await ipcRenderer.invoke('viewer-rules:save', editingRule);
       
-      if (response.success) {
-        setMessage({ type: 'success', text: 'Rule saved successfully!' });
-        setTimeout(() => setMessage(null), 2000);
-        await loadRules();
-        setEditingRule(null);
-        setSelectedViewer(null);
-        setSearchTerm('');
-      } else {
-        setMessage({ type: 'error', text: response.error || 'Failed to save rule' });
+      if (!voiceResponse.success) {
+        setMessage({ type: 'error', text: voiceResponse.error || 'Failed to save voice rule' });
+        return;
       }
+
+      // Save TTS rules (mute & cooldown)
+      if (isMuted) {
+        const muteResponse = await ipcRenderer.invoke('viewer-tts-rules:set-mute', {
+          viewerId: editingRule.viewer_id,
+          mutePeriodMins: mutePeriodMins === 0 ? null : mutePeriodMins
+        });
+        
+        if (!muteResponse.success) {
+          setMessage({ type: 'error', text: muteResponse.error || 'Failed to save mute rule' });
+          return;
+        }
+      } else {
+        // Remove mute if disabled
+        await ipcRenderer.invoke('viewer-tts-rules:remove-mute', { 
+          viewerId: editingRule.viewer_id 
+        });
+      }
+
+      if (hasCooldown) {
+        const cooldownResponse = await ipcRenderer.invoke('viewer-tts-rules:set-cooldown', {
+          viewerId: editingRule.viewer_id,
+          cooldownGapSeconds,
+          cooldownPeriodMins: cooldownPeriodMins === 0 ? null : cooldownPeriodMins
+        });
+        
+        if (!cooldownResponse.success) {
+          setMessage({ type: 'error', text: cooldownResponse.error || 'Failed to save cooldown rule' });
+          return;
+        }
+      } else {
+        // Remove cooldown if disabled
+        await ipcRenderer.invoke('viewer-tts-rules:remove-cooldown', { 
+          viewerId: editingRule.viewer_id 
+        });
+      }
+
+      setMessage({ type: 'success', text: 'All rules saved successfully!' });
+      setTimeout(() => setMessage(null), 2000);
+      await loadRules();
+      setEditingRule(null);
+      setSelectedViewer(null);
+      setSearchTerm('');
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     } finally {
@@ -196,11 +285,67 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
       setMessage({ type: 'error', text: error.message });
     }
   };
-
   const handleCancelEdit = () => {
     setEditingRule(null);
     setSelectedViewer(null);
     setSearchTerm('');
+    // Reset TTS rules state
+    setTtsRules(null);
+    setIsMuted(false);
+    setMutePeriodMins(0);
+    setHasCooldown(false);
+    setCooldownGapSeconds(30);
+    setCooldownPeriodMins(0);
+  };
+  // Phase 4: TTS Rules Handlers (simplified - save happens in handleSaveRule)
+  const handleToggleMute = (enabled: boolean) => {
+    setIsMuted(enabled);
+  };
+
+  const handleToggleCooldown = (enabled: boolean) => {
+    setHasCooldown(enabled);
+  };
+
+  const handleClearAllRules = async () => {
+    if (!selectedViewer) return;
+    
+    if (!confirm(`Clear all TTS rules (mute & cooldown) for ${selectedViewer.display_name || selectedViewer.username}?`)) {
+      return;
+    }
+
+    try {
+      const response = await ipcRenderer.invoke('viewer-tts-rules:clear-all', { 
+        viewerId: selectedViewer.id 
+      });
+      
+      if (response.success) {
+        setMessage({ type: 'success', text: 'All TTS rules cleared' });
+        setTimeout(() => setMessage(null), 2000);
+        await loadTTSRules(selectedViewer.id);
+      } else {
+        setMessage({ type: 'error', text: response.error || 'Failed to clear rules' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const formatTimeRemaining = (expiresAt: string | null | undefined): string => {
+    if (!expiresAt) return '';
+    
+    const now = new Date();
+    const expires = new Date(expiresAt);
+    const diffMs = expires.getTime() - now.getTime();
+    
+    if (diffMs <= 0) return 'Expired';
+    
+    const mins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(mins / 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${mins % 60}m remaining`;
+    }
+    return `${mins}m remaining`;
   };
 
   const getFilteredVoices = () => {
@@ -412,8 +557,7 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               </div>
             )}
           </div>
-          
-          {/* Pitch Control */}
+            {/* Pitch Control */}
           <div className="slider-control">
             <label>Pitch: {editingRule.pitch?.toFixed(1) || 1.0}</label>
             <input 
@@ -425,11 +569,6 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               onChange={(e) => updateRule('pitch', parseFloat(e.target.value))}
               className="slider"
             />
-            <div className="slider-labels">
-              <span>Lower</span>
-              <span>Normal</span>
-              <span>Higher</span>
-            </div>
           </div>
           
           {/* Speed Control */}
@@ -444,12 +583,127 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               onChange={(e) => updateRule('speed', parseFloat(e.target.value))}
               className="slider"
             />
-            <div className="slider-labels">
-              <span>Slower</span>
-              <span>Normal</span>
-              <span>Faster</span>
-            </div>
           </div>
+
+          {/* Phase 4: TTS Rules - Mute & Cooldown */}
+          <div className="tts-rules-section">
+            <h4 style={{ marginTop: '30px', borderTop: '2px solid #444', paddingTop: '20px' }}>
+              TTS Restrictions
+            </h4>
+            
+            {/* Mute Control */}
+            <div className="tts-rule-control">
+              <div className="rule-header">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={isMuted}
+                    onChange={(e) => handleToggleMute(e.target.checked)}
+                  />
+                  🔇 Mute Viewer
+                </label>
+              </div>
+                {isMuted && (
+                <div className="rule-config">                  <div className="slider-control">
+                    <label>
+                      Mute Period (Minutes): {mutePeriodMins === 0 ? 'Permanent' : mutePeriodMins}
+                    </label>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="1440" 
+                      step="5"
+                      value={mutePeriodMins}
+                      onChange={(e) => setMutePeriodMins(parseInt(e.target.value))}
+                      className="slider"
+                    />
+                  </div>
+                  
+                  {ttsRules?.is_muted && ttsRules.mute_expires_at && (
+                    <div className="status-display">
+                      Status: 🔇 Muted - {formatTimeRemaining(ttsRules.mute_expires_at)}
+                    </div>
+                  )}
+                  
+                  {ttsRules?.is_muted && !ttsRules.mute_expires_at && (
+                    <div className="status-display">
+                      Status: 🔇 Permanently Muted
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Cooldown Control */}
+            <div className="tts-rule-control" style={{ marginTop: '20px' }}>
+              <div className="rule-header">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={hasCooldown}
+                    onChange={(e) => handleToggleCooldown(e.target.checked)}
+                  />
+                  ⏰ Cooldown Viewer
+                </label>
+              </div>
+                {hasCooldown && (
+                <div className="rule-config">                  <div className="slider-control">
+                    <label>
+                      Cooldown Gap (Seconds): {cooldownGapSeconds}
+                    </label>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="120" 
+                      step="1"
+                      value={cooldownGapSeconds}
+                      onChange={(e) => setCooldownGapSeconds(parseInt(e.target.value))}
+                      className="slider"
+                    />
+                  </div>
+                  
+                  <div className="slider-control">
+                    <label>
+                      Cooldown Period (Minutes): {cooldownPeriodMins === 0 ? 'Permanent' : cooldownPeriodMins}
+                    </label>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="1440" 
+                      step="5"
+                      value={cooldownPeriodMins}
+                      onChange={(e) => setCooldownPeriodMins(parseInt(e.target.value))}
+                      className="slider"
+                    />
+                  </div>
+                  
+                  {ttsRules?.has_cooldown && ttsRules.cooldown_expires_at && (
+                    <div className="status-display">
+                      Status: ⏰ Active - {formatTimeRemaining(ttsRules.cooldown_expires_at)}
+                    </div>
+                  )}
+                  
+                  {ttsRules?.has_cooldown && !ttsRules.cooldown_expires_at && (
+                    <div className="status-display">
+                      Status: ⏰ Permanent Cooldown ({ttsRules.cooldown_gap_seconds}s gap)
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Clear All Button */}
+            {(ttsRules?.is_muted || ttsRules?.has_cooldown) && (
+              <button 
+                onClick={handleClearAllRules}
+                className="button button-danger"
+                style={{ marginTop: '20px' }}
+              >
+                🗑️ Clear All TTS Rules
+              </button>
+            )}
+          </div>
+            
             <div className="button-group">
             <button 
               onClick={handleSaveRule} 
