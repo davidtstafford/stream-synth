@@ -18,6 +18,7 @@ import { exportSettings, importSettings, getExportPreview } from '../../services
 import { TwitchRoleSyncService } from '../../services/twitch-role-sync';
 import { TwitchFollowersService } from '../../services/twitch-followers';
 import { getDatabase } from '../../database/connection';
+import { getEventSubManager } from '../../services/eventsub-manager';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -287,12 +288,137 @@ export function setupTwitchHandlers(): void {
 
         const { ModerationHistoryRepository } = require('../../database/repositories/moderation-history');
         const moderationRepo = new ModerationHistoryRepository();
-        
-        return {
+          return {
           bans: moderationRepo.getActiveBansCount(session.channel_id),
           timeouts: moderationRepo.getActiveTimeoutsCount(session.channel_id)
         };
       }
+    }
+  );
+
+  // ===== EventSub WebSocket Handlers (Phase 7) =====
+  ipcRegistry.register<void, {
+    isConnected: boolean;
+    sessionId: string | null;
+    subscriptions: string[];
+    subscriptionCount: number;
+    lastConnectedAt: string | null;
+    nextKeepaliveAt: string | null;
+    reconnectAttempts: number;
+  }>(
+    'eventsub-get-status',
+    {
+      execute: async () => {
+        const manager = getEventSubManager();
+        return manager.getStatus();
+      },
+    }
+  );
+
+  ipcRegistry.register<
+    { userId: string; channelId: string },
+    { success: boolean; message: string }
+  >(
+    'eventsub-initialize',
+    {
+      validate: (input: { userId: string; channelId: string }) => {
+        if (!input.userId) return 'userId is required';
+        if (!input.channelId) return 'channelId is required';
+        return null;
+      },
+      execute: async (input: { userId: string; channelId: string }) => {
+        try {
+          const manager = getEventSubManager();
+          await manager.initialize(input.userId, input.channelId);
+          return {
+            success: true,
+            message: 'EventSub connection initialized',
+          };
+        } catch (error: any) {
+          return {
+            success: false,
+            message: error.message || 'Failed to initialize EventSub',
+          };
+        }
+      },
+    }
+  );
+
+  ipcRegistry.register<void, { success: boolean; message: string }>(
+    'eventsub-disconnect',
+    {
+      execute: async () => {
+        try {
+          const manager = getEventSubManager();
+          manager.destroy();
+          return {
+            success: true,
+            message: 'EventSub disconnected',
+          };
+        } catch (error: any) {
+          return {
+            success: false,
+            message: error.message || 'Failed to disconnect EventSub',
+          };
+        }
+      },
+    }
+  );
+
+  ipcRegistry.register<
+    void,
+    Array<{
+      type: string;
+      displayName: string;
+      description: string;
+    }>
+  >(
+    'eventsub-get-subscription-types',
+    {
+      execute: async () => {
+        return [
+          {
+            type: 'channel.follow',
+            displayName: 'New Follower',
+            description: 'When someone follows the channel',
+          },
+          {
+            type: 'channel.subscribe',
+            displayName: 'New Subscription',
+            description: 'When someone subscribes to the channel',
+          },
+          {
+            type: 'channel.subscription.end',
+            displayName: 'Subscription Ended',
+            description: 'When a subscription expires',
+          },
+          {
+            type: 'channel.subscription.gift',
+            displayName: 'Gifted Subscription',
+            description: 'When someone gifts a subscription',
+          },
+          {
+            type: 'channel.moderator.add',
+            displayName: 'Moderator Added',
+            description: 'When someone is promoted to moderator',
+          },
+          {
+            type: 'channel.moderator.remove',
+            displayName: 'Moderator Removed',
+            description: 'When someone loses moderator status',
+          },
+          {
+            type: 'channel.vip.add',
+            displayName: 'VIP Added',
+            description: 'When someone is promoted to VIP',
+          },
+          {
+            type: 'channel.vip.remove',
+            displayName: 'VIP Removed',
+            description: 'When someone loses VIP status',
+          },
+        ];
+      },
     }
   );
 }

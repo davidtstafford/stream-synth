@@ -9,8 +9,10 @@ import { ViewersScreen } from './screens/viewers/viewers';
 import { TTS } from './screens/tts/tts';
 import { Discord } from './screens/discord/discord';
 import { AdvancedScreen } from './screens/advanced/advanced';
+import { EventSubDashboard } from './screens/system/eventsub-dashboard';
 import * as db from './services/database';
 import * as ttsService from './services/tts';
+import * as eventsubService from './services/eventsub';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -26,7 +28,6 @@ const App: React.FC = () => {
     broadcasterLogin: '',
     isBroadcaster: false
   });
-
   // Initialize voice syncing on app startup
   useEffect(() => {
     const initializeVoiceSync = async () => {
@@ -40,7 +41,29 @@ const App: React.FC = () => {
     };
     
     initializeVoiceSync();
-  }, []);
+  }, []);  // Initialize EventSub when connection state is ready
+  useEffect(() => {
+    const initializeEventSub = async () => {
+      try {
+        if (connectionState.userId && connectionState.accessToken && connectionState.clientId && connectionState.broadcasterId) {
+          console.log('[App] Initializing EventSub with credentials...');
+          console.log('[App] userId:', connectionState.userId);
+          console.log('[App] channelId:', connectionState.broadcasterId);
+          const result = await eventsubService.initializeEventSub(
+            connectionState.userId,
+            connectionState.broadcasterId
+          );
+          console.log('[App] EventSub initialization result:', result);
+        }
+      } catch (err: any) {
+        console.error('[App] Error initializing EventSub:', err);
+      }
+    };
+    
+    // Initialize EventSub after a short delay to ensure connection state is loaded
+    const timer = setTimeout(initializeEventSub, 2500);
+    return () => clearTimeout(timer);
+  }, [connectionState.userId, connectionState.accessToken, connectionState.clientId, connectionState.broadcasterId]);
 
   // Load current session to get channel ID and connection state
   useEffect(() => {
@@ -75,8 +98,8 @@ const App: React.FC = () => {
 
     // Also listen for session changes
     const interval = setInterval(loadSession, 5000);
-    return () => clearInterval(interval);
-  }, []);  // Note: TTS speak handler is registered in services/tts.ts to prevent duplicate listeners
+    return () => clearInterval(interval);  }, []);  
+
   const menuItems = [
     { id: 'connection', label: 'Connection' },
     { id: 'events', label: 'Events' },
@@ -85,8 +108,11 @@ const App: React.FC = () => {
     { id: 'viewers', label: 'Viewers' },
     { id: 'tts', label: 'TTS' },
     { id: 'discord', label: 'Discord' },
+    { id: 'eventsub', label: 'EventSub' },
     { id: 'advanced', label: 'Advanced', isBottom: true }
-  ];  const renderScreen = () => {
+  ];
+
+  const renderScreen = () => {
     switch (activeScreen) {
       case 'connection':
         return <ConnectionScreen />;
@@ -99,9 +125,15 @@ const App: React.FC = () => {
       case 'viewers':
         return <ViewersScreen />;
       case 'tts':
-        return <TTS />;
-      case 'discord':
+        return <TTS />;      case 'discord':
         return <Discord />;
+      case 'eventsub':
+        return <EventSubDashboard 
+          userId={connectionState.userId}
+          accessToken={connectionState.accessToken}
+          clientId={connectionState.clientId}
+          broadcasterId={connectionState.broadcasterId}
+        />;
       case 'advanced':
         return <AdvancedScreen 
           userId={connectionState.userId}

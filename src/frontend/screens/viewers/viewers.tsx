@@ -42,7 +42,23 @@ export const ViewersScreen: React.FC = () => {
 
   useEffect(() => {
     loadViewers();
-  }, [searchQuery]);
+  }, [searchQuery]);  // Listen for EventSub role changes and refresh viewers
+  useEffect(() => {
+    const { ipcRenderer } = window.require('electron');
+    
+    const handleRoleChanged = (event: any, data: any) => {
+      console.log('[Viewers] Role changed event received:', data);
+      // Reload viewers immediately to show updated roles
+      loadViewers();
+    };
+    
+    // Listen for explicit role change notifications
+    ipcRenderer.on('eventsub:role-changed', handleRoleChanged);
+    
+    return () => {
+      ipcRenderer.removeListener('eventsub:role-changed', handleRoleChanged);
+    };
+  }, []);
 
   const handleDeleteViewer = async (id: string) => {
     if (!confirm('Are you sure you want to delete this viewer? This will also remove them from associated events.')) {

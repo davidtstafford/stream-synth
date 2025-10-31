@@ -1,0 +1,487 @@
+import { EventEmitter } from 'events';
+import { BrowserWindow } from 'electron';
+import { FollowerHistoryRepository } from '../database/repositories/follower-history';
+import { ViewerRolesRepository } from '../database/repositories/viewer-roles';
+import { SubscriptionsRepository } from '../database/repositories/subscriptions';
+import { ViewersRepository } from '../database/repositories/viewers';
+import { EventsRepository } from '../database/repositories/events';
+import { SessionsRepository } from '../database/repositories/sessions';
+
+/**
+ * EventSub Event Router
+ * 
+ * Routes incoming EventSub events to appropriate handlers.
+ * Applies the same business logic that polling was doing.
+ */
+export class EventSubEventRouter extends EventEmitter {
+  private followerHistoryRepo = new FollowerHistoryRepository();
+  private viewerRolesRepo = new ViewerRolesRepository();
+  private subscriptionsRepo = new SubscriptionsRepository();
+  private viewersRepo = new ViewersRepository();
+  private eventsRepo = new EventsRepository();
+  private sessionsRepo = new SessionsRepository();
+  private mainWindow: BrowserWindow | null = null;
+
+  constructor(mainWindow?: BrowserWindow | null) {
+    super();
+    this.mainWindow = mainWindow || null;
+  }
+
+  /**
+   * Set main window for IPC communication
+   */
+  setMainWindow(mainWindow: BrowserWindow | null): void {
+    this.mainWindow = mainWindow;
+  }
+
+  /**
+   * Emit IPC event to frontend
+   */
+  private emitToFrontend(channel: string, data: any): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(channel, data);
+    }
+  }
+
+  /**
+   * Route an event to the appropriate handler
+   */
+  async routeEvent(eventType: string, eventData: any, timestamp: string): Promise<void> {
+    try {
+      console.log(`[EventRouter] Routing event: ${eventType}`);
+
+      switch (eventType) {
+        case 'channel.follow':
+          await this.handleFollowEvent(eventData, timestamp);
+          break;
+
+        case 'channel.subscribe':
+          await this.handleSubscribeEvent(eventData, timestamp);
+          break;
+
+        case 'channel.subscription.end':
+          await this.handleSubscriptionEndEvent(eventData, timestamp);
+          break;
+
+        case 'channel.subscription.gift':
+          await this.handleSubscriptionGiftEvent(eventData, timestamp);
+          break;
+
+        case 'channel.moderator.add':
+          await this.handleModeratorAddEvent(eventData, timestamp);
+          break;
+
+        case 'channel.moderator.remove':
+          await this.handleModeratorRemoveEvent(eventData, timestamp);
+          break;
+
+        case 'channel.vip.add':
+          await this.handleVIPAddEvent(eventData, timestamp);
+          break;
+
+        case 'channel.vip.remove':
+          await this.handleVIPRemoveEvent(eventData, timestamp);
+          break;
+
+        default:
+          console.warn(`[EventRouter] Unknown event type: ${eventType}`);
+      }
+    } catch (error) {
+      console.error(`[EventRouter] Error routing ${eventType}:`, error);
+      this.emit('error', { eventType, error });
+    }
+  }
+
+  /**
+   * Handle channel.follow event
+   */
+  private async handleFollowEvent(event: any, timestamp: string): Promise<void> {
+    console.log('[EventRouter] Processing follow event:', event.user_login);
+
+    const followerId = event.user_id;
+    const followerLogin = event.user_login;
+    const followerDisplayName = event.user_name;
+    const followedAt = event.followed_at;
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn('[EventRouter] No active session for follow event');
+      return;
+    }
+
+    // Get or create viewer
+    const viewer = this.viewersRepo.getOrCreate(followerId, followerLogin, followerDisplayName);
+    if (!viewer) {
+      console.warn('[EventRouter] Could not create viewer for follow:', followerLogin);
+      return;
+    }
+
+    // Record to follower_history
+    this.followerHistoryRepo.batchInsertFollowerHistory([
+      {
+        channelId: currentSession.channel_id,
+        viewerId: viewer.id,
+        followerUserId: followerId,
+        followerUserLogin: followerLogin,
+        followerUserName: followerDisplayName,
+        action: 'follow' as const,
+        followedAt,
+      },
+    ]);
+
+    // Record event
+    this.eventsRepo.storeEvent('channel.follow', { user_login: followerLogin }, currentSession.channel_id, viewer.id);
+
+    console.log('[EventRouter] ✓ Follow event recorded for:', followerLogin);
+    this.emit('follow', { viewer, followerId });
+  }
+
+  /**
+   * Handle channel.subscribe event
+   */
+  private async handleSubscribeEvent(event: any, timestamp: string): Promise<void> {
+    console.log('[EventRouter] Processing subscribe event:', event.user_login);
+
+    const userId = event.user_id;
+    const userLogin = event.user_login;
+    const userDisplayName = event.user_name;
+    const tier = event.tier; // '1000', '2000', '3000'
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn('[EventRouter] No active session for subscribe event');
+      return;
+    }
+
+    // Get or create viewer
+    const viewer = this.viewersRepo.getOrCreate(userId, userLogin, userDisplayName);
+    if (!viewer) {
+      console.warn('[EventRouter] Could not create viewer for subscribe:', userLogin);
+      return;
+    }    // Record subscription
+    this.subscriptionsRepo.upsert({
+      id: `${userId}-${Date.now()}`,
+      viewer_id: viewer.id,
+      tier,
+      is_gift: 0,
+      start_date: new Date().toISOString(),
+    });
+
+    // Record event
+    this.eventsRepo.storeEvent(
+      'channel.subscribe',
+      { user_login: userLogin, tier },
+      currentSession.channel_id,
+      viewer.id
+    );
+
+    console.log('[EventRouter] ✓ Subscribe event recorded for:', userLogin);
+    this.emit('subscribe', { viewer, userId, tier });
+    
+    // Notify frontend to refresh viewers
+    this.emitToFrontend('eventsub:role-changed', {
+      eventType: 'subscribe',
+      userId,
+      userLogin,
+      userName: userDisplayName,
+      tier,
+    });
+  }
+
+  /**
+   * Handle channel.subscription.end event
+   */
+  private async handleSubscriptionEndEvent(event: any, timestamp: string): Promise<void> {
+    console.log('[EventRouter] Processing subscription end event:', event.user_login);
+
+    const userId = event.user_id;
+    const userLogin = event.user_login;
+    const userDisplayName = event.user_name;
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn('[EventRouter] No active session for subscription end event');
+      return;
+    }    // Get viewer
+    const viewer = this.viewersRepo.getViewerById(userId);
+    if (!viewer) {
+      console.warn('[EventRouter] Viewer not found for subscription end:', userLogin);
+      return;
+    }
+
+    // Update subscription with end date
+    const subscription = this.subscriptionsRepo.getByViewerId(viewer.id);
+    if (subscription) {
+      this.subscriptionsRepo.upsert({
+        id: subscription.id,
+        viewer_id: viewer.id,
+        tier: subscription.tier,
+        is_gift: subscription.is_gift,
+        start_date: subscription.start_date,
+        end_date: new Date().toISOString(),
+      });
+    }
+
+    // Record event
+    this.eventsRepo.storeEvent(
+      'channel.subscription.end',
+      { user_login: userLogin },
+      currentSession.channel_id,
+      viewer.id
+    );
+
+    console.log('[EventRouter] ✓ Subscription end event recorded for:', userLogin);
+    this.emit('subscription_end', { viewer, userId });
+  }
+
+  /**
+   * Handle channel.subscription.gift event
+   */
+  private async handleSubscriptionGiftEvent(event: any, timestamp: string): Promise<void> {
+    console.log('[EventRouter] Processing subscription gift event:', event.user_login);
+
+    const gifter = event.user_id;
+    const gifterLogin = event.user_login;
+    const gifterName = event.user_name;
+    const tier = event.tier;
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn('[EventRouter] No active session for gift subscription event');
+      return;
+    }
+
+    // Get or create gifter viewer
+    const gifterViewer = this.viewersRepo.getOrCreate(gifter, gifterLogin, gifterName);
+    if (!gifterViewer) {
+      console.warn('[EventRouter] Could not create gifter viewer:', gifterLogin);
+      return;
+    }
+
+    // Record gift subscription
+    this.subscriptionsRepo.upsert({
+      id: `gift-${gifter}-${Date.now()}`,
+      viewer_id: gifterViewer.id,
+      tier: tier || '1000',
+      is_gift: 1,
+      start_date: new Date().toISOString(),
+    });
+
+    // Record event
+    this.eventsRepo.storeEvent(
+      'channel.subscription.gift',
+      { user_login: gifterLogin, tier },
+      currentSession.channel_id,
+      gifterViewer.id
+    );
+
+    console.log('[EventRouter] ✓ Gift subscription event recorded for:', gifterLogin);
+    this.emit('subscription_gift', { viewer: gifterViewer, gifter, tier });
+  }
+
+  /**
+   * Handle channel.moderator.add event
+   */
+  private async handleModeratorAddEvent(event: any, timestamp: string): Promise<void> {
+    console.log('[EventRouter] Processing moderator add event:', event.user_login);
+
+    const userId = event.user_id;
+    const userLogin = event.user_login;
+    const userDisplayName = event.user_name;
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn('[EventRouter] No active session for moderator add event');
+      return;
+    }
+
+    // Get or create viewer
+    const viewer = this.viewersRepo.getOrCreate(userId, userLogin, userDisplayName);
+    if (!viewer) {
+      console.warn('[EventRouter] Could not create viewer for moderator add:', userLogin);
+      return;
+    }    // Update or create role
+    this.viewerRolesRepo.grantRole(viewer.id, 'moderator');
+
+    // Record event
+    this.eventsRepo.storeEvent(
+      'channel.moderator.add',
+      { user_login: userLogin },
+      currentSession.channel_id,
+      viewer.id
+    );
+
+    console.log('[EventRouter] ✓ Moderator add event recorded for:', userLogin);
+    this.emit('moderator_add', { viewer, userId });
+    
+    // Notify frontend to refresh viewers
+    this.emitToFrontend('eventsub:role-changed', {
+      eventType: 'moderator.add',
+      userId,
+      userLogin,
+      userName: userDisplayName,
+      role: 'moderator',
+    });
+  }
+
+  /**
+   * Handle channel.moderator.remove event
+   */
+  private async handleModeratorRemoveEvent(event: any, timestamp: string): Promise<void> {
+    console.log('[EventRouter] Processing moderator remove event:', event.user_login);
+
+    const userId = event.user_id;
+    const userLogin = event.user_login;
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn('[EventRouter] No active session for moderator remove event');
+      return;
+    }    // Get viewer
+    const viewer = this.viewersRepo.getViewerById(userId);
+    if (viewer) {
+      // Revoke moderator role
+      this.viewerRolesRepo.revokeRole(viewer.id, 'moderator');
+
+      // Record event
+      this.eventsRepo.storeEvent(
+        'channel.moderator.remove',
+        { user_login: userLogin },
+        currentSession.channel_id,
+        viewer.id
+      );
+
+      console.log('[EventRouter] ✓ Moderator remove event recorded for:', userLogin);
+      this.emit('moderator_remove', { viewer, userId });
+      
+      // Notify frontend to refresh viewers
+      this.emitToFrontend('eventsub:role-changed', {
+        eventType: 'moderator.remove',
+        userId,
+        userLogin,
+        userName: viewer.display_name,
+        role: 'moderator',
+      });
+    }
+  }
+
+  /**
+   * Handle channel.vip.add event
+   */
+  private async handleVIPAddEvent(event: any, timestamp: string): Promise<void> {
+    console.log('[EventRouter] Processing VIP add event:', event.user_login);
+
+    const userId = event.user_id;
+    const userLogin = event.user_login;
+    const userDisplayName = event.user_name;
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn('[EventRouter] No active session for VIP add event');
+      return;
+    }
+
+    // Get or create viewer
+    const viewer = this.viewersRepo.getOrCreate(userId, userLogin, userDisplayName);
+    if (!viewer) {
+      console.warn('[EventRouter] Could not create viewer for VIP add:', userLogin);
+      return;
+    }
+
+    // Update or create role
+    this.viewerRolesRepo.grantRole(viewer.id, 'vip');    // Record event
+    this.eventsRepo.storeEvent(
+      'channel.vip.add',
+      { user_login: userLogin },
+      currentSession.channel_id,
+      viewer.id
+    );
+
+    console.log('[EventRouter] ✓ VIP add event recorded for:', userLogin);
+    this.emit('vip_add', { viewer, userId });
+    
+    // Notify frontend to refresh viewers
+    this.emitToFrontend('eventsub:role-changed', {
+      eventType: 'vip.add',
+      userId,
+      userLogin,
+      userName: userDisplayName,
+      role: 'vip',
+    });
+  }
+
+  /**
+   * Handle channel.vip.remove event
+   */
+  private async handleVIPRemoveEvent(event: any, timestamp: string): Promise<void> {
+    console.log('[EventRouter] Processing VIP remove event:', event.user_login);
+
+    const userId = event.user_id;
+    const userLogin = event.user_login;
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn('[EventRouter] No active session for VIP remove event');
+      return;
+    }    // Get viewer
+    const viewer = this.viewersRepo.getViewerById(userId);
+    if (viewer) {
+      // Revoke VIP role
+      this.viewerRolesRepo.revokeRole(viewer.id, 'vip');
+
+      // Record event
+      this.eventsRepo.storeEvent(
+        'channel.vip.remove',
+        { user_login: userLogin },
+        currentSession.channel_id,
+        viewer.id
+      );
+
+      console.log('[EventRouter] ✓ VIP remove event recorded for:', userLogin);
+      this.emit('vip_remove', { viewer, userId });
+      
+      // Notify frontend to refresh viewers
+      this.emitToFrontend('eventsub:role-changed', {
+        eventType: 'vip.remove',
+        userId,
+        userLogin,
+        userName: viewer.display_name,
+        role: 'vip',
+      });
+    }
+  }
+
+  /**
+   * Destroy router
+   */
+  destroy(): void {
+    console.log('[EventRouter] Destroying router');
+    this.removeAllListeners();
+  }
+}
+
+// Global instance
+let eventSubRouter: EventSubEventRouter | null = null;
+
+/**
+ * Get or create EventSub router instance
+ */
+export function getEventSubRouter(mainWindow?: BrowserWindow | null): EventSubEventRouter {
+  if (!eventSubRouter) {
+    eventSubRouter = new EventSubEventRouter(mainWindow);
+  } else if (mainWindow) {
+    // Update main window reference if provided
+    eventSubRouter.setMainWindow(mainWindow);
+  }
+  return eventSubRouter;
+}
+
+/**
+ * Reset EventSub router instance (for testing)
+ */
+export function resetEventSubRouter(): void {
+  if (eventSubRouter) {
+    eventSubRouter.destroy();
+    eventSubRouter = null;
+  }
+}

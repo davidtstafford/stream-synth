@@ -21,8 +21,7 @@ async function initialize(): Promise<void> {
       console.error('[Main] Error running TTS rules cleanup:', error);
     }
   }, 5 * 60 * 1000); // 5 minutes
-  
-  mainWindow = await createMainWindow();
+    mainWindow = await createMainWindow();
   setupAllIpcHandlers(mainWindow);
 
   mainWindow.on('closed', () => {
@@ -31,7 +30,7 @@ async function initialize(): Promise<void> {
   
   // Run startup tasks after window is ready
   mainWindow.webContents.on('did-finish-load', () => {
-    runStartupTasks();
+    runStartupTasks(mainWindow);
   });
 }
 

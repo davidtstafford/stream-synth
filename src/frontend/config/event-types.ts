@@ -4,14 +4,15 @@ export interface EventSubscriptions {
   'channel.follow': boolean; // Testing if it works via WebSocket despite docs
   'channel.subscribe': boolean;
   'channel.subscription.end': boolean;
-  'channel.subscription.gift': boolean;
-  'channel.subscription.message': boolean;
+  'channel.subscription.gift': boolean;  'channel.subscription.message': boolean;
   'channel.cheer': boolean;
   'channel.raid': boolean;
-  // 'channel.ban': boolean; - WEBHOOK ONLY (not available via WebSocket)
-  // 'channel.unban': boolean; - WEBHOOK ONLY (not available via WebSocket)
-  // 'channel.moderator.add': boolean; - WEBHOOK ONLY (not available via WebSocket)
-  // 'channel.moderator.remove': boolean; - WEBHOOK ONLY (not available via WebSocket)
+  'channel.ban': boolean;
+  'channel.unban': boolean;
+  'channel.moderator.add': boolean;
+  'channel.moderator.remove': boolean;
+  'channel.vip.add': boolean;
+  'channel.vip.remove': boolean;
   
   // Chat Events
   'channel.chat.message': boolean;
@@ -72,11 +73,13 @@ export const EVENT_GROUPS: Record<string, string[]> = {
     'channel.subscription.gift',
     'channel.subscription.message',
     'channel.cheer',
-    'channel.raid'
-    // 'channel.ban', - WEBHOOK ONLY (not available via WebSocket)
-    // 'channel.unban', - WEBHOOK ONLY (not available via WebSocket)
-    // 'channel.moderator.add', - WEBHOOK ONLY (not available via WebSocket)
-    // 'channel.moderator.remove' - WEBHOOK ONLY (not available via WebSocket)
+    'channel.raid',
+    'channel.ban',
+    'channel.unban',
+    'channel.moderator.add',
+    'channel.moderator.remove',
+    'channel.vip.add',
+    'channel.vip.remove'
   ],
   'Chat Events': [
     'channel.chat.message',
@@ -153,12 +156,13 @@ export const BROADCASTER_ONLY_EVENTS: (keyof EventSubscriptions)[] = [
   'channel.subscription.end',
   'channel.subscription.gift',
   'channel.subscription.message',
-  'channel.cheer',
-  'channel.raid',
-  // 'channel.ban' - WEBHOOK ONLY (not available via WebSocket)
-  // 'channel.unban' - WEBHOOK ONLY (not available via WebSocket)
-  // 'channel.moderator.add' - WEBHOOK ONLY (not available via WebSocket)
-  // 'channel.moderator.remove' - WEBHOOK ONLY (not available via WebSocket)
+  'channel.cheer',  'channel.raid',
+  'channel.ban',
+  'channel.unban',
+  'channel.moderator.add',
+  'channel.moderator.remove',
+  'channel.vip.add',
+  'channel.vip.remove',
   'channel.channel_points_custom_reward.add',
   'channel.channel_points_custom_reward.update',
   'channel.channel_points_custom_reward.remove',
@@ -215,15 +219,33 @@ export const EVENT_DISPLAY_INFO: Record<keyof EventSubscriptions, { name: string
   'channel.cheer': { 
     name: 'Bits Cheered', 
     description: 'User cheers bits in the channel' 
-  },
-  'channel.raid': { 
+  },  'channel.raid': { 
     name: 'Incoming Raid', 
     description: 'Channel receives a raid from another broadcaster' 
   },
-  // 'channel.ban' - WEBHOOK ONLY (not available via WebSocket EventSub)
-  // 'channel.unban' - WEBHOOK ONLY (not available via WebSocket EventSub)
-  // 'channel.moderator.add' - WEBHOOK ONLY (not available via WebSocket EventSub)
-  // 'channel.moderator.remove' - WEBHOOK ONLY (not available via WebSocket EventSub)
+  'channel.ban': { 
+    name: 'User Banned', 
+    description: 'User is banned from the channel' 
+  },
+  'channel.unban': { 
+    name: 'User Unbanned', 
+    description: 'User ban is removed from the channel' 
+  },
+  'channel.moderator.add': { 
+    name: 'Moderator Added', 
+    description: 'User is granted moderator status' 
+  },  'channel.moderator.remove': { 
+    name: 'Moderator Removed', 
+    description: 'User moderator status is removed' 
+  },
+  'channel.vip.add': { 
+    name: 'VIP Added', 
+    description: 'User is granted VIP status' 
+  },
+  'channel.vip.remove': { 
+    name: 'VIP Removed', 
+    description: 'User VIP status is removed' 
+  },
   
   // Chat Events
   'channel.chat.message': { 

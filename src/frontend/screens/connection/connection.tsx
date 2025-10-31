@@ -130,11 +130,21 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
             // Extract event type and payload
             const eventType = data.subscription?.type || data.payload?.subscription?.type;
             const eventPayload = data.event || data.payload?.event;
+            const eventTimestamp = data.metadata?.message_timestamp || new Date().toISOString();
             
             console.log('📝 Event type:', eventType);
             console.log('📦 Event payload:', eventPayload);
             
             if (eventType && eventPayload) {
+              // Forward event to backend for role processing
+              const { ipcRenderer } = window.require('electron');
+              console.log('📤 Forwarding event to backend router...');
+              ipcRenderer.send('eventsub-event-received', {
+                type: eventType,
+                data: eventPayload,
+                timestamp: eventTimestamp
+              });
+              
               // Extract viewer info if available based on event type
               let viewerId: string | undefined;
               let viewerUsername: string | undefined;
@@ -310,11 +320,21 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
         // Extract event type and payload
         const eventType = data.subscription?.type || data.payload?.subscription?.type;
         const eventPayload = data.event || data.payload?.event;
+        const eventTimestamp = data.metadata?.message_timestamp || new Date().toISOString();
         
         console.log('📝 Event type:', eventType);
         console.log('📦 Event payload:', eventPayload);
         
         if (eventType && eventPayload) {
+          // Forward event to backend for role processing
+          const { ipcRenderer } = window.require('electron');
+          console.log('📤 Forwarding event to backend router...');
+          ipcRenderer.send('eventsub-event-received', {
+            type: eventType,
+            data: eventPayload,
+            timestamp: eventTimestamp
+          });
+          
           // Extract viewer info if available based on event type
           let viewerId: string | undefined;
           let viewerUsername: string | undefined;

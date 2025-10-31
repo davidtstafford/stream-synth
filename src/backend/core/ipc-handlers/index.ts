@@ -23,6 +23,7 @@ export function setupIpcHandlers(): void {
   setupIRCHandlers();
   setupTTSAccessHandlers();
   setupChatCommandHandlers(); // Phase 5: Chat Commands
+  // setupEventSubHandlers(); // Phase 7: EventSub WebSocket - temporarily disabled
   // twitch-polling handlers auto-registered on import
 }
 

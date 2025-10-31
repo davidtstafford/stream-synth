@@ -1,12 +1,4 @@
-/**
- * Startup Tasks Module
- * 
- * Handles initialization on app startup:
- * - TTS service initialization
- * - Voice synchronization
- * - Discord voice catalogue posting
- */
-
+import { BrowserWindow } from 'electron';
 import { SettingsRepository } from '../../database/repositories/settings';
 import { VoicesRepository } from '../../database/repositories/voices';
 import { SessionsRepository } from '../../database/repositories/sessions';
@@ -15,6 +7,7 @@ import { initializeTTS } from './tts';
 import { VoiceSyncService } from '../../services/tts/voice-sync';
 import { TwitchRoleSyncService } from '../../services/twitch-role-sync';
 import { DynamicPollingManager } from '../../services/dynamic-polling-manager';
+import { initializeEventSubIntegration } from '../../services/eventsub-integration';
 
 const settingsRepo = new SettingsRepository();
 const voicesRepo = new VoicesRepository();
@@ -25,9 +18,15 @@ const roleSyncService = new TwitchRoleSyncService();
 // Global polling manager instance
 let pollingManager: DynamicPollingManager | null = null;
 
-export async function runStartupTasks(): Promise<void> {
+export async function runStartupTasks(mainWindow?: BrowserWindow | null): Promise<void> {
   try {
     console.log('[Startup] Running startup tasks...');
+    
+    // Initialize EventSub integration if mainWindow is available
+    if (mainWindow) {
+      console.log('[Startup] Initializing EventSub integration...');
+      initializeEventSubIntegration(mainWindow);
+    }
 
     // Cleanup expired channel point grants (keep expired records for 7 days)
     console.log('[Startup] Cleaning up expired channel point grants...');
