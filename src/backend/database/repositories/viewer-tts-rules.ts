@@ -3,6 +3,8 @@ import { BaseRepository } from '../base-repository';
 export interface ViewerTTSRules {
   id: number;
   viewer_id: string;
+  viewer_username?: string;
+  viewer_display_name?: string | null;
   
   // Mute
   is_muted: boolean;
@@ -262,18 +264,28 @@ export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
       console.error('[ViewerTTSRulesRepo] Error cleaning expired rules:', error);
       return 0;
     }
-  }
-  /**
+  }  /**
    * Get all currently muted viewers
    */
   getAllMuted(): ViewerTTSRules[] {
     try {
       const db = this.getDatabase();
       const rows = db.prepare(`
-        SELECT * FROM viewer_tts_rules WHERE is_muted = 1
-      `).all();
+        SELECT 
+          vtr.*,
+          v.username as viewer_username,
+          v.display_name as viewer_display_name
+        FROM viewer_tts_rules vtr
+        LEFT JOIN viewers v ON vtr.viewer_id = v.id
+        WHERE vtr.is_muted = 1 
+        ORDER BY vtr.mute_expires_at ASC NULLS LAST
+      `).all() as any[];
 
-      return rows.map(this.mapRow);
+      return rows.map(row => ({
+        ...this.mapRow(row),
+        viewer_username: row.viewer_username,
+        viewer_display_name: row.viewer_display_name
+      }));
     } catch (error: any) {
       console.error('[ViewerTTSRulesRepo] Error getting muted viewers:', error);
       return [];
@@ -286,10 +298,21 @@ export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
     try {
       const db = this.getDatabase();
       const rows = db.prepare(`
-        SELECT * FROM viewer_tts_rules WHERE has_cooldown = 1
-      `).all();
+        SELECT 
+          vtr.*,
+          v.username as viewer_username,
+          v.display_name as viewer_display_name
+        FROM viewer_tts_rules vtr
+        LEFT JOIN viewers v ON vtr.viewer_id = v.id
+        WHERE vtr.has_cooldown = 1 
+        ORDER BY vtr.cooldown_expires_at ASC NULLS LAST
+      `).all() as any[];
 
-      return rows.map(this.mapRow);
+      return rows.map(row => ({
+        ...this.mapRow(row),
+        viewer_username: row.viewer_username,
+        viewer_display_name: row.viewer_display_name
+      }));
     } catch (error: any) {
       console.error('[ViewerTTSRulesRepo] Error getting cooldown viewers:', error);
       return [];
