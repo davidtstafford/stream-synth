@@ -11,7 +11,7 @@
  * Phase 3: Migrated to use IPCRegistry for consistent error handling
  */
 
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, session } from 'electron';
 import { ipcRegistry } from '../ipc/ipc-framework';
 import { authenticateWithTwitch } from '../../auth/twitch-oauth';
 import { exportSettings, importSettings, getExportPreview } from '../../services/export-import';
@@ -34,6 +34,28 @@ export function setupTwitchHandlers(): void {
       validate: (clientId) => clientId ? null : 'Client ID is required',
       execute: async (clientId) => {
         return await authenticateWithTwitch(clientId, mainWindow);
+      }
+    }
+  );
+
+  // Clear Twitch OAuth session cache
+  ipcRegistry.register<void, void>(
+    'clear-twitch-oauth-cache',
+    {
+      execute: async () => {
+        console.log('[Twitch] Clearing OAuth session cache...');
+        const ses = session.defaultSession;
+        
+        // Clear all Twitch-related storage
+        await ses.clearStorageData({
+          storages: ['cookies', 'localstorage'],
+          origin: 'https://id.twitch.tv'
+        });
+        
+        // Clear cache
+        await ses.clearCache();
+        
+        console.log('[Twitch] OAuth cache cleared successfully');
       }
     }
   );

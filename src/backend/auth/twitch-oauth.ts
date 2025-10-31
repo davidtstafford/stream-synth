@@ -17,7 +17,7 @@ const TWITCH_SCOPES = [
   'moderator:read:shield_mode',
   'moderator:read:shoutouts',
   'moderator:manage:shoutouts',
-  'moderator:read:banned_users',  // For channel.ban and channel.unban events
+  'channel:moderate',             // ✅ REQUIRED for channel.ban and channel.unban events
   'moderator:read:moderators',    // For channel.moderator.add and channel.moderator.remove events
   'moderation:read',              // Required for reading moderators list
   'channel:read:vips',            // For VIP sync and viewer role management

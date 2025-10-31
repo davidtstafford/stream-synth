@@ -6,6 +6,7 @@ import { SubscriptionsRepository } from '../database/repositories/subscriptions'
 import { ViewersRepository } from '../database/repositories/viewers';
 import { EventsRepository } from '../database/repositories/events';
 import { SessionsRepository } from '../database/repositories/sessions';
+import { ModerationHistoryRepository } from '../database/repositories/moderation-history';
 
 /**
  * EventSub Event Router
@@ -20,6 +21,7 @@ export class EventSubEventRouter extends EventEmitter {
   private viewersRepo = new ViewersRepository();
   private eventsRepo = new EventsRepository();
   private sessionsRepo = new SessionsRepository();
+  private moderationHistoryRepo = new ModerationHistoryRepository();
   private mainWindow: BrowserWindow | null = null;
 
   constructor(mainWindow?: BrowserWindow | null) {
@@ -81,6 +83,12 @@ export class EventSubEventRouter extends EventEmitter {
 
         case 'channel.vip.remove':
           await this.handleVIPRemoveEvent(eventData, timestamp);
+          break;        case 'channel.ban':
+          await this.handleBanEvent(eventData, timestamp);
+          break;
+
+        case 'channel.unban':
+          await this.handleUnbanEvent(eventData, timestamp);
           break;
 
         default:
@@ -447,6 +455,147 @@ export class EventSubEventRouter extends EventEmitter {
         userLogin,
         userName: viewer.display_name,
         role: 'vip',
+      });
+    }
+  }  /**
+   * Handle channel.ban event
+   * NOTE: This event fires for BOTH permanent bans AND temporary timeouts
+   * Use is_permanent and ends_at to distinguish between them
+   */
+  private async handleBanEvent(event: any, timestamp: string): Promise<void> {
+    const isPermanent = event.is_permanent ?? true; // Default to true if not specified
+    const actionType = isPermanent ? 'ban' : 'timeout';
+    
+    console.log(`[EventRouter] Processing ${actionType} event:`, event.user_login);
+
+    const userId = event.user_id;
+    const userLogin = event.user_login;
+    const userDisplayName = event.user_name;
+    const moderatorId = event.moderator_user_id;
+    const moderatorLogin = event.moderator_user_login;
+    const reason = event.reason;
+    const bannedAt = event.banned_at || timestamp;
+    const endsAt = event.ends_at; // Only present for timeouts
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn(`[EventRouter] No active session for ${actionType} event`);
+      return;
+    }
+
+    // Get or create viewer
+    const viewer = this.viewersRepo.getOrCreate(userId, userLogin, userDisplayName);
+    if (!viewer) {
+      console.warn(`[EventRouter] Could not create viewer for ${actionType}:`, userLogin);
+      return;
+    }
+
+    // Calculate duration for timeouts
+    let durationSeconds: number | undefined;
+    if (!isPermanent && endsAt && bannedAt) {
+      const start = new Date(bannedAt).getTime();
+      const end = new Date(endsAt).getTime();
+      durationSeconds = Math.floor((end - start) / 1000);
+    }
+
+    // Record moderation action in moderation_history table
+    this.moderationHistoryRepo.record({
+      channel_id: currentSession.channel_id,
+      viewer_id: viewer.id,
+      user_id: userId,
+      user_login: userLogin,
+      user_name: userDisplayName,
+      action: actionType, // 'ban' or 'timeout'
+      reason: reason || undefined,
+      duration_seconds: durationSeconds,
+      moderator_id: moderatorId,
+      moderator_login: moderatorLogin,
+      action_at: bannedAt,
+    });
+
+    // Record event
+    this.eventsRepo.storeEvent(
+      'channel.ban',
+      { 
+        user_login: userLogin, 
+        reason: reason || undefined, 
+        moderator_login: moderatorLogin,
+        is_permanent: isPermanent,
+        duration_seconds: durationSeconds
+      },
+      currentSession.channel_id,
+      viewer.id
+    );
+
+    console.log(`[EventRouter] ✓ ${actionType} event recorded for:`, userLogin, durationSeconds ? `(${durationSeconds}s)` : '(permanent)');
+    this.emit(actionType, { viewer, userId, isPermanent, durationSeconds });
+    
+    // Notify frontend to refresh moderation screen (if exists)
+    this.emitToFrontend('eventsub:moderation-changed', {
+      eventType: actionType,
+      userId,
+      userLogin,
+      userName: userDisplayName,
+      moderatorLogin,
+      reason,
+      isPermanent,
+      durationSeconds,
+      expiresAt: endsAt,
+    });
+  }
+  /**
+   * Handle channel.unban event
+   */
+  private async handleUnbanEvent(event: any, timestamp: string): Promise<void> {
+    console.log('[EventRouter] Processing unban event:', event.user_login);
+
+    const userId = event.user_id;
+    const userLogin = event.user_login;
+    const userDisplayName = event.user_name;
+    const moderatorId = event.moderator_user_id;
+    const moderatorLogin = event.moderator_user_login;
+    const unbannedAt = timestamp;
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn('[EventRouter] No active session for unban event');
+      return;
+    }
+
+    // Get viewer
+    const viewer = this.viewersRepo.getViewerById(userId);
+    if (viewer) {
+      // Record moderation action in moderation_history table
+      this.moderationHistoryRepo.record({
+        channel_id: currentSession.channel_id,
+        viewer_id: viewer.id,
+        user_id: userId,
+        user_login: userLogin,
+        user_name: userDisplayName,
+        action: 'unban',
+        moderator_id: moderatorId,
+        moderator_login: moderatorLogin,
+        action_at: unbannedAt,
+      });
+
+      // Record event
+      this.eventsRepo.storeEvent(
+        'channel.unban',
+        { user_login: userLogin, moderator_login: moderatorLogin },
+        currentSession.channel_id,
+        viewer.id
+      );
+
+      console.log('[EventRouter] ✓ Unban event recorded for:', userLogin);
+      this.emit('unban', { viewer, userId });
+      
+      // Notify frontend to refresh viewers (if there's a moderation screen)
+      this.emitToFrontend('eventsub:moderation-changed', {
+        eventType: 'unban',
+        userId,
+        userLogin,
+        userName: viewer.display_name,
+        moderatorLogin,
       });
     }
   }

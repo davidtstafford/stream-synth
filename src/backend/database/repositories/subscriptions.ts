@@ -26,6 +26,9 @@ export interface ViewerWithSubscription {
   is_vip: number | null;
   is_moderator: number | null;
   is_broadcaster: number | null;
+  moderation_status: string | null; // 'banned', 'timed_out', 'active', null
+  moderation_reason: string | null;
+  moderation_expires_at: string | null; // For timeouts
 }
 
 export class SubscriptionsRepository extends BaseRepository<ViewerSubscription> {

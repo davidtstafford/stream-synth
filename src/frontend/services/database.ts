@@ -235,6 +235,9 @@ export interface ViewerWithSubscription {
   is_vip: number | null;
   is_moderator: number | null;
   is_broadcaster: number | null;
+  moderation_status: string | null;
+  moderation_reason: string | null;
+  moderation_expires_at: string | null;
 }
 
 export async function upsertSubscription(

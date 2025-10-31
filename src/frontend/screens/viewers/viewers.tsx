@@ -51,12 +51,21 @@ export const ViewersScreen: React.FC = () => {
       // Reload viewers immediately to show updated roles
       loadViewers();
     };
+
+    const handleModerationChanged = (event: any, data: any) => {
+      console.log('[Viewers] Moderation changed event received:', data);
+      // Reload viewers immediately to show updated moderation status
+      loadViewers();
+    };
     
     // Listen for explicit role change notifications
     ipcRenderer.on('eventsub:role-changed', handleRoleChanged);
+    // Listen for moderation change notifications (ban/unban/timeout)
+    ipcRenderer.on('eventsub:moderation-changed', handleModerationChanged);
     
     return () => {
       ipcRenderer.removeListener('eventsub:role-changed', handleRoleChanged);
+      ipcRenderer.removeListener('eventsub:moderation-changed', handleModerationChanged);
     };
   }, []);
 
@@ -127,10 +136,58 @@ export const ViewersScreen: React.FC = () => {
       setSyncing(false);
     }
   };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString();
+  };
+
+  const renderModerationStatus = (viewer: db.ViewerWithSubscription) => {
+    if (!viewer.moderation_status || viewer.moderation_status === 'active') {
+      return <span style={{ color: '#888', fontSize: '12px' }}>—</span>;
+    }
+
+    let badge;
+    if (viewer.moderation_status === 'banned') {
+      badge = (
+        <span style={{
+          padding: '3px 8px',
+          borderRadius: '4px',
+          fontSize: '11px',
+          fontWeight: 'bold',
+          backgroundColor: '#d32f2f',
+          color: 'white'
+        }}>
+          BANNED
+        </span>
+      );
+    } else if (viewer.moderation_status === 'timed_out') {
+      const expiresAt = viewer.moderation_expires_at 
+        ? new Date(viewer.moderation_expires_at).toLocaleTimeString() 
+        : '';
+      badge = (
+        <span style={{
+          padding: '3px 8px',
+          borderRadius: '4px',
+          fontSize: '11px',
+          fontWeight: 'bold',
+          backgroundColor: '#f57c00',
+          color: 'white'
+        }} title={expiresAt ? `Expires: ${expiresAt}` : undefined}>
+          TIMED OUT
+        </span>
+      );
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {badge}
+        {viewer.moderation_reason && (
+          <span style={{ fontSize: '11px', color: '#aaa', fontStyle: 'italic' }}>
+            {viewer.moderation_reason}
+          </span>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -250,11 +307,11 @@ export const ViewersScreen: React.FC = () => {
       )}      {/* Viewers Table */}
       {!loading && viewers.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>            <thead>
               <tr style={{ backgroundColor: '#2a2a2a' }}>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Display Name</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Roles</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Moderation</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Subscription Status</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>First Seen</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Last Updated</th>
@@ -279,8 +336,7 @@ export const ViewersScreen: React.FC = () => {
                     <span style={{ color: '#9147ff', fontWeight: 'bold' }}>
                       {viewer.display_name || 'Unknown'}
                     </span>
-                  </td>
-                  <td style={{ padding: '10px' }}>
+                  </td>                  <td style={{ padding: '10px' }}>
                     {roles.length > 0 ? (
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {viewer.is_broadcaster && (
@@ -323,6 +379,9 @@ export const ViewersScreen: React.FC = () => {
                     ) : (
                       <span style={{ color: '#888', fontSize: '12px' }}>—</span>
                     )}
+                  </td>
+                  <td style={{ padding: '10px' }}>
+                    {renderModerationStatus(viewer)}
                   </td>
                   <td style={{ padding: '10px' }}>
                     <span style={{

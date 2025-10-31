@@ -568,7 +568,6 @@ export function runMigrations(db: Database.Database): void {
     WHERE mh.rn = 1
     ORDER BY mh.detected_at DESC
   `);
-
   // ===== VIEWER SUBSCRIPTION STATUS VIEW =====
 
   db.exec(`
@@ -598,9 +597,13 @@ export function runMigrations(db: Database.Database): void {
       END AS subscription_status,
       (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'vip' AND revoked_at IS NULL) AS is_vip,
       (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'moderator' AND revoked_at IS NULL) AS is_moderator,
-      (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'broadcaster' AND revoked_at IS NULL) AS is_broadcaster
+      (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'broadcaster' AND revoked_at IS NULL) AS is_broadcaster,
+      cms.current_status AS moderation_status,
+      cms.reason AS moderation_reason,
+      cms.timeout_expires_at AS moderation_expires_at
     FROM viewers v
     LEFT JOIN viewer_subscriptions vs ON v.id = vs.viewer_id
+    LEFT JOIN current_moderation_status cms ON v.id = cms.viewer_id
   `);
 
   // ===== TWITCH API POLLING CONFIGURATION =====

@@ -40,10 +40,12 @@ export async function subscribeToEvent(
         condition.to_broadcaster_user_id = broadcasterId;
       } else if (eventType.includes('moderator') || eventType.includes('shield_mode')) {
         condition.broadcaster_user_id = broadcasterId;
-        condition.moderator_user_id = userId;
-      } else if (eventType.startsWith('channel.shoutout')) {
+        condition.moderator_user_id = userId;      } else if (eventType.startsWith('channel.shoutout')) {
         condition.broadcaster_user_id = broadcasterId;
         condition.moderator_user_id = userId;
+      } else if (eventType === 'channel.ban' || eventType === 'channel.unban') {
+        // Ban/unban events ONLY need broadcaster_user_id (per Twitch docs)
+        condition.broadcaster_user_id = broadcasterId;
       } else {
         condition.broadcaster_user_id = broadcasterId;
       }
@@ -127,9 +129,7 @@ export async function subscribeToEvent(
             const subscriptionResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
               method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId, 'Content-Type': 'application/json' },
               body: JSON.stringify({ type: eventType, version, condition, transport: { method: 'websocket', session_id: sessionId } })
-            });
-
-            const result = await subscriptionResponse.json().catch(() => ({}));
+            });            const result = await subscriptionResponse.json().catch(() => ({}));
             if (subscriptionResponse.ok) {
               console.log('[EventSub] Subscription created:', result);
               if (result && result.data && result.data[0] && result.data[0].id) {
@@ -176,7 +176,13 @@ export async function subscribeToEvent(
 
               return;
             }
-            console.warn('[EventSub] Create failed status=', subscriptionResponse.status, 'body=', result);
+            
+            // Enhanced error logging for debugging
+            console.error(`[EventSub] ❌ Create FAILED for ${eventType}`);
+            console.error(`[EventSub] Status: ${subscriptionResponse.status}`);
+            console.error(`[EventSub] Error body:`, JSON.stringify(result, null, 2));
+            console.error(`[EventSub] Condition sent:`, JSON.stringify(condition, null, 2));
+            console.error(`[EventSub] Version sent: ${version}`);
             if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 1000 * attempt));
           } catch (err) {
             console.warn('[EventSub] Create attempt error', err);

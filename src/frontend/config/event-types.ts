@@ -139,6 +139,12 @@ export const DEFAULT_SUBSCRIPTIONS: (keyof EventSubscriptions)[] = [
   'channel.subscription.gift',
   'channel.cheer',
   'channel.raid',
+  'channel.ban', // Real-time ban tracking
+  'channel.unban', // Real-time unban tracking
+  'channel.moderator.add', // Real-time moderator grants
+  'channel.moderator.remove', // Real-time moderator revokes
+  'channel.vip.add', // Real-time VIP grants
+  'channel.vip.remove', // Real-time VIP revokes
   'channel.channel_points_custom_reward_redemption.add',
   'stream.online',
   'stream.offline'

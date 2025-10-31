@@ -47,8 +47,7 @@ interface EventSubStatus {
  */
 export class EventSubManager extends EventEmitter {
   private ws: WebSocket | null = null;
-  private sessionId: string | null = null;
-  private keepaliveTimeout: NodeJS.Timeout | null = null;
+  private sessionId: string | null = null;  private keepaliveTimeout: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
   private subscriptions: Set<string> = new Set();
@@ -56,6 +55,7 @@ export class EventSubManager extends EventEmitter {
   private channelId: string | null = null;
   private accessToken: string | null = null;
   private clientId: string | null = null;
+  private connectionResolver: (() => void) | null = null; // ✅ ADDED
 
   private sessionsRepo = new SessionsRepository();
   private tokensRepo = new TokensRepository();
@@ -87,16 +87,17 @@ export class EventSubManager extends EventEmitter {
       console.error('[EventSub] Initialization failed:', error);
       throw error;
     }
-  }
-
-  /**
+  }  /**
    * Connect to EventSub WebSocket
    */
   private async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const wsUrl = 'wss://eventsub-beta.wss.twitch.tv';
+        const wsUrl = 'wss://eventsub.wss.twitch.tv/ws';
         console.log('[EventSub] Connecting to', wsUrl);
+
+        // Store resolver to call when welcome message is received
+        this.connectionResolver = resolve;
 
         this.ws = new WebSocket(wsUrl);
 
@@ -111,6 +112,7 @@ export class EventSubManager extends EventEmitter {
         this.ws.onerror = (error: Event) => {
           console.error('[EventSub] WebSocket error:', error);
           this.emit('error', error);
+          this.connectionResolver = null; // Clear resolver on error
           reject(error);
         };
 
@@ -118,6 +120,7 @@ export class EventSubManager extends EventEmitter {
           console.log('[EventSub] WebSocket closed');
           this.clearKeepalive();
           this.emit('disconnected');
+          this.connectionResolver = null; // Clear resolver on close
           this.attemptReconnect();
         };
 
@@ -166,7 +169,6 @@ export class EventSubManager extends EventEmitter {
         console.warn('[EventSub] Unknown message type:', metadata.message_type);
     }
   }
-
   /**
    * Handle welcome message - subscribe to events
    */
@@ -191,6 +193,12 @@ export class EventSubManager extends EventEmitter {
       sessionId: this.sessionId,
       connectedAt: new Date().toISOString(),
     });
+
+    // Resolve the connection promise
+    if (this.connectionResolver) {
+      this.connectionResolver();
+      this.connectionResolver = null;
+    }
   }
 
   /**
@@ -259,13 +267,13 @@ export class EventSubManager extends EventEmitter {
     if (!this.sessionId || !this.accessToken || !this.clientId || !this.channelId) {
       console.error('[EventSub] Missing required data for subscription');
       return;
-    }
-
-    const eventTypes = [
+    }    const eventTypes = [
       'channel.follow',
       'channel.subscribe',
       'channel.subscription.end',
       'channel.subscription.gift',
+      'channel.ban',
+      'channel.unban',
       'channel.moderator.add',
       'channel.moderator.remove',
       'channel.vip.add',
@@ -290,14 +298,15 @@ export class EventSubManager extends EventEmitter {
    * Subscribe to a specific event type
    */
   private async subscribeToEvent(eventType: string): Promise<void> {
-    const url = 'https://api.twitch.tv/helix/eventsub/subscriptions';
-
-    // Build condition based on event type
+    const url = 'https://api.twitch.tv/helix/eventsub/subscriptions';    // Build condition based on event type
     const condition: any = { broadcaster_user_id: this.channelId };
 
     if (eventType === 'channel.follow') {
       condition.moderator_user_id = this.channelId;
     }
+
+    // Ban/unban events ONLY need broadcaster_user_id (per Twitch docs)
+    // DO NOT add moderator_user_id for these events
 
     const payload = {
       type: eventType,
