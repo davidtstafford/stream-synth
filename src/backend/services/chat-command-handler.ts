@@ -270,20 +270,7 @@ export class ChatCommandHandler {
       throw new Error(`User @${targetUsername} not found in the database`);
     }
 
-    // Ensure viewer rule exists
-    let viewerRule = this.voicePrefsRepo.getByViewerId(targetViewer.id);
-    if (!viewerRule) {
-      // Create a default viewer rule if it doesn't exist
-      this.voicePrefsRepo.upsert({
-        viewer_id: targetViewer.id,
-        voice_id: 'alloy', // Default voice
-        provider: 'openai',
-        pitch: 1.0,
-        speed: 1.0
-      });
-    }
-
-    // Add/update mute rule
+    // Add/update mute rule (no need to create viewer rule - restrictions are separate)
     const config: MuteConfig = {
       mute_period_mins: minutes === 0 ? null : minutes
     };
@@ -294,8 +281,7 @@ export class ChatCommandHandler {
     } else {
       return `🔇 @${targetUsername} has been muted from TTS for ${minutes} minute(s)`;
     }
-  }
-  /**
+  }  /**
    * Command: ~unmutevoice @user
    */
   private async handleUnmuteVoice(args: string[], context: ChatCommandContext): Promise<string> {
@@ -311,20 +297,7 @@ export class ChatCommandHandler {
       throw new Error(`User @${targetUsername} not found in the database`);
     }
 
-    // Ensure viewer rule exists
-    let viewerRule = this.voicePrefsRepo.getByViewerId(targetViewer.id);
-    if (!viewerRule) {
-      // Create a default viewer rule if it doesn't exist
-      this.voicePrefsRepo.upsert({
-        viewer_id: targetViewer.id,
-        voice_id: 'alloy', // Default voice
-        provider: 'openai',
-        pitch: 1.0,
-        speed: 1.0
-      });
-    }
-
-    // Remove mute rule
+    // Remove mute rule (no need to check/create viewer rule)
     this.viewerTTSRulesRepo.removeMute(targetViewer.id);
 
     return `✅ @${targetUsername} has been unmuted from TTS`;
@@ -349,25 +322,11 @@ export class ChatCommandHandler {
     if (isNaN(periodMins) || periodMins < 0) {
       throw new Error('Period must be >= 0 minutes (0 = permanent)');
     }    // Get target viewer
-    const targetViewer = this.viewersRepo.getByUsername(targetUsername);
-    if (!targetViewer) {
+    const targetViewer = this.viewersRepo.getByUsername(targetUsername);    if (!targetViewer) {
       throw new Error(`User @${targetUsername} not found in the database`);
     }
 
-    // Ensure viewer rule exists
-    let viewerRule = this.voicePrefsRepo.getByViewerId(targetViewer.id);
-    if (!viewerRule) {
-      // Create a default viewer rule if it doesn't exist
-      this.voicePrefsRepo.upsert({
-        viewer_id: targetViewer.id,
-        voice_id: 'alloy', // Default voice
-        provider: 'openai',
-        pitch: 1.0,
-        speed: 1.0
-      });
-    }
-
-    // Add/update cooldown rule
+    // Add/update cooldown rule (no need to check/create viewer rule)
     const config: CooldownConfig = {
       cooldown_gap_seconds: gapSeconds,
       cooldown_period_mins: periodMins === 0 ? null : periodMins
@@ -379,7 +338,7 @@ export class ChatCommandHandler {
     } else {
       return `⏰ @${targetUsername} now has a ${gapSeconds} second TTS cooldown for ${periodMins} minute(s)`;
     }
-  }  /**
+  }/**
    * Command: ~mutetts (globally disable TTS)
    */
   private async handleMuteTTS(context: ChatCommandContext): Promise<string> {

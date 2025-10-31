@@ -12,6 +12,7 @@ import { setupDiscordHandlers } from './discord';
 import { setupIRCHandlers, setMainWindowForIRC } from './irc';
 import { setupTTSAccessHandlers } from './tts-access';
 import { setupChatCommandHandlers } from './chat-commands';
+import { ViewerTTSRulesRepository } from '../../database/repositories/viewer-tts-rules';
 import './twitch-polling'; // Auto-registers handlers
 
 export function setupIpcHandlers(): void {
@@ -29,6 +30,7 @@ export function setMainWindow(mainWindow: BrowserWindow): void {
   setMainWindowForTwitch(mainWindow);
   setMainWindowForTTS(mainWindow);
   setMainWindowForIRC(mainWindow);
+  ViewerTTSRulesRepository.setMainWindow(mainWindow);
   
   // Setup the event storage handler which needs mainWindow reference
   setupEventStorageHandler(initializeTTS, mainWindow);

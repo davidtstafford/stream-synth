@@ -1,4 +1,5 @@
 import { BaseRepository } from '../base-repository';
+import { BrowserWindow } from 'electron';
 
 export interface ViewerTTSRules {
   id: number;
@@ -33,6 +34,22 @@ export interface CooldownConfig {
 }
 
 export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
+  private static mainWindow: BrowserWindow | null = null;
+
+  static setMainWindow(mainWindow: BrowserWindow | null): void {
+    ViewerTTSRulesRepository.mainWindow = mainWindow;
+  }
+
+  private static emitRestrictionUpdate(): void {
+    if (ViewerTTSRulesRepository.mainWindow && !ViewerTTSRulesRepository.mainWindow.isDestroyed()) {
+      try {
+        ViewerTTSRulesRepository.mainWindow.webContents.send('viewer-tts-rules-updated');
+      } catch (error) {
+        console.error('[ViewerTTSRulesRepo] Error emitting update event:', error);
+      }
+    }
+  }
+
   get tableName(): string {
     return 'viewer_tts_rules';
   }
@@ -105,6 +122,9 @@ export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
         expiresAt
       );
 
+      // Emit real-time update event
+      ViewerTTSRulesRepository.emitRestrictionUpdate();
+
       return { success: true };
     } catch (error: any) {
       console.error('[ViewerTTSRulesRepo] Error setting mute:', error);
@@ -127,6 +147,9 @@ export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
             updated_at = CURRENT_TIMESTAMP
         WHERE viewer_id = ?
       `).run(viewerId);
+
+      // Emit real-time update event
+      ViewerTTSRulesRepository.emitRestrictionUpdate();
 
       return { success: true };
     } catch (error: any) {
@@ -172,6 +195,9 @@ export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
         expiresAt
       );
 
+      // Emit real-time update event
+      ViewerTTSRulesRepository.emitRestrictionUpdate();
+
       return { success: true };
     } catch (error: any) {
       console.error('[ViewerTTSRulesRepo] Error setting cooldown:', error);
@@ -196,6 +222,9 @@ export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
         WHERE viewer_id = ?
       `).run(viewerId);
 
+      // Emit real-time update event
+      ViewerTTSRulesRepository.emitRestrictionUpdate();
+
       return { success: true };
     } catch (error: any) {
       console.error('[ViewerTTSRulesRepo] Error removing cooldown:', error);
@@ -212,6 +241,9 @@ export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
       db.prepare(`
         DELETE FROM viewer_tts_rules WHERE viewer_id = ?
       `).run(viewerId);
+
+      // Emit real-time update event
+      ViewerTTSRulesRepository.emitRestrictionUpdate();
 
       return { success: true };
     } catch (error: any) {
@@ -237,7 +269,8 @@ export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
             updated_at = CURRENT_TIMESTAMP
         WHERE is_muted = 1 
           AND mute_expires_at IS NOT NULL 
-          AND mute_expires_at <= ?      `).run(now);
+          AND mute_expires_at <= ?
+      `).run(now);
 
       // Clear expired cooldowns
       const cooldownsCleared = db.prepare(`
@@ -257,6 +290,8 @@ export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
       
       if (totalCleared > 0) {
         console.log(`[ViewerTTSRulesRepo] Cleaned up ${totalCleared} expired rules`);
+        // Emit update event on cleanup as well
+        ViewerTTSRulesRepository.emitRestrictionUpdate();
       }
 
       return totalCleared;
@@ -264,7 +299,8 @@ export class ViewerTTSRulesRepository extends BaseRepository<ViewerTTSRules> {
       console.error('[ViewerTTSRulesRepo] Error cleaning expired rules:', error);
       return 0;
     }
-  }  /**
+  }
+  /**
    * Get all currently muted viewers
    */
   getAllMuted(): ViewerTTSRules[] {

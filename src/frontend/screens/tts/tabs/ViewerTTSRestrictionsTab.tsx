@@ -36,8 +36,7 @@ interface Message {
   text: string;
 }
 
-export const ViewerTTSRestrictionsTab: React.FC = () => {
-  const [mutedUsers, setMutedUsers] = useState<ViewerTTSRules[]>([]);
+export const ViewerTTSRestrictionsTab: React.FC = () => {  const [mutedUsers, setMutedUsers] = useState<ViewerTTSRules[]>([]);
   const [cooldownUsers, setCooldownUsers] = useState<ViewerTTSRules[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Viewer[]>([]);
@@ -52,13 +51,15 @@ export const ViewerTTSRestrictionsTab: React.FC = () => {
   const [cooldownGapSeconds, setCooldownGapSeconds] = useState(30);
   const [cooldownPeriodMins, setCooldownPeriodMins] = useState(60);
   
-  // Countdown timer
+  // Real-time update tracking
   const [countdownTick, setCountdownTick] = useState(0);
-
+  const pollingIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
+  // Initial load
   useEffect(() => {
     loadRestrictions();
   }, []);
 
+  // Search functionality
   useEffect(() => {
     if (searchTerm.length >= 2) {
       searchViewers();
@@ -67,19 +68,19 @@ export const ViewerTTSRestrictionsTab: React.FC = () => {
     }
   }, [searchTerm]);
 
-  // Set up countdown timer
+  // Set up countdown timer (updates UI time remaining displays)
   useEffect(() => {
-    const interval = setInterval(() => {
+    const countdownInterval = setInterval(() => {
       setCountdownTick(prev => prev + 1);
-    }, 10000); // Update every 10 seconds
+    }, 10000); // Update time displays every 10 seconds
 
-    return () => clearInterval(interval);
+    return () => clearInterval(countdownInterval);
   }, []);
 
-  // Listen for TTS rules updates from chat commands
+  // Listen for real-time TTS rules updates (from IPC events or chat commands)
   useEffect(() => {
     const handleTTSRulesUpdated = () => {
-      console.log('[ViewerTTSRestrictionsTab] TTS rules updated via chat');
+      console.log('[ViewerTTSRestrictionsTab] TTS rules updated - reloading');
       loadRestrictions();
     };
 
@@ -87,6 +88,39 @@ export const ViewerTTSRestrictionsTab: React.FC = () => {
 
     return () => {
       ipcRenderer.removeListener('viewer-tts-rules-updated', handleTTSRulesUpdated);
+    };
+  }, []);
+
+  // Set up polling as fallback (checks for changes every 30 seconds)
+  useEffect(() => {
+    const startPolling = () => {
+      pollingIntervalRef.current = setInterval(async () => {
+        try {
+          const [mutedResponse, cooldownResponse] = await Promise.all([
+            ipcRenderer.invoke('viewer-tts-rules:get-all-muted'),
+            ipcRenderer.invoke('viewer-tts-rules:get-all-cooldown')
+          ]);
+
+          if (mutedResponse.success && mutedResponse.data) {
+            setMutedUsers(mutedResponse.data);
+          }
+          
+          if (cooldownResponse.success && cooldownResponse.data) {
+            setCooldownUsers(cooldownResponse.data);
+          }
+        } catch (error) {
+          console.error('[ViewerTTSRestrictionsTab] Polling error:', error);
+        }
+      }, 30000); // Poll every 30 seconds
+    };
+
+    startPolling();
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
     };
   }, []);
 
