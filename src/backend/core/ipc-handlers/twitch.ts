@@ -315,14 +315,14 @@ export function setupTwitchHandlers(): void {
           timeouts: moderationRepo.getActiveTimeoutsCount(session.channel_id)
         };
       }
-    }
-  );
+    }  );
 
   // ===== EventSub WebSocket Handlers (Phase 7) =====
+  
   ipcRegistry.register<void, {
-    isConnected: boolean;
+    connected: boolean;
     sessionId: string | null;
-    subscriptions: string[];
+    subscriptions: Array<{ type: string; condition: Record<string, string> }>;
     subscriptionCount: number;
     lastConnectedAt: string | null;
     nextKeepaliveAt: string | null;
@@ -332,7 +332,24 @@ export function setupTwitchHandlers(): void {
     {
       execute: async () => {
         const manager = getEventSubManager();
-        return manager.getStatus();
+        const status = manager.getStatus();
+        
+        // Transform backend status to match frontend expectations
+        return {
+          connected: status.isConnected,  // Transform: isConnected → connected
+          sessionId: status.sessionId,
+          // Transform: string[] → { type, condition }[]
+          subscriptions: status.subscriptions.map(eventType => ({
+            type: eventType,
+            condition: {
+              broadcaster_user_id: 'BROADCASTER_ID' // Placeholder - we don't track conditions
+            }
+          })),
+          subscriptionCount: status.subscriptionCount,
+          lastConnectedAt: status.lastConnectedAt,
+          nextKeepaliveAt: status.nextKeepaliveAt,
+          reconnectAttempts: status.reconnectAttempts
+        };
       },
     }
   );

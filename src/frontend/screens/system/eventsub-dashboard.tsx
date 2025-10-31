@@ -178,11 +178,10 @@ export const EventSubDashboard: React.FC<EventSubDashboardProps> = ({
             <span style={{ color: '#2196f3', fontFamily: "'Courier New', monospace", fontSize: '12px', padding: '4px 8px', backgroundColor: '#e3f2fd', borderRadius: '4px' }}>
               {status?.sessionId ? status.sessionId.substring(0, 16) + '...' : 'None'}
             </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9f9f9', borderRadius: '6px', border: '1px solid #e8e8e8' }}>
+          </div>          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9f9f9', borderRadius: '6px', border: '1px solid #e8e8e8' }}>
             <span style={{ fontWeight: 600, color: '#555', minWidth: '140px' }}>Active Subscriptions:</span>
             <span style={{ color: '#2196f3', fontFamily: "'Courier New', monospace", fontSize: '12px', padding: '4px 8px', backgroundColor: '#e3f2fd', borderRadius: '4px' }}>
-              {status?.subscriptionCount || 0} / 8
+              {status?.subscriptionCount || 0}
             </span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9f9f9', borderRadius: '6px', border: '1px solid #e8e8e8' }}>
@@ -276,10 +275,8 @@ export const EventSubDashboard: React.FC<EventSubDashboardProps> = ({
             Auto-refresh (5s)
           </label>
         </div>
-      </div>
-
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)', border: '1px solid #e0e0e0' }}>
-        <h2 style={{ margin: '0 0 16px 0', fontSize: '18px', color: '#333', fontWeight: 600 }}>Available Event Types</h2>
+      </div>      <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)', border: '1px solid #e0e0e0' }}>
+        <h2 style={{ margin: '0 0 16px 0', fontSize: '18px', color: '#333', fontWeight: 600 }}>Event Subscriptions</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
           {eventTypes.map((event) => {
             const isSubscribed = status?.subscriptions.some((sub) => sub.type === event.type);
@@ -350,11 +347,10 @@ export const EventSubDashboard: React.FC<EventSubDashboardProps> = ({
       )}
 
       <div style={{ backgroundColor: '#f5f5f5', borderRadius: '8px', padding: '20px', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)', border: '1px solid #e0e0e0' }}>
-        <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#333', fontWeight: 600 }}>About EventSub WebSocket</h3>
-        <ul style={{ margin: 0, paddingLeft: '20px', listStyleType: 'disc' }}>
+        <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#333', fontWeight: 600 }}>About EventSub WebSocket</h3>        <ul style={{ margin: 0, paddingLeft: '20px', listStyleType: 'disc' }}>
           <li style={{ margin: '8px 0', color: '#555', fontSize: '13px', lineHeight: 1.6 }}>Real-time Twitch events delivered via WebSocket connection</li>
           <li style={{ margin: '8px 0', color: '#555', fontSize: '13px', lineHeight: 1.6 }}>Reduces API polling by 90%+ with &lt;1 second event latency</li>
-          <li style={{ margin: '8px 0', color: '#555', fontSize: '13px', lineHeight: 1.6 }}>Supports 8 event types: follows, subscriptions, roles, and more</li>
+          <li style={{ margin: '8px 0', color: '#555', fontSize: '13px', lineHeight: 1.6 }}>Supports multiple event types: follows, subscriptions, roles, bans, raids, and more</li>
           <li style={{ margin: '8px 0', color: '#555', fontSize: '13px', lineHeight: 1.6 }}>Automatic reconnection with exponential backoff</li>
           <li style={{ margin: '8px 0', color: '#555', fontSize: '13px', lineHeight: 1.6 }}>Hourly reconciliation safety net for missed events</li>
           <li style={{ margin: '8px 0', color: '#555', fontSize: '13px', lineHeight: 1.6 }}>Connection status: {statusText}</li>

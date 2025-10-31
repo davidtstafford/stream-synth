@@ -567,8 +567,7 @@ export function runMigrations(db: Database.Database): void {
     INNER JOIN viewers v ON mh.viewer_id = v.id
     WHERE mh.rn = 1
     ORDER BY mh.detected_at DESC
-  `);
-  // ===== VIEWER SUBSCRIPTION STATUS VIEW =====
+  `);  // ===== VIEWER SUBSCRIPTION STATUS VIEW =====
 
   db.exec(`
     DROP VIEW IF EXISTS viewer_subscription_status
@@ -600,10 +599,13 @@ export function runMigrations(db: Database.Database): void {
       (SELECT 1 FROM viewer_roles WHERE viewer_id = v.id AND role_type = 'broadcaster' AND revoked_at IS NULL) AS is_broadcaster,
       cms.current_status AS moderation_status,
       cms.reason AS moderation_reason,
-      cms.timeout_expires_at AS moderation_expires_at
+      cms.timeout_expires_at AS moderation_expires_at,
+      cf.followed_at AS followed_at,
+      CASE WHEN cf.follower_user_id IS NOT NULL THEN 1 ELSE 0 END AS is_follower
     FROM viewers v
     LEFT JOIN viewer_subscriptions vs ON v.id = vs.viewer_id
     LEFT JOIN current_moderation_status cms ON v.id = cms.viewer_id
+    LEFT JOIN current_followers cf ON v.id = cf.viewer_id
   `);
 
   // ===== TWITCH API POLLING CONFIGURATION =====

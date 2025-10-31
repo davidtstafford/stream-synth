@@ -29,6 +29,8 @@ export interface ViewerWithSubscription {
   moderation_status: string | null; // 'banned', 'timed_out', 'active', null
   moderation_reason: string | null;
   moderation_expires_at: string | null; // For timeouts
+  followed_at: string | null; // When user followed the channel
+  is_follower: number | null; // 1 if currently following, 0 if not
 }
 
 export class SubscriptionsRepository extends BaseRepository<ViewerSubscription> {

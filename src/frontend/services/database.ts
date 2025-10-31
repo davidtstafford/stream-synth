@@ -238,6 +238,8 @@ export interface ViewerWithSubscription {
   moderation_status: string | null;
   moderation_reason: string | null;
   moderation_expires_at: string | null;
+  followed_at: string | null;
+  is_follower: number | null;
 }
 
 export async function upsertSubscription(

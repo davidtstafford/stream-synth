@@ -10,6 +10,27 @@ interface WebSocketMessage {
     subscription_type?: string;
     subscription_version?: string;
   };
+  payload?: {
+    subscription?: {
+      id: string;
+      type: string;
+      version: string;
+      status: string;
+      cost: number;
+      condition: any;
+      transport: any;
+      created_at: string;
+    };
+    session?: {
+      id: string;
+      status: 'connected' | 'reconnecting' | 'failed';
+      connected_at: string;
+      keepalive_timeout_seconds?: number;
+      reconnect_url?: string;
+    };
+    event?: any;
+  };
+  // Deprecated fields (keeping for backward compatibility)
   subscription?: {
     id: string;
     type: string;
@@ -168,17 +189,25 @@ export class EventSubManager extends EventEmitter {
       default:
         console.warn('[EventSub] Unknown message type:', metadata.message_type);
     }
-  }
-  /**
+  }  /**
    * Handle welcome message - subscribe to events
    */
   private handleWelcome(message: WebSocketMessage): void {
-    if (!message.session) {
+    console.log('[EventSub] Welcome message received:', JSON.stringify(message, null, 2));
+    
+    // Twitch sends session data in payload.session
+    const session = message.payload?.session || message.session;
+    
+    if (!session) {
       console.error('[EventSub] No session in welcome message');
+      console.error('[EventSub] Message structure:', Object.keys(message));
+      if (message.payload) {
+        console.error('[EventSub] Payload structure:', Object.keys(message.payload));
+      }
       return;
     }
 
-    this.sessionId = message.session.id;
+    this.sessionId = session.id;
     this.reconnectAttempts = 0;
 
     console.log('[EventSub] Connected with session:', this.sessionId);
@@ -211,30 +240,33 @@ export class EventSubManager extends EventEmitter {
 
   /**
    * Handle reconnect request
-   */
-  private handleReconnect(message: WebSocketMessage): void {
+   */  private handleReconnect(message: WebSocketMessage): void {
     console.log('[EventSub] Reconnect requested');
-    if (message.session?.reconnect_url) {
+    const session = message.payload?.session || message.session;
+    if (session?.reconnect_url) {
       this.closeConnection();
-      this.connectToUrl(message.session.reconnect_url);
+      this.connectToUrl(session.reconnect_url);
     }
   }
   /**
    * Handle event notification
-   */
-  private handleEvent(message: WebSocketMessage): void {
-    if (!message.subscription || !message.event) {
+   */  private handleEvent(message: WebSocketMessage): void {
+    // Check both payload and root level for backward compatibility
+    const subscription = message.payload?.subscription || message.subscription;
+    const event = message.payload?.event || message.event;
+    
+    if (!subscription || !event) {
       console.warn('[EventSub] Invalid event notification');
       return;
     }
 
-    const eventType = message.subscription.type;
+    const eventType = subscription.type;
     console.log('[EventSub] 📨 Event received:', eventType);
 
     const eventData = {
       type: eventType,
-      version: message.subscription.version,
-      data: message.event,
+      version: subscription.version,
+      data: event,
       timestamp: message.metadata.message_timestamp,
     };
 
@@ -293,7 +325,6 @@ export class EventSubManager extends EventEmitter {
 
     console.log('[EventSub] Subscription complete');
   }
-
   /**
    * Subscribe to a specific event type
    */
@@ -308,9 +339,13 @@ export class EventSubManager extends EventEmitter {
     // Ban/unban events ONLY need broadcaster_user_id (per Twitch docs)
     // DO NOT add moderator_user_id for these events
 
+    // Determine the correct version for each event type
+    // channel.follow v1 was deprecated, use v2
+    const version = eventType === 'channel.follow' ? '2' : '1';
+
     const payload = {
       type: eventType,
-      version: '1',
+      version,
       condition,
       transport: {
         method: 'websocket',
@@ -339,13 +374,14 @@ export class EventSubManager extends EventEmitter {
 
   /**
    * Set up keepalive timeout (10 seconds)
-   */
-  private setupKeepalive(): void {
+   */  private setupKeepalive(): void {
     this.clearKeepalive();
+    // Twitch sends keepalives every 10 seconds
+    // Set timeout to 15 seconds to account for network delays
     this.keepaliveTimeout = setTimeout(() => {
       console.error('[EventSub] Keepalive timeout - connection may be dead');
       this.closeConnection();
-    }, 10000);
+    }, 15000);
   }
 
   /**

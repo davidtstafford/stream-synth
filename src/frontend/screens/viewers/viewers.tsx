@@ -108,7 +108,6 @@ export const ViewersScreen: React.FC = () => {
       alert(err.message || 'Failed to delete all viewers');
     }
   };
-
   const handleSyncFromTwitch = async () => {
     setSyncing(true);
     setSyncMessage(null);
@@ -116,10 +115,15 @@ export const ViewersScreen: React.FC = () => {
 
     try {
       const { ipcRenderer } = window.require('electron');
-      const result = await ipcRenderer.invoke('twitch:sync-subscriptions-from-twitch');
+      
+      // Sync roles (subscribers, VIPs, moderators)
+      const roleResult = await ipcRenderer.invoke('twitch:sync-subscriptions-from-twitch');
+      
+      // Sync followers
+      const followerResult = await ipcRenderer.invoke('twitch:sync-followers-from-twitch');
 
-      if (result.success) {
-        const message = `✓ Synced successfully: ${result.subCount || 0} subscribers, ${result.vipCount || 0} VIPs, ${result.modCount || 0} moderators`;
+      if (roleResult.success && followerResult.success) {
+        const message = `✓ Synced: ${roleResult.subCount || 0} subs, ${roleResult.vipCount || 0} VIPs, ${roleResult.modCount || 0} mods, ${followerResult.newFollowers || 0} new followers`;
         setSyncMessage(message);
         
         // Reload viewers to show updated data
@@ -128,7 +132,10 @@ export const ViewersScreen: React.FC = () => {
         // Clear message after 5 seconds
         setTimeout(() => setSyncMessage(null), 5000);
       } else {
-        setError(result.error || 'Failed to sync from Twitch');
+        const errors = [];
+        if (!roleResult.success) errors.push(roleResult.error || 'Role sync failed');
+        if (!followerResult.success) errors.push(followerResult.error || 'Follower sync failed');
+        setError(errors.join(', '));
       }
     } catch (err: any) {
       setError(err.message || 'Failed to sync from Twitch');
@@ -311,6 +318,7 @@ export const ViewersScreen: React.FC = () => {
               <tr style={{ backgroundColor: '#2a2a2a' }}>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Display Name</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Roles</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Follower</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Moderation</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Subscription Status</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>First Seen</th>
@@ -376,10 +384,27 @@ export const ViewersScreen: React.FC = () => {
                           </span>
                         )}
                       </div>
+                    ) : (                      <span style={{ color: '#888', fontSize: '12px' }}>—</span>
+                    )}
+                  </td>
+                  
+                  <td style={{ padding: '10px' }}>
+                    {viewer.is_follower ? (
+                      <span style={{
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        backgroundColor: '#9147ff',
+                        color: 'white'
+                      }} title={viewer.followed_at ? `Followed: ${formatDate(viewer.followed_at)}` : 'Following'}>
+                        FOLLOWING
+                      </span>
                     ) : (
                       <span style={{ color: '#888', fontSize: '12px' }}>—</span>
                     )}
                   </td>
+                  
                   <td style={{ padding: '10px' }}>
                     {renderModerationStatus(viewer)}
                   </td>
