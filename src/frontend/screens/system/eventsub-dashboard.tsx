@@ -276,7 +276,10 @@ export const EventSubDashboard: React.FC<EventSubDashboardProps> = ({
           </label>
         </div>
       </div>      <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)', border: '1px solid #e0e0e0' }}>
-        <h2 style={{ margin: '0 0 16px 0', fontSize: '18px', color: '#333', fontWeight: 600 }}>Event Subscriptions</h2>
+        <h2 style={{ margin: '0 0 8px 0', fontSize: '18px', color: '#333', fontWeight: 600 }}>Common Event Types</h2>
+        <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#666', lineHeight: 1.5 }}>
+          Quick preview of the most frequently used events. See "Active Subscriptions" below for the complete list of all {status?.subscriptionCount || 0} subscribed events.
+        </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
           {eventTypes.map((event) => {
             const isSubscribed = status?.subscriptions.some((sub) => sub.type === event.type);
@@ -305,12 +308,15 @@ export const EventSubDashboard: React.FC<EventSubDashboardProps> = ({
             );
           })}
         </div>
-      </div>
-
-      {status && status.subscriptions.length > 0 && (
+      </div>      {status && status.subscriptions.length > 0 && (
         <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)', border: '1px solid #e0e0e0' }}>
-          <h2 style={{ margin: '0 0 16px 0', fontSize: '18px', color: '#333', fontWeight: 600 }}>Active Subscriptions</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <h2 style={{ margin: '0 0 8px 0', fontSize: '18px', color: '#333', fontWeight: 600 }}>
+            All Active Subscriptions ({status.subscriptions.length})
+          </h2>
+          <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#666', lineHeight: 1.5 }}>
+            Complete list of all EventSub event types currently subscribed. Configure which events to enable in <strong>Settings → Events</strong>.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
             {status.subscriptions.map((sub, index) => (
               <div key={index} style={{ display: 'flex', gap: '16px', padding: '12px', backgroundColor: '#f9f9f9', borderRadius: '6px', border: '1px solid #e8e8e8' }}>
                 <span style={{ fontWeight: 600, color: '#2196f3', minWidth: '200px', fontFamily: "'Courier New', monospace", fontSize: '12px' }}>{sub.type}</span>
@@ -320,7 +326,8 @@ export const EventSubDashboard: React.FC<EventSubDashboardProps> = ({
               </div>
             ))}
           </div>
-        </div>      )}
+        </div>
+      )}
 
       {recentEvents.length > 0 && (
         <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)', border: '1px solid #e0e0e0' }}>

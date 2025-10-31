@@ -290,27 +290,37 @@ export class EventSubManager extends EventEmitter {
     console.warn('[EventSub] Subscription revoked:', message.subscription.type);
     this.subscriptions.delete(message.subscription.type);
     this.emit('subscription-revoked', message.subscription.type);
-  }
-
-  /**
+  }  /**
    * Subscribe to all EventSub events
    */
   private async subscribeToEvents(): Promise<void> {
-    if (!this.sessionId || !this.accessToken || !this.clientId || !this.channelId) {
+    if (!this.sessionId || !this.accessToken || !this.clientId || !this.channelId || !this.userId) {
       console.error('[EventSub] Missing required data for subscription');
       return;
-    }    const eventTypes = [
-      'channel.follow',
-      'channel.subscribe',
-      'channel.subscription.end',
-      'channel.subscription.gift',
-      'channel.ban',
-      'channel.unban',
-      'channel.moderator.add',
-      'channel.moderator.remove',
-      'channel.vip.add',
-      'channel.vip.remove',
-    ];
+    }
+
+    // Load enabled events from database instead of hardcoded list
+    const { EventsRepository } = require('../database/repositories/events');
+    const eventsRepo = new EventsRepository();
+    let eventTypes: string[] = eventsRepo.getEnabledEvents(this.userId, this.channelId);
+
+    // Filter out IRC events (not available via EventSub WebSocket)
+    eventTypes = eventTypes.filter((type: string) => !type.startsWith('irc.'));
+
+    if (eventTypes.length === 0) {
+      console.warn('[EventSub] No enabled events found in database, using defaults');
+      // Fallback to safe defaults if nothing is enabled
+      eventTypes = [
+        'channel.follow',
+        'channel.subscribe',
+        'channel.ban',
+        'channel.unban',
+        'channel.moderator.add',
+        'channel.moderator.remove',
+        'channel.vip.add',
+        'channel.vip.remove',
+      ];
+    }
 
     console.log('[EventSub] Subscribing to', eventTypes.length, 'event types');
 
@@ -324,24 +334,36 @@ export class EventSubManager extends EventEmitter {
     }
 
     console.log('[EventSub] Subscription complete');
-  }
-  /**
+  }  /**
    * Subscribe to a specific event type
    */
   private async subscribeToEvent(eventType: string): Promise<void> {
     const url = 'https://api.twitch.tv/helix/eventsub/subscriptions';    // Build condition based on event type
     const condition: any = { broadcaster_user_id: this.channelId };
 
+    // Special conditions for specific event types
     if (eventType === 'channel.follow') {
+      // channel.follow v2 requires moderator_user_id
       condition.moderator_user_id = this.channelId;
+    } else if (eventType === 'channel.chat.message' || 
+               eventType === 'channel.chat.clear' ||
+               eventType === 'channel.chat.clear_user_messages' ||
+               eventType === 'channel.chat.message_delete' ||
+               eventType === 'channel.chat_settings.update') {
+      // Chat events require user_id
+      condition.user_id = this.channelId;
     }
 
-    // Ban/unban events ONLY need broadcaster_user_id (per Twitch docs)
-    // DO NOT add moderator_user_id for these events
-
     // Determine the correct version for each event type
-    // channel.follow v1 was deprecated, use v2
-    const version = eventType === 'channel.follow' ? '2' : '1';
+    // Most events use v1, but some require v2
+    let version = '1';
+    if (eventType === 'channel.follow') {
+      version = '2'; // channel.follow v1 was deprecated
+    } else if (eventType === 'channel.chat.message' ||
+               eventType === 'channel.chat.notification') {
+      version = '1'; // Chat events use v1
+    }
+    // All other events default to v1
 
     const payload = {
       type: eventType,

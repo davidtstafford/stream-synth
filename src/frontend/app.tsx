@@ -108,7 +108,7 @@ const App: React.FC = () => {
     { id: 'viewers', label: 'Viewers' },
     { id: 'tts', label: 'TTS' },
     { id: 'discord', label: 'Discord' },
-    { id: 'eventsub', label: 'EventSub' },
+    { id: 'eventsub', label: 'EventSub', isBottom: true },
     { id: 'advanced', label: 'Advanced', isBottom: true }
   ];
 
