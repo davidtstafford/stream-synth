@@ -248,6 +248,40 @@ export function setupTwitchHandlers(): void {
     }
   );
 
+  ipcRegistry.register<
+    { userId: string },
+    { isBanned: boolean; isTimedOut: boolean; expiresAt: string | null; reason: string | null }
+  >(
+    'twitch:check-user-ban-status',
+    {
+      validate: (input) => input.userId ? null : 'userId is required',      execute: async (input) => {
+        const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
+        const tokensRepo = require('../../database/repositories/tokens').TokensRepository;
+        const session = new sessionsRepo().getCurrentSession();
+
+        if (!session) {
+          throw new Error('Not connected to Twitch. Please connect first.');
+        }
+
+        const tokens = new tokensRepo().get(session.user_id);
+
+        if (!tokens?.accessToken || !tokens?.clientId) {
+          throw new Error('No valid access token found. Please reconnect.');
+        }
+
+        const { TwitchModerationService } = require('../../services/twitch-moderation');
+        const moderationService = new TwitchModerationService();
+        
+        return await moderationService.checkUserBanStatus(
+          session.user_id, // broadcasterId
+          input.userId,
+          tokens.accessToken,
+          tokens.clientId
+        );
+      }
+    }
+  );
+
   ipcRegistry.register<void, any[]>(
     'twitch:get-active-moderations',
     {

@@ -230,11 +230,14 @@ export const ViewerDetailModal: React.FC<ViewerDetailModalProps> = ({
             accessToken,
             clientId
           );
-          break;
-      }
+          break;      }
 
-      if (result?.success) {
-        setActionMessage(result.message || `Action completed successfully`);
+      // IPC framework wraps response: { success: true, data: { success, error, ... } }
+      // So we need to check result.data.success, not result.success
+      const actionResult = result?.data || result;
+
+      if (actionResult?.success) {
+        setActionMessage(actionResult.message || `Action completed successfully`);
         setSelectedAction(null);
         setActionReason('');
         setTimeoutDuration(300);
@@ -245,7 +248,7 @@ export const ViewerDetailModal: React.FC<ViewerDetailModalProps> = ({
           onActionComplete();
         }, 1500);
       } else {
-        setActionError(result?.error || 'Action failed');
+        setActionError(actionResult?.error || result?.error || 'Action failed');
       }
     } catch (err: any) {
       setActionError(err.message || 'Failed to execute action');

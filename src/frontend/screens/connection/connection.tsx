@@ -136,14 +136,8 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
             console.log('📦 Event payload:', eventPayload);
             
             if (eventType && eventPayload) {
-              // Forward event to backend for role processing
-              const { ipcRenderer } = window.require('electron');
-              console.log('📤 Forwarding event to backend router...');
-              ipcRenderer.send('eventsub-event-received', {
-                type: eventType,
-                data: eventPayload,
-                timestamp: eventTimestamp
-              });
+              // Note: Backend receives events directly from WebSocket via eventsub-manager.
+              // Frontend only needs to handle viewer/event storage for UI display.
               
               // Extract viewer info if available based on event type
               let viewerId: string | undefined;
@@ -326,14 +320,8 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
         console.log('📦 Event payload:', eventPayload);
         
         if (eventType && eventPayload) {
-          // Forward event to backend for role processing
-          const { ipcRenderer } = window.require('electron');
-          console.log('📤 Forwarding event to backend router...');
-          ipcRenderer.send('eventsub-event-received', {
-            type: eventType,
-            data: eventPayload,
-            timestamp: eventTimestamp
-          });
+          // Note: Backend receives events directly from WebSocket via eventsub-manager.
+          // Frontend only needs to handle viewer/event storage for UI display.
           
           // Extract viewer info if available based on event type
           let viewerId: string | undefined;

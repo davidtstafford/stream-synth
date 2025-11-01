@@ -18,8 +18,7 @@ export class ViewerModerationActionsService {
 
   /**
    * Ban a user from the channel
-   */
-  async banUser(
+   */  async banUser(
     broadcasterId: string,
     userId: string,
     displayName: string,
@@ -28,6 +27,7 @@ export class ViewerModerationActionsService {
     clientId: string
   ): Promise<ModerationActionResponse> {
     try {
+      console.log(`[ModActions] Banning user: ${displayName} (${userId}) in channel ${broadcasterId}`);
       const response = await fetch(
         `${this.helixBaseUrl}/moderation/bans?broadcaster_id=${broadcasterId}&moderator_id=${broadcasterId}`,
         {
@@ -38,13 +38,17 @@ export class ViewerModerationActionsService {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            user_id: userId,
-            reason: reason || undefined
+            data: {
+              user_id: userId,
+              ...(reason && { reason })
+            }
           })
         }
       );
+      console.log(`[ModActions] Ban response status: ${response.status}`);      console.log(`[ModActions] Ban response status: ${response.status}`);
 
       if (response.status === 204 || response.ok) {
+        console.log(`[ModActions] ✓ Ban successful for ${displayName}`);
         return {
           success: true,
           action: 'ban',
@@ -55,6 +59,7 @@ export class ViewerModerationActionsService {
       }
 
       const errorData = await response.json().catch(() => ({}));
+      console.error(`[ModActions] ✗ Ban failed:`, errorData);
       return {
         success: false,
         action: 'ban',
@@ -76,8 +81,7 @@ export class ViewerModerationActionsService {
 
   /**
    * Unban a user from the channel
-   */
-  async unbanUser(
+   */  async unbanUser(
     broadcasterId: string,
     userId: string,
     displayName: string,
@@ -85,6 +89,7 @@ export class ViewerModerationActionsService {
     clientId: string
   ): Promise<ModerationActionResponse> {
     try {
+      console.log(`[ModActions] Unbanning user: ${displayName} (${userId}) in channel ${broadcasterId}`);
       const response = await fetch(
         `${this.helixBaseUrl}/moderation/bans?broadcaster_id=${broadcasterId}&moderator_id=${broadcasterId}&user_id=${userId}`,
         {
@@ -95,8 +100,10 @@ export class ViewerModerationActionsService {
           }
         }
       );
+      console.log(`[ModActions] Unban response status: ${response.status}`);      console.log(`[ModActions] Unban response status: ${response.status}`);
 
       if (response.status === 204) {
+        console.log(`[ModActions] ✓ Unban successful for ${displayName}`);
         return {
           success: true,
           action: 'unban',
@@ -107,6 +114,7 @@ export class ViewerModerationActionsService {
       }
 
       const errorData = await response.json().catch(() => ({}));
+      console.error(`[ModActions] ✗ Unban failed:`, errorData);
       return {
         success: false,
         action: 'unban',
@@ -128,8 +136,7 @@ export class ViewerModerationActionsService {
 
   /**
    * Timeout a user (temporary ban)
-   */
-  async timeoutUser(
+   */  async timeoutUser(
     broadcasterId: string,
     userId: string,
     displayName: string,
@@ -150,6 +157,7 @@ export class ViewerModerationActionsService {
         };
       }
 
+      console.log(`[ModActions] Timing out user: ${displayName} (${userId}) for ${durationSeconds}s in channel ${broadcasterId}`);
       const response = await fetch(
         `${this.helixBaseUrl}/moderation/bans?broadcaster_id=${broadcasterId}&moderator_id=${broadcasterId}`,
         {
@@ -160,15 +168,19 @@ export class ViewerModerationActionsService {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            user_id: userId,
-            duration: durationSeconds,
-            reason: reason || undefined
+            data: {
+              user_id: userId,
+              duration: durationSeconds,
+              ...(reason && { reason })
+            }
           })
         }
       );
+      console.log(`[ModActions] Timeout response status: ${response.status}`);      console.log(`[ModActions] Timeout response status: ${response.status}`);
 
       if (response.status === 204 || response.ok) {
         const durationText = this.formatDuration(durationSeconds);
+        console.log(`[ModActions] ✓ Timeout successful for ${displayName} (${durationText})`);
         return {
           success: true,
           action: 'timeout',
@@ -179,6 +191,7 @@ export class ViewerModerationActionsService {
       }
 
       const errorData = await response.json().catch(() => ({}));
+      console.error(`[ModActions] ✗ Timeout failed:`, errorData);
       return {
         success: false,
         action: 'timeout',
@@ -200,8 +213,7 @@ export class ViewerModerationActionsService {
 
   /**
    * Add a user as moderator
-   */
-  async addModerator(
+   */  async addModerator(
     broadcasterId: string,
     userId: string,
     displayName: string,
@@ -209,6 +221,7 @@ export class ViewerModerationActionsService {
     clientId: string
   ): Promise<ModerationActionResponse> {
     try {
+      console.log(`[ModActions] Adding moderator: ${displayName} (${userId}) in channel ${broadcasterId}`);
       const response = await fetch(
         `${this.helixBaseUrl}/moderation/moderators?broadcaster_id=${broadcasterId}`,
         {
@@ -223,8 +236,10 @@ export class ViewerModerationActionsService {
           })
         }
       );
+      console.log(`[ModActions] Add moderator response status: ${response.status}`);      console.log(`[ModActions] Add moderator response status: ${response.status}`);
 
       if (response.status === 204 || response.ok) {
+        console.log(`[ModActions] ✓ Add moderator successful for ${displayName}`);
         return {
           success: true,
           action: 'mod',
@@ -235,6 +250,7 @@ export class ViewerModerationActionsService {
       }
 
       const errorData = await response.json().catch(() => ({}));
+      console.error(`[ModActions] ✗ Add moderator failed:`, errorData);
       return {
         success: false,
         action: 'mod',
@@ -256,8 +272,7 @@ export class ViewerModerationActionsService {
 
   /**
    * Remove a user as moderator
-   */
-  async removeModerator(
+   */  async removeModerator(
     broadcasterId: string,
     userId: string,
     displayName: string,
@@ -265,6 +280,7 @@ export class ViewerModerationActionsService {
     clientId: string
   ): Promise<ModerationActionResponse> {
     try {
+      console.log(`[ModActions] Removing moderator: ${displayName} (${userId}) in channel ${broadcasterId}`);
       const response = await fetch(
         `${this.helixBaseUrl}/moderation/moderators?broadcaster_id=${broadcasterId}&user_id=${userId}`,
         {
@@ -275,8 +291,10 @@ export class ViewerModerationActionsService {
           }
         }
       );
+      console.log(`[ModActions] Remove moderator response status: ${response.status}`);      console.log(`[ModActions] Remove moderator response status: ${response.status}`);
 
       if (response.status === 204) {
+        console.log(`[ModActions] ✓ Remove moderator successful for ${displayName}`);
         return {
           success: true,
           action: 'unmod',
@@ -287,6 +305,7 @@ export class ViewerModerationActionsService {
       }
 
       const errorData = await response.json().catch(() => ({}));
+      console.error(`[ModActions] ✗ Remove moderator failed:`, errorData);
       return {
         success: false,
         action: 'unmod',
@@ -308,8 +327,7 @@ export class ViewerModerationActionsService {
 
   /**
    * Add a user as VIP
-   */
-  async addVIP(
+   */  async addVIP(
     broadcasterId: string,
     userId: string,
     displayName: string,
@@ -317,6 +335,7 @@ export class ViewerModerationActionsService {
     clientId: string
   ): Promise<ModerationActionResponse> {
     try {
+      console.log(`[ModActions] Adding VIP: ${displayName} (${userId}) in channel ${broadcasterId}`);
       const response = await fetch(
         `${this.helixBaseUrl}/channels/vips?broadcaster_id=${broadcasterId}`,
         {
@@ -331,8 +350,10 @@ export class ViewerModerationActionsService {
           })
         }
       );
+      console.log(`[ModActions] Add VIP response status: ${response.status}`);      console.log(`[ModActions] Add VIP response status: ${response.status}`);
 
       if (response.status === 204 || response.ok) {
+        console.log(`[ModActions] ✓ Add VIP successful for ${displayName}`);
         return {
           success: true,
           action: 'vip',
@@ -343,6 +364,7 @@ export class ViewerModerationActionsService {
       }
 
       const errorData = await response.json().catch(() => ({}));
+      console.error(`[ModActions] ✗ Add VIP failed:`, errorData);
       return {
         success: false,
         action: 'vip',
@@ -364,8 +386,7 @@ export class ViewerModerationActionsService {
 
   /**
    * Remove a user as VIP
-   */
-  async removeVIP(
+   */  async removeVIP(
     broadcasterId: string,
     userId: string,
     displayName: string,
@@ -373,6 +394,7 @@ export class ViewerModerationActionsService {
     clientId: string
   ): Promise<ModerationActionResponse> {
     try {
+      console.log(`[ModActions] Removing VIP: ${displayName} (${userId}) in channel ${broadcasterId}`);
       const response = await fetch(
         `${this.helixBaseUrl}/channels/vips?broadcaster_id=${broadcasterId}&user_id=${userId}`,
         {
@@ -383,8 +405,10 @@ export class ViewerModerationActionsService {
           }
         }
       );
+      console.log(`[ModActions] Remove VIP response status: ${response.status}`);      console.log(`[ModActions] Remove VIP response status: ${response.status}`);
 
       if (response.status === 204) {
+        console.log(`[ModActions] ✓ Remove VIP successful for ${displayName}`);
         return {
           success: true,
           action: 'unvip',
@@ -395,6 +419,7 @@ export class ViewerModerationActionsService {
       }
 
       const errorData = await response.json().catch(() => ({}));
+      console.error(`[ModActions] ✗ Remove VIP failed:`, errorData);
       return {
         success: false,
         action: 'unvip',

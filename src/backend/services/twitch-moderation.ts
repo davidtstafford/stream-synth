@@ -352,4 +352,80 @@ export class TwitchModerationService {
       return { success: false, error: error.message };
     }
   }
+
+  /**
+   * Check a specific user's ban status from Twitch API
+   * Returns real-time status from Twitch, not from local database
+   */
+  async checkUserBanStatus(
+    broadcasterId: string,
+    userId: string,
+    accessToken: string,
+    clientId: string
+  ): Promise<{
+    isBanned: boolean;
+    isTimedOut: boolean;
+    expiresAt: string | null;
+    reason: string | null;
+  }> {
+    try {
+      const queryParams = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        user_id: userId
+      });
+
+      const response = await fetch(`https://api.twitch.tv/helix/moderation/banned?${queryParams.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Client-Id': clientId
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // User not found in banned list = not banned
+          return {
+            isBanned: false,
+            isTimedOut: false,
+            expiresAt: null,
+            reason: null
+          };
+        }
+        const errorText = await response.text();
+        throw new Error(`Failed to check ban status: ${response.status} ${errorText}`);
+      }
+
+      const data = await response.json();
+      
+      // If data.data is empty, user is not banned
+      if (!data.data || data.data.length === 0) {
+        return {
+          isBanned: false,
+          isTimedOut: false,
+          expiresAt: null,
+          reason: null
+        };
+      }
+
+      // User is banned or timed out
+      const bannedUser = data.data[0];
+      const isPermanent = this.isPermanentBan(bannedUser.expires_at);
+
+      return {
+        isBanned: isPermanent,
+        isTimedOut: !isPermanent,
+        expiresAt: bannedUser.expires_at,
+        reason: bannedUser.reason || null
+      };
+    } catch (error: any) {
+      console.error('[Moderation] Error checking ban status:', error);
+      // On error, return safe defaults (not banned)
+      return {
+        isBanned: false,
+        isTimedOut: false,
+        expiresAt: null,
+        reason: null
+      };
+    }
+  }
 }
