@@ -101,13 +101,16 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
               type: 'success',
               message: `Auto-reconnected! Monitoring: ${lastChannelLogin || user.login}`
             });
-            
-            // Connect to IRC for JOIN/PART events
+              // Connect to IRC for JOIN/PART events
             try {
               console.log('🔌 Connecting to IRC (auto-reconnect)...');
               const { ipcRenderer } = window.require('electron');
               const channelToJoin = lastChannelLogin || user.login;
-              const ircResult = await ipcRenderer.invoke('irc:connect', user.login, savedToken.accessToken, channelToJoin);
+              const ircResult = await ipcRenderer.invoke('irc:connect', {
+                username: user.login,
+                token: savedToken.accessToken,
+                channel: channelToJoin
+              });
               if (ircResult.success) {
                 console.log('✅ IRC connected');
                 setStatusMessage({
@@ -120,19 +123,21 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
             } catch (error) {
               console.error('❌ IRC connection error:', error);
             }
-          },
-          onKeepalive: () => {},
+          },          onKeepalive: () => {},
           onNotification: async (data: any) => {
             console.log('🔔 Event received (full):', JSON.stringify(data, null, 2));
             
             // Extract event type and payload
             const eventType = data.subscription?.type || data.payload?.subscription?.type;
             const eventPayload = data.event || data.payload?.event;
+            const eventTimestamp = data.metadata?.message_timestamp || new Date().toISOString();
             
             console.log('📝 Event type:', eventType);
             console.log('📦 Event payload:', eventPayload);
-            
-            if (eventType && eventPayload) {
+              if (eventType && eventPayload) {
+              // Note: Backend receives events directly from WebSocket via eventsub-manager
+              // and stores them in the database. Frontend only needs to create/update viewers.
+              
               // Extract viewer info if available based on event type
               let viewerId: string | undefined;
               let viewerUsername: string | undefined;
@@ -165,15 +170,6 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
                 console.log('👥 Creating/updating viewer:', viewerUsername);
                 const viewerResult = await db.getOrCreateViewer(viewerId, viewerUsername, viewerDisplayName);
                 console.log('👥 Viewer result:', viewerResult);
-              }          // Store the event using broadcaster_user_id from the event
-          const eventChannelId = eventPayload.broadcaster_user_id || lastChannelId || user.id;
-          console.log('💾 Storing event for channel:', eventChannelId);
-          const result = await db.storeEvent(eventType, eventPayload, eventChannelId, viewerId);
-              console.log('💾 Store result:', result);
-              if (result.success) {
-                console.log('✅ Event stored with ID:', result.id);
-              } else {
-                console.error('❌ Failed to store event:', result.error);
               }
             } else {
               console.log('⚠️ Missing event type or payload');
@@ -278,12 +274,15 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
           type: 'success',
           message: `WebSocket session established! Monitoring: ${userLoginValue}`
         });
-        
-        // Connect to IRC for JOIN/PART events
+          // Connect to IRC for JOIN/PART events
         try {
           console.log('🔌 Connecting to IRC...');
           const { ipcRenderer } = window.require('electron');
-          const ircResult = await ipcRenderer.invoke('irc:connect', userLoginValue, accessTokenValue, userLoginValue);
+          const ircResult = await ipcRenderer.invoke('irc:connect', {
+            username: userLoginValue,
+            token: accessTokenValue,
+            channel: userLoginValue
+          });
           if (ircResult.success) {
             console.log('✅ IRC connected');
             setStatusMessage({
@@ -296,8 +295,7 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
         } catch (error) {
           console.error('❌ IRC connection error:', error);
         }
-      },
-      onKeepalive: () => {
+      },      onKeepalive: () => {
         // Keepalive received
       },
       onNotification: async (data: any) => {
@@ -306,11 +304,14 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
         // Extract event type and payload
         const eventType = data.subscription?.type || data.payload?.subscription?.type;
         const eventPayload = data.event || data.payload?.event;
+        const eventTimestamp = data.metadata?.message_timestamp || new Date().toISOString();
         
         console.log('📝 Event type:', eventType);
         console.log('📦 Event payload:', eventPayload);
-        
-        if (eventType && eventPayload) {
+          if (eventType && eventPayload) {
+          // Note: Backend receives events directly from WebSocket via eventsub-manager
+          // and stores them in the database. Frontend only needs to create/update viewers.
+          
           // Extract viewer info if available based on event type
           let viewerId: string | undefined;
           let viewerUsername: string | undefined;
@@ -337,22 +338,12 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
             viewerDisplayName = eventPayload.from_broadcaster_user_name;
             console.log('🎯 Raid from:', viewerUsername, '(ID:', viewerId, ')');
           }
-            // Create or update viewer if we have their info
+          
+          // Create or update viewer if we have their info
           if (viewerId && viewerUsername) {
             console.log('👥 Creating/updating viewer:', viewerUsername);
             const viewerResult = await db.getOrCreateViewer(viewerId, viewerUsername, viewerDisplayName);
             console.log('👥 Viewer result:', viewerResult);
-          }
-          
-          // Store the event - use broadcaster_user_id from event, fallback to userIdValue
-          const eventChannelId = eventPayload.broadcaster_user_id || userIdValue;
-          console.log('💾 Storing event for channel:', eventChannelId);
-          const result = await db.storeEvent(eventType, eventPayload, eventChannelId, viewerId);
-          console.log('💾 Store result:', result);
-          if (result.success) {
-            console.log('✅ Event stored with ID:', result.id);
-          } else {
-            console.error('❌ Failed to store event:', result.error);
           }
         } else {
           console.log('⚠️ Missing event type or payload');
@@ -400,32 +391,34 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
     setBroadcasterLogin('');
     setIsBroadcaster(false);    setSessionId('');
     setStatusMessage(null);
-  };
-
-  return (
+  };  return (
     <div className="content">
       {isAutoReconnecting ? (
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <h2>Restoring previous session...</h2>
           <p style={{ color: '#888' }}>Please wait</p>
-        </div>      ) : (
-        <Connection 
-          onConnected={handleConnected}
-          onDisconnected={handleDisconnected}
-          isConnected={!!accessToken}
-          connectedUserLogin={userLogin}
-          connectedUserId={userId}
-        />
-      )}{accessToken && broadcasterId && sessionId && (
-        <EventSubscriptions
-          clientId={clientId}
-          accessToken={accessToken}
-          sessionId={sessionId}
-          broadcasterId={broadcasterId}
-          broadcasterLogin={broadcasterLogin}
-          userId={userId}
-          isBroadcaster={isBroadcaster}
-        />
+        </div>
+      ) : (
+        <>          <Connection 
+            onConnected={handleConnected}
+            onDisconnected={handleDisconnected}
+            isConnected={!!accessToken}
+            connectedUserLogin={userLogin}
+            connectedUserId={userId}
+          />
+          
+          {sessionId && (
+            <EventSubscriptions
+              userId={userId}
+              accessToken={accessToken}
+              clientId={clientId}
+              sessionId={sessionId}
+              broadcasterId={broadcasterId}
+              broadcasterLogin={broadcasterLogin}
+              isBroadcaster={isBroadcaster}
+            />
+          )}
+        </>
       )}
     </div>
   );

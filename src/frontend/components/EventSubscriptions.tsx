@@ -22,12 +22,12 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
   broadcasterLogin,
   userId,
   isBroadcaster
-}) => {
-  const [showSubscriptions, setShowSubscriptions] = useState<boolean>(false);
+}) => {  const [showSubscriptions, setShowSubscriptions] = useState<boolean>(false);
   const [subscriptions, setSubscriptions] = useState<EventSubscriptionsType>(() => {
+    // Initialize ALL events as enabled by default
     const initial = {} as EventSubscriptionsType;
     Object.values(EVENT_GROUPS).flat().forEach(event => {
-      initial[event as keyof EventSubscriptionsType] = MANDATORY_SUBSCRIPTIONS.includes(event as keyof EventSubscriptionsType);
+      initial[event as keyof EventSubscriptionsType] = true;
     });
     return initial;
   });
@@ -41,7 +41,6 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
       });
     }
   }, [sessionId, accessToken, clientId, broadcasterId, userId]);
-
   // Restore saved event subscriptions from database
   useEffect(() => {
     async function restoreSubscriptions() {
@@ -51,18 +50,48 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
         const savedEvents = await db.getEnabledEvents(userId, broadcasterId);
         console.log('Restoring saved events:', savedEvents);
 
-        const newSubscriptions = { ...subscriptions };
-        savedEvents.forEach(eventType => {
-          newSubscriptions[eventType as keyof EventSubscriptionsType] = true;
-        });
-        setSubscriptions(newSubscriptions);
+        if (savedEvents.length > 0) {
+          // User has saved preferences, use those
+          const newSubscriptions = {} as EventSubscriptionsType;
+          Object.values(EVENT_GROUPS).flat().forEach(event => {
+            newSubscriptions[event as keyof EventSubscriptionsType] = savedEvents.includes(event);
+          });          setSubscriptions(newSubscriptions);
 
-        // Re-subscribe to saved events
-        savedEvents.forEach(eventType => {
-          if (!MANDATORY_SUBSCRIPTIONS.includes(eventType as keyof EventSubscriptionsType)) {
-            subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);
+          // Re-subscribe to saved events (filter out IRC events)
+          savedEvents.forEach(eventType => {
+            if (!MANDATORY_SUBSCRIPTIONS.includes(eventType as keyof EventSubscriptionsType) &&
+                !eventType.startsWith('irc.')) {
+              subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);
+            }
+          });} else {
+          // No saved preferences, enable all events by default (already in initial state)
+          const allEvents = Object.values(EVENT_GROUPS).flat();
+          
+          // Save ALL events as enabled to database (first-time setup)
+          console.log('First-time setup: Saving all events as enabled to database');
+          for (const eventType of allEvents) {
+            await db.saveSubscription(userId, broadcasterId, eventType, true);
           }
-        });
+          
+          // Subscribe to all non-mandatory EventSub events
+          allEvents.forEach(eventType => {
+            if (!MANDATORY_SUBSCRIPTIONS.includes(eventType as keyof EventSubscriptionsType) && 
+                !eventType.startsWith('irc.')) {
+              subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);
+            }
+          });
+          
+          // Connect to IRC for IRC events
+          const hasIRCEvents = allEvents.some(key => key.startsWith('irc.'));
+          if (hasIRCEvents && !ircConnected && broadcasterLogin) {
+            try {
+              await connectIRC(broadcasterLogin, accessToken, broadcasterLogin);
+              setIrcConnected(true);
+            } catch (error) {
+              console.error('Failed to connect to IRC:', error);
+            }
+          }
+        }
       } catch (error) {
         console.error('Failed to restore subscriptions:', error);
       }
@@ -279,15 +308,34 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
         <h2 style={{ fontSize: '24px', fontWeight: '500' }}>
           Event Subscriptions {showSubscriptions ? '▼' : '▶'}
         </h2>
-      </div>
-
-      {showSubscriptions && (
+      </div>      {showSubscriptions && (
         <div style={{ 
           background: '#252525', 
           padding: '20px', 
           borderRadius: '8px',
           border: '1px solid #333'
         }}>
+          {/* Warning Message */}
+          <div style={{
+            padding: '15px',
+            background: '#3d2d1a',
+            border: '2px solid #ff9800',
+            borderRadius: '5px',
+            marginBottom: '20px',
+            fontSize: '14px',
+            color: '#ffb74d'
+          }}>
+            <strong style={{ display: 'block', marginBottom: '8px', fontSize: '15px' }}>
+              ⚠️ Warning: Disabling Events May Cause Issues
+            </strong>
+            <p style={{ margin: '0 0 8px 0', lineHeight: '1.5' }}>
+              All events are enabled by default for optimal functionality. Disabling events may cause features to malfunction or data to be incomplete.
+            </p>
+            <p style={{ margin: '0', lineHeight: '1.5' }}>
+              Only disable events if you understand the potential impact on the application.
+            </p>
+          </div>
+
           <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
             <button className="btn" onClick={handleSelectDefault}>
               Select Default

@@ -3,6 +3,7 @@ import { AzureTTSProvider } from './azure-provider';
 import { GoogleTTSProvider } from './google-provider';
 import { TTSRepository } from '../../database/repositories/tts';
 import { VoicesRepository } from '../../database/repositories/voices';
+import { ViewerTTSRulesRepository } from '../../database/repositories/viewer-tts-rules';
 import { SettingsMapper } from './settings-mapper';
 import { TTSAccessControlService } from '../tts-access-control';
 import Database from 'better-sqlite3';
@@ -30,6 +31,7 @@ export class TTSManager {
   private currentProvider: TTSProvider | null = null;
   private repository: TTSRepository;
   private voicesRepo: VoicesRepository;
+  private viewerTTSRulesRepo: ViewerTTSRulesRepository;
   private accessControl: TTSAccessControlService;
   private settings: TTSSettings | null = null;
   private messageQueue: TTSQueueItem[] = [];
@@ -41,12 +43,15 @@ export class TTSManager {
   private messageHistory: MessageHistory[] = [];
   private userCooldowns: Map<string, UserCooldown> = new Map();
   private lastGlobalSpeak: number = 0;
+  // Phase 4: TTS rules - track last TTS time per viewer for cooldown enforcement
+  private viewerLastTTS: Map<string, number> = new Map();
   private copypastaList: Set<string> = new Set([
     'kappa123',
     'pogchamp',
   ]);  constructor(db: Database.Database) {
     this.repository = new TTSRepository();
     this.voicesRepo = new VoicesRepository();
+    this.viewerTTSRulesRepo = new ViewerTTSRulesRepository();
     this.accessControl = new TTSAccessControlService();
     this.providers = new Map();
     
@@ -83,12 +88,10 @@ export class TTSManager {
     }
     
     console.log('[TTS] Manager initialized. Providers ready:', Array.from(this.providers.keys()).join(', '));
-  }
-
-    /**
+  }  /**
    * Load settings from database
    */
-  private async loadSettings(): Promise<void> {
+  async loadSettings(): Promise<void> {
     const dbSettings = this.repository.getSettings();
     this.settings = SettingsMapper.fromDatabase(dbSettings);
   }
@@ -381,9 +384,7 @@ export class TTSManager {
   async handleChatMessage(username: string, message: string, userId?: string): Promise<void> {
     if (!this.settings || !this.settings.enabled) {
       return; // TTS disabled
-    }
-
-    // NEW: Access control validation
+    }    // NEW: Access control validation
     if (userId) {
       const validation = await this.accessControl.validateAndDetermineVoice(userId, message);
       
@@ -399,11 +400,55 @@ export class TTSManager {
       }
     }
 
+    // Phase 4: Check viewer TTS rules (mute & cooldown)
+    if (userId) {
+      const ttsRules = this.viewerTTSRulesRepo.getByViewerId(userId);
+      
+      // Check if viewer is muted
+      if (ttsRules?.is_muted) {
+        if (ttsRules.mute_expires_at) {
+          const expiresAt = new Date(ttsRules.mute_expires_at);
+          if (expiresAt > new Date()) {
+            console.log(`[TTS] Viewer ${username} is muted (expires: ${ttsRules.mute_expires_at}) - skipping TTS`);
+            return;
+          } else {
+            // Expired mute - will be cleaned up by background job
+            console.log(`[TTS] Viewer ${username} mute expired - allowing TTS`);
+          }
+        } else {
+          // Permanent mute
+          console.log(`[TTS] Viewer ${username} is permanently muted - skipping TTS`);
+          return;
+        }
+      }
+      
+      // Check cooldown rules
+      if (ttsRules?.has_cooldown && ttsRules.cooldown_gap_seconds) {
+        const lastTTSTime = this.viewerLastTTS.get(userId);
+        if (lastTTSTime) {
+          const timeSinceLastTTS = (Date.now() - lastTTSTime) / 1000; // Convert to seconds
+          if (timeSinceLastTTS < ttsRules.cooldown_gap_seconds) {
+            const remaining = Math.ceil(ttsRules.cooldown_gap_seconds - timeSinceLastTTS);
+            console.log(`[TTS] Viewer ${username} on cooldown - ${timeSinceLastTTS.toFixed(1)}s < ${ttsRules.cooldown_gap_seconds}s (${remaining}s remaining)`);
+            return;
+          }
+        }
+        
+        // Check if cooldown period has expired
+        if (ttsRules.cooldown_expires_at) {
+          const expiresAt = new Date(ttsRules.cooldown_expires_at);
+          if (expiresAt <= new Date()) {
+            console.log(`[TTS] Viewer ${username} cooldown period expired - allowing TTS`);
+          }
+        }
+      }
+    }
+
     // Check if bot (if filter enabled)
     if (this.settings.filterBots && this.isBot(username)) {
       console.log('[TTS] Skipping bot:', username);
       return;
-    }    // Check user cooldown
+    }// Check user cooldown
     if (this.settings.userCooldownEnabled && !this.checkUserCooldown(username)) {
       console.log('[TTS] User on cooldown:', username);
       return;
@@ -461,9 +506,7 @@ export class TTSManager {
         pitch = validation.pitch || pitch;
         rate = validation.speed || rate;
       }
-    }
-
-    // Add to queue
+    }    // Add to queue
     this.messageQueue.push({
       username,
       message: filteredMessage,
@@ -472,6 +515,12 @@ export class TTSManager {
       rate,
       timestamp: new Date().toISOString()
     });
+
+    // Phase 4: Track last TTS time for cooldown enforcement
+    if (userId) {
+      this.viewerLastTTS.set(userId, Date.now());
+      console.log(`[TTS] Recorded TTS time for viewer ${username} (${userId})`);
+    }
 
     // Process queue
     this.processQueue();

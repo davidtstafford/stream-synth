@@ -235,6 +235,11 @@ export interface ViewerWithSubscription {
   is_vip: number | null;
   is_moderator: number | null;
   is_broadcaster: number | null;
+  moderation_status: string | null;
+  moderation_reason: string | null;
+  moderation_expires_at: string | null;
+  followed_at: string | null;
+  is_follower: number | null;
 }
 
 export async function upsertSubscription(
@@ -273,6 +278,144 @@ export async function syncSubscriptionsFromTwitch(broadcasterId: string, userId:
 
 export async function checkSubscriptionStatus(viewerId: string): Promise<{ success: boolean; isSubscribed?: boolean; status?: string; error?: string }> {
   return await ipcRenderer.invoke('db:check-subscription-status', viewerId);
+}
+
+// Viewer History & Details
+export async function getViewerDetailedHistory(viewerId: string): Promise<any> {
+  const response = await ipcRenderer.invoke('viewer:get-detailed-history', viewerId);
+  return response;
+}
+
+export async function getViewerStats(viewerId: string): Promise<any> {
+  const response = await ipcRenderer.invoke('viewer:get-stats', viewerId);
+  return response;
+}
+
+// Viewer Moderation Actions
+export async function banViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  reason: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:ban', {
+    broadcasterId,
+    userId,
+    displayName,
+    reason,
+    accessToken,
+    clientId
+  });
+}
+
+export async function unbanViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:unban', {
+    broadcasterId,
+    userId,
+    displayName,
+    accessToken,
+    clientId
+  });
+}
+
+export async function timeoutViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  durationSeconds: number,
+  reason: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:timeout', {
+    broadcasterId,
+    userId,
+    displayName,
+    durationSeconds,
+    reason,
+    accessToken,
+    clientId
+  });
+}
+
+export async function addModViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:add-mod', {
+    broadcasterId,
+    userId,
+    displayName,
+    accessToken,
+    clientId
+  });
+}
+
+export async function removeModViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:remove-mod', {
+    broadcasterId,
+    userId,
+    displayName,
+    accessToken,
+    clientId
+  });
+}
+
+export async function addVipViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:add-vip', {
+    broadcasterId,
+    userId,
+    displayName,
+    accessToken,
+    clientId
+  });
+}
+
+export async function removeVipViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:remove-vip', {
+    broadcasterId,
+    userId,
+    displayName,
+    accessToken,
+    clientId
+  });
+}
+
+// Check viewer's real-time ban status from Twitch
+export async function checkViewerBanStatus(userId: string): Promise<any> {
+  return await ipcRenderer.invoke('twitch:check-user-ban-status', { userId });
+}
+
+export async function debugViewerData(viewerId: string): Promise<any> {
+  return await ipcRenderer.invoke('debug:viewer-data', { viewerId });
 }
 
 

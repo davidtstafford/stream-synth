@@ -3,7 +3,8 @@ import * as ttsService from '../../services/tts';
 import { VoiceSettingsTab } from './tabs/VoiceSettingsTab';
 import { TTSRulesTab } from './tabs/TTSRulesTab';
 import { TTSAccessTab } from './tabs/TTSAccessTab';
-import { ViewerRulesTab } from './tabs/ViewerRulesTab';
+import { ViewerVoiceSettingsTab } from './tabs/ViewerVoiceSettingsTab';
+import { ViewerTTSRestrictionsTab } from './tabs/ViewerTTSRestrictionsTab';
 import './tts.css';
 
 interface VoiceGroup {
@@ -19,7 +20,7 @@ interface VoiceGroup {
   }>;
 }
 
-type TabType = 'settings' | 'rules' | 'access' | 'viewer-rules';
+type TabType = 'settings' | 'rules' | 'access' | 'viewer-voice-settings' | 'viewer-tts-restrictions';
 
 export const TTS: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('settings');
@@ -443,9 +444,7 @@ export const TTS: React.FC = () => {
         <div className="error-message">
           {error}
         </div>
-      )}
-
-      <div className="tab-navigation">
+      )}      <div className="tab-navigation">
         <button
           className={`tab-button ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => setActiveTab('settings')}      >
@@ -464,12 +463,18 @@ export const TTS: React.FC = () => {
           🔐 TTS Access
         </button>
         <button
-          className={`tab-button ${activeTab === 'viewer-rules' ? 'active' : ''}`}
-          onClick={() => setActiveTab('viewer-rules')}
+          className={`tab-button ${activeTab === 'viewer-voice-settings' ? 'active' : ''}`}
+          onClick={() => setActiveTab('viewer-voice-settings')}
         >
-          👤 Viewer Rules
+          👤 Viewer Voice Settings
         </button>
-      </div>      {activeTab === 'settings' && (
+        <button
+          className={`tab-button ${activeTab === 'viewer-tts-restrictions' ? 'active' : ''}`}
+          onClick={() => setActiveTab('viewer-tts-restrictions')}
+        >
+          🔇 Viewer TTS Restrictions
+        </button>
+      </div>{activeTab === 'settings' && (
         <div className="tab-content">
           <VoiceSettingsTab
             settings={settings}
@@ -525,12 +530,18 @@ export const TTS: React.FC = () => {
         </div>
       )}
 
-      {activeTab === 'viewer-rules' && (
+      {activeTab === 'viewer-voice-settings' && (
         <div className="tab-content">
-          <ViewerRulesTab
+          <ViewerVoiceSettingsTab
             voiceGroups={voiceGroups}
             accessMode={'access_all'}
           />
+        </div>
+      )}
+
+      {activeTab === 'viewer-tts-restrictions' && (
+        <div className="tab-content">
+          <ViewerTTSRestrictionsTab />
         </div>
       )}
     </div>

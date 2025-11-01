@@ -11,6 +11,12 @@ export async function subscribeToEvent(
   broadcasterId: string,
   userId: string
 ): Promise<void> {
+  // Filter out IRC events - they are handled by IRC connection, not EventSub
+  if (eventType.startsWith('irc.')) {
+    console.log(`[EventSub] Skipping IRC event ${eventType} - handled by IRC connection`);
+    return;
+  }
+
   if (!accessToken || !sessionId) {
     console.error('Cannot subscribe: missing token or session', { 
       hasToken: !!accessToken, 
@@ -27,25 +33,47 @@ export async function subscribeToEvent(
   }
 
   const opPromise = (async () => {
-    try {
-      // Create subscription condition based on event type
+    try {      // Create subscription condition based on event type
       const condition: any = {};
       if (eventType.startsWith('channel.chat')) {
         condition.broadcaster_user_id = broadcasterId;
         condition.user_id = userId;
+      } else if (eventType === 'channel.follow') {
+        // channel.follow v2 requires moderator_user_id
+        condition.broadcaster_user_id = broadcasterId;
+        condition.moderator_user_id = userId;
       } else if (eventType === 'channel.raid') {
         condition.to_broadcaster_user_id = broadcasterId;
       } else if (eventType.includes('moderator') || eventType.includes('shield_mode')) {
         condition.broadcaster_user_id = broadcasterId;
-        condition.moderator_user_id = userId;
-      } else if (eventType.startsWith('channel.shoutout')) {
+        condition.moderator_user_id = userId;      } else if (eventType.startsWith('channel.shoutout')) {
         condition.broadcaster_user_id = broadcasterId;
         condition.moderator_user_id = userId;
+      } else if (eventType === 'channel.ban' || eventType === 'channel.unban') {
+        // Ban/unban events ONLY need broadcaster_user_id (per Twitch docs)
+        condition.broadcaster_user_id = broadcasterId;
       } else {
         condition.broadcaster_user_id = broadcasterId;
       }
 
+      // Set version based on event type
       let version = '1';
+      if (eventType === 'channel.follow') {
+        version = '2'; // v2 is current version for channel.follow
+      } else if (eventType === 'channel.chat.message') {
+        version = '1';
+      } else if (eventType === 'channel.chat.clear' || 
+                 eventType === 'channel.chat.clear_user_messages' ||
+                 eventType === 'channel.chat.message_delete' ||
+                 eventType === 'channel.chat_settings.update') {
+        version = '1';
+      } else if (eventType === 'channel.shield_mode.begin' ||
+                 eventType === 'channel.shield_mode.end') {
+        version = '1';
+      } else if (eventType === 'channel.shoutout.create' ||
+                 eventType === 'channel.shoutout.receive') {
+        version = '1';
+      }
 
       const persistedKey = `eventsub:${broadcasterId}:${eventType}:subscription_id`;
       const persistedCreatedAtKey = `eventsub:${broadcasterId}:${eventType}:created_at`;
@@ -107,9 +135,7 @@ export async function subscribeToEvent(
             const subscriptionResponse = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
               method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}`, 'Client-Id': clientId, 'Content-Type': 'application/json' },
               body: JSON.stringify({ type: eventType, version, condition, transport: { method: 'websocket', session_id: sessionId } })
-            });
-
-            const result = await subscriptionResponse.json().catch(() => ({}));
+            });            const result = await subscriptionResponse.json().catch(() => ({}));
             if (subscriptionResponse.ok) {
               console.log('[EventSub] Subscription created:', result);
               if (result && result.data && result.data[0] && result.data[0].id) {
@@ -156,7 +182,13 @@ export async function subscribeToEvent(
 
               return;
             }
-            console.warn('[EventSub] Create failed status=', subscriptionResponse.status, 'body=', result);
+            
+            // Enhanced error logging for debugging
+            console.error(`[EventSub] ❌ Create FAILED for ${eventType}`);
+            console.error(`[EventSub] Status: ${subscriptionResponse.status}`);
+            console.error(`[EventSub] Error body:`, JSON.stringify(result, null, 2));
+            console.error(`[EventSub] Condition sent:`, JSON.stringify(condition, null, 2));
+            console.error(`[EventSub] Version sent: ${version}`);
             if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 1000 * attempt));
           } catch (err) {
             console.warn('[EventSub] Create attempt error', err);

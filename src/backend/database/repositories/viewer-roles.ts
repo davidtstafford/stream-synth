@@ -195,7 +195,6 @@ export class ViewerRolesRepository extends BaseRepository<ViewerRole> {
       throw error;
     }
   }
-
   /**
    * Get all active VIPs
    */
@@ -205,6 +204,19 @@ export class ViewerRolesRepository extends BaseRepository<ViewerRole> {
       SELECT viewer_id, granted_at 
       FROM viewer_roles 
       WHERE role_type = 'vip' AND revoked_at IS NULL
+      ORDER BY granted_at DESC
+    `).all() as Array<{ viewer_id: string; granted_at: string }>;
+  }
+
+  /**
+   * Get all active Moderators
+   */
+  getAllModerators(): Array<{ viewer_id: string; granted_at: string }> {
+    const db = this.getDatabase();
+    return db.prepare(`
+      SELECT viewer_id, granted_at 
+      FROM viewer_roles 
+      WHERE role_type = 'moderator' AND revoked_at IS NULL
       ORDER BY granted_at DESC
     `).all() as Array<{ viewer_id: string; granted_at: string }>;
   }

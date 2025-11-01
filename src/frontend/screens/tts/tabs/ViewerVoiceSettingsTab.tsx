@@ -49,7 +49,7 @@ interface Props {
   accessMode: 'access_all' | 'limited_access' | 'premium_voice_access';
 }
 
-export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => {
+export const ViewerVoiceSettingsTab: React.FC<Props> = ({ voiceGroups, accessMode }) => {
   const [rules, setRules] = useState<ViewerVoicePreferenceWithInfo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Viewer[]>([]);
@@ -111,7 +111,7 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
     setSearchTerm(viewer.display_name || viewer.username);
     setSearchResults([]);
     
-    // Check if viewer has an existing rule
+    // Check if viewer has an existing voice rule
     const response = await ipcRenderer.invoke('viewer-rules:get', { viewerId: viewer.id });
     
     if (response.success && response.data) {
@@ -149,6 +149,7 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
       [field]: value
     });
   };
+
   const handleSaveRule = async () => {
     if (!editingRule || !editingRule.viewer_id || !editingRule.voice_id) {
       setMessage({ type: 'error', text: 'Please select a voice' });
@@ -159,24 +160,27 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
       setSaving(true);
       setMessage(null);
 
-      const response = await ipcRenderer.invoke('viewer-rules:save', editingRule);
+      // Save voice preference only
+      const voiceResponse = await ipcRenderer.invoke('viewer-rules:save', editingRule);
       
-      if (response.success) {
-        setMessage({ type: 'success', text: 'Rule saved successfully!' });
-        setTimeout(() => setMessage(null), 2000);
-        await loadRules();
-        setEditingRule(null);
-        setSelectedViewer(null);
-        setSearchTerm('');
-      } else {
-        setMessage({ type: 'error', text: response.error || 'Failed to save rule' });
+      if (!voiceResponse.success) {
+        setMessage({ type: 'error', text: voiceResponse.error || 'Failed to save voice rule' });
+        return;
       }
+
+      setMessage({ type: 'success', text: 'Voice preference saved successfully!' });
+      setTimeout(() => setMessage(null), 2000);
+      await loadRules();
+      setEditingRule(null);
+      setSelectedViewer(null);
+      setSearchTerm('');
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     } finally {
       setSaving(false);
     }
   };
+
   const handleDeleteRule = async (viewerId: string, viewerName: string) => {
     if (!confirm(`Delete custom voice rule for ${viewerName}?`)) {
       return;
@@ -262,15 +266,15 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
   const validationWarning = getVoiceValidationWarning();
 
   if (loading) {
-    return <div className="loading">Loading viewer rules...</div>;
+    return <div className="loading">Loading viewer voice settings...</div>;
   }
 
   return (
-    <div className="viewer-rules-tab">
+    <div className="viewer-voice-settings-tab">
       <div className="tab-header">
-        <h2>Viewer Custom Voice Rules</h2>
+        <h2>Viewer Voice Settings</h2>
         <p className="tab-description">
-          Set custom voices, pitch, and speed for individual viewers.
+          Customize TTS voices, pitch, and speed for individual viewers (optional).
         </p>
       </div>
 
@@ -292,7 +296,7 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               onChange={(e) => setSearchTerm(e.target.value)}
               className="search-input"
             />
-              {searchResults.length > 0 && (
+            {searchResults.length > 0 && (
               <ul className="autocomplete-results">
                 {searchResults.map(viewer => {
                   const hasRule = rules.some(r => r.viewer_id === viewer.id);
@@ -306,7 +310,7 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
                         {viewer.display_name || viewer.username}
                       </span>
                       {hasRule && (
-                        <span className="has-rule-badge">Has Rule</span>
+                        <span className="has-rule-badge">Has Setting</span>
                       )}
                     </li>
                   );
@@ -319,11 +323,11 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
             <div className="selected-viewer">
               <p>Selected: <strong>{selectedViewer.display_name || selectedViewer.username}</strong></p>
               <button onClick={handleCreateRule} className="button button-primary">
-                Create Voice Rule
+                Create Voice Setting
               </button>
               {selectedViewer.hasRule && (
                 <button onClick={handleEditRule} className="button button-secondary">
-                  Edit Existing Rule
+                  Edit Existing Setting
                 </button>
               )}
             </div>
@@ -379,7 +383,8 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               ))}
             </select>
           </div>
-            {/* Voice Selection */}
+
+          {/* Voice Selection */}
           <div className="voice-selector">
             <label>Voice:</label>
             <select 
@@ -412,7 +417,7 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               </div>
             )}
           </div>
-          
+
           {/* Pitch Control */}
           <div className="slider-control">
             <label>Pitch: {editingRule.pitch?.toFixed(1) || 1.0}</label>
@@ -425,11 +430,6 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               onChange={(e) => updateRule('pitch', parseFloat(e.target.value))}
               className="slider"
             />
-            <div className="slider-labels">
-              <span>Lower</span>
-              <span>Normal</span>
-              <span>Higher</span>
-            </div>
           </div>
           
           {/* Speed Control */}
@@ -444,19 +444,15 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
               onChange={(e) => updateRule('speed', parseFloat(e.target.value))}
               className="slider"
             />
-            <div className="slider-labels">
-              <span>Slower</span>
-              <span>Normal</span>
-              <span>Faster</span>
-            </div>
           </div>
-            <div className="button-group">
+            
+          <div className="button-group">
             <button 
               onClick={handleSaveRule} 
               disabled={saving || !editingRule.voice_id}
               className="button button-primary"
             >
-              {saving ? 'Saving...' : 'Add/Update Rule'}
+              {saving ? 'Saving...' : 'Save Voice Setting'}
             </button>
             <button 
               onClick={handleCancelEdit}
@@ -469,11 +465,11 @@ export const ViewerRulesTab: React.FC<Props> = ({ voiceGroups, accessMode }) => 
         </div>
       )}
 
-      {/* Existing Rules Table */}
+      {/* Existing Settings Table */}
       <div className="existing-rules">
-        <h3>Existing Viewer Rules ({rules.length})</h3>
+        <h3>Existing Voice Settings ({rules.length})</h3>
         {rules.length === 0 ? (
-          <p className="no-rules">No custom voice rules configured yet.</p>
+          <p className="no-rules">No custom voice settings configured yet.</p>
         ) : (
           <table className="rules-table">
             <thead>

@@ -92,16 +92,15 @@ export const Connection: React.FC<ConnectionProps> = ({
     setStatusMessage(null);
     onDisconnected();
   };
-
   const handleForgetCredentials = async () => {
-    if (!confirm('Are you sure? This will delete all saved tokens and session information. You will need to log in again.')) {
+    if (!confirm('Are you sure? This will delete all saved tokens, session information, and clear the OAuth cache. You will need to log in again and re-authorize the application.')) {
       return;
     }
     
     try {
       setStatusMessage({
         type: 'info',
-        message: 'Removing credentials...'
+        message: 'Removing credentials and clearing OAuth cache...'
       });
 
       const userIdToForget = userId || connectedUserId;
@@ -117,13 +116,16 @@ export const Connection: React.FC<ConnectionProps> = ({
       await db.setSetting('last_connected_channel_login', '');
       await db.setSetting('last_is_broadcaster', '');
 
+      // Clear Twitch OAuth cache (cookies, localstorage, cache)
+      await ipcRenderer.invoke('clear-twitch-oauth-cache');
+
       setAccessToken('');
       setUserId('');
       setUserLogin('');
       
       setStatusMessage({
         type: 'success',
-        message: 'Credentials removed. You are now logged out.'
+        message: 'Credentials removed and OAuth cache cleared. You are now logged out. Next login will require re-authorization with updated scopes.'
       });
       
       onDisconnected();

@@ -30,6 +30,16 @@ export function setMainWindowForTTS(window: BrowserWindow | null): void {
   }
 }
 
+/**
+ * Reload TTS settings from database (called after chat commands change settings)
+ */
+export async function reloadTTSSettings(): Promise<void> {
+  if (ttsManager) {
+    await ttsManager.loadSettings();
+    console.log('[TTS] Settings reloaded from database');
+  }
+}
+
 async function initializeTTS() {
   if (!ttsManager) {
     const db = getDatabase();

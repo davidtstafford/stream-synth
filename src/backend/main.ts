@@ -3,14 +3,25 @@ import { createMainWindow } from './core/window';
 import { setupAllIpcHandlers, runStartupTasks } from './core/ipc-handlers';
 import { PlatformTTSFactory } from './core/platform-tts';
 import { initializeDatabase, closeDatabase } from './database/connection';
+import { ViewerTTSRulesRepository } from './database/repositories/viewer-tts-rules';
 
 let mainWindow: BrowserWindow | null = null;
+let cleanupInterval: NodeJS.Timeout | null = null;
 
 async function initialize(): Promise<void> {
   // Initialize database first
   initializeDatabase();
   
-  mainWindow = await createMainWindow();
+  // Start background cleanup job for expired TTS rules (every 5 minutes)
+  const viewerTTSRulesRepo = new ViewerTTSRulesRepository();
+  cleanupInterval = setInterval(() => {
+    try {
+      viewerTTSRulesRepo.cleanupExpiredRules();
+    } catch (error) {
+      console.error('[Main] Error running TTS rules cleanup:', error);
+    }
+  }, 5 * 60 * 1000); // 5 minutes
+    mainWindow = await createMainWindow();
   setupAllIpcHandlers(mainWindow);
 
   mainWindow.on('closed', () => {
@@ -19,7 +30,7 @@ async function initialize(): Promise<void> {
   
   // Run startup tasks after window is ready
   mainWindow.webContents.on('did-finish-load', () => {
-    runStartupTasks();
+    runStartupTasks(mainWindow);
   });
 }
 
@@ -39,6 +50,12 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', async () => {
+  // Stop cleanup interval
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+  
   // Cleanup platform TTS handler
   try {
     await PlatformTTSFactory.cleanup();

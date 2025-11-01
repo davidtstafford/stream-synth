@@ -84,7 +84,6 @@ export class EventsRepository extends BaseRepository<StoredEvent> {
       WHERE user_id = ? AND channel_id = ?
     `).run(userId, channelId);
   }
-
   /**
    * Store an event in the database
    */
@@ -100,6 +99,41 @@ export class EventsRepository extends BaseRepository<StoredEvent> {
       viewerId || null
     );
     return result.lastInsertRowid as number;
+  }
+
+  /**
+   * Batch insert multiple events (used by polling systems)
+   * Uses a transaction for performance when writing multiple events at once
+   */
+  batchInsertEvents(events: Array<{
+    eventType: string;
+    eventData: any;
+    channelId: string;
+    viewerId?: string | null;
+  }>): number {
+    if (events.length === 0) {
+      return 0;
+    }
+
+    const db = this.getDatabase();
+    const stmt = db.prepare(`
+      INSERT INTO events (event_type, event_data, channel_id, viewer_id)
+      VALUES (?, ?, ?, ?)
+    `);
+
+    const transaction = db.transaction((eventList: typeof events) => {
+      for (const event of eventList) {
+        stmt.run(
+          event.eventType,
+          JSON.stringify(event.eventData),
+          event.channelId,
+          event.viewerId || null
+        );
+      }
+    });
+
+    transaction(events);
+    return events.length;
   }
 
   /**
