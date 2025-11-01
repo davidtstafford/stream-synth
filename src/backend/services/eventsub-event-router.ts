@@ -23,12 +23,13 @@ export class EventSubEventRouter extends EventEmitter {
   private sessionsRepo = new SessionsRepository();
   private moderationHistoryRepo = new ModerationHistoryRepository();
   private mainWindow: BrowserWindow | null = null;
+  private ttsInitializer: (() => Promise<any>) | null = null;
 
-  constructor(mainWindow?: BrowserWindow | null) {
+  constructor(mainWindow?: BrowserWindow | null, ttsInitializer?: () => Promise<any>) {
     super();
     this.mainWindow = mainWindow || null;
+    this.ttsInitializer = ttsInitializer || null;
   }
-
   /**
    * Set main window for IPC communication
    */
@@ -37,12 +38,49 @@ export class EventSubEventRouter extends EventEmitter {
   }
 
   /**
+   * Set TTS initializer for chat message handling
+   */
+  setTTSInitializer(ttsInitializer: () => Promise<any>): void {
+    this.ttsInitializer = ttsInitializer;
+  }
+  /**
    * Emit IPC event to frontend
    */
   private emitToFrontend(channel: string, data: any): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data);
     }
+  }
+
+  /**
+   * Store event and emit to frontend for real-time UI updates
+   */
+  private storeAndEmitEvent(
+    eventType: string,
+    eventData: any,
+    channelId: string,
+    viewerId: string,
+    viewerUsername?: string,
+    viewerDisplayName?: string
+  ): number {
+    // Store event in database
+    const eventId = this.eventsRepo.storeEvent(eventType, eventData, channelId, viewerId);
+
+    // Emit to frontend for real-time updates
+    if (eventId) {
+      this.emitToFrontend('event:stored', {
+        id: eventId,
+        event_type: eventType,
+        event_data: typeof eventData === 'string' ? eventData : JSON.stringify(eventData),
+        channel_id: channelId,
+        viewer_id: viewerId,
+        viewer_username: viewerUsername,
+        viewer_display_name: viewerDisplayName,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    return eventId;
   }
 
   /**
@@ -87,12 +125,8 @@ export class EventSubEventRouter extends EventEmitter {
           await this.handleBanEvent(eventData, timestamp);
           break;        case 'channel.unban':
           await this.handleUnbanEvent(eventData, timestamp);
-          break;
-
-        case 'channel.chat.message':
-          // Chat messages are handled by the eventsub-integration.ts file
-          // which forwards them to TTS. We just log them here.
-          console.log(`[EventRouter] Chat message from ${eventData.chatter_user_login}: ${eventData.message?.text}`);
+          break;        case 'channel.chat.message':
+          await this.handleChatMessageEvent(eventData, timestamp);
           break;
 
         case 'channel.chat.clear':
@@ -170,10 +204,15 @@ export class EventSubEventRouter extends EventEmitter {
         action: 'follow' as const,
         followedAt,
       },
-    ]);
-
-    // Record event
-    this.eventsRepo.storeEvent('channel.follow', { user_login: followerLogin }, currentSession.channel_id, viewer.id);
+    ]);    // Record event and emit to frontend
+    this.storeAndEmitEvent(
+      'channel.follow',
+      { user_login: followerLogin },
+      currentSession.channel_id,
+      viewer.id,
+      followerLogin,
+      followerDisplayName
+    );
 
     console.log('[EventRouter] ✓ Follow event recorded for:', followerLogin);
     this.emit('follow', { viewer, followerId });
@@ -208,14 +247,14 @@ export class EventSubEventRouter extends EventEmitter {
       tier,
       is_gift: 0,
       start_date: new Date().toISOString(),
-    });
-
-    // Record event
-    this.eventsRepo.storeEvent(
+    });    // Record event and emit to frontend
+    this.storeAndEmitEvent(
       'channel.subscribe',
       { user_login: userLogin, tier },
       currentSession.channel_id,
-      viewer.id
+      viewer.id,
+      userLogin,
+      userDisplayName
     );
 
     console.log('[EventRouter] ✓ Subscribe event recorded for:', userLogin);
@@ -263,14 +302,14 @@ export class EventSubEventRouter extends EventEmitter {
         start_date: subscription.start_date,
         end_date: new Date().toISOString(),
       });
-    }
-
-    // Record event
-    this.eventsRepo.storeEvent(
+    }    // Record event and emit to frontend
+    this.storeAndEmitEvent(
       'channel.subscription.end',
       { user_login: userLogin },
       currentSession.channel_id,
-      viewer.id
+      viewer.id,
+      userLogin,
+      userDisplayName
     );
 
     console.log('[EventRouter] ✓ Subscription end event recorded for:', userLogin);
@@ -308,14 +347,14 @@ export class EventSubEventRouter extends EventEmitter {
       tier: tier || '1000',
       is_gift: 1,
       start_date: new Date().toISOString(),
-    });
-
-    // Record event
-    this.eventsRepo.storeEvent(
+    });    // Record event and emit to frontend
+    this.storeAndEmitEvent(
       'channel.subscription.gift',
       { user_login: gifterLogin, tier },
       currentSession.channel_id,
-      gifterViewer.id
+      gifterViewer.id,
+      gifterLogin,
+      gifter.display_name
     );
 
     console.log('[EventRouter] ✓ Gift subscription event recorded for:', gifterLogin);
@@ -346,12 +385,14 @@ export class EventSubEventRouter extends EventEmitter {
     }    // Update or create role
     this.viewerRolesRepo.grantRole(viewer.id, 'moderator');
 
-    // Record event
-    this.eventsRepo.storeEvent(
+    // Record event and emit to frontend
+    this.storeAndEmitEvent(
       'channel.moderator.add',
       { user_login: userLogin },
       currentSession.channel_id,
-      viewer.id
+      viewer.id,
+      userLogin,
+      userDisplayName
     );
 
     console.log('[EventRouter] ✓ Moderator add event recorded for:', userLogin);
@@ -384,14 +425,14 @@ export class EventSubEventRouter extends EventEmitter {
     const viewer = this.viewersRepo.getViewerById(userId);
     if (viewer) {
       // Revoke moderator role
-      this.viewerRolesRepo.revokeRole(viewer.id, 'moderator');
-
-      // Record event
-      this.eventsRepo.storeEvent(
+      this.viewerRolesRepo.revokeRole(viewer.id, 'moderator');      // Record event and emit to frontend
+      this.storeAndEmitEvent(
         'channel.moderator.remove',
         { user_login: userLogin },
         currentSession.channel_id,
-        viewer.id
+        viewer.id,
+        userLogin,
+        viewer.display_name || undefined
       );
 
       console.log('[EventRouter] ✓ Moderator remove event recorded for:', userLogin);
@@ -429,15 +470,17 @@ export class EventSubEventRouter extends EventEmitter {
     if (!viewer) {
       console.warn('[EventRouter] Could not create viewer for VIP add:', userLogin);
       return;
-    }
+    }    // Update or create role
+    this.viewerRolesRepo.grantRole(viewer.id, 'vip');
 
-    // Update or create role
-    this.viewerRolesRepo.grantRole(viewer.id, 'vip');    // Record event
-    this.eventsRepo.storeEvent(
+    // Record event and emit to frontend
+    this.storeAndEmitEvent(
       'channel.vip.add',
       { user_login: userLogin },
       currentSession.channel_id,
-      viewer.id
+      viewer.id,
+      userLogin,
+      userDisplayName
     );
 
     console.log('[EventRouter] ✓ VIP add event recorded for:', userLogin);
@@ -470,14 +513,14 @@ export class EventSubEventRouter extends EventEmitter {
     const viewer = this.viewersRepo.getViewerById(userId);
     if (viewer) {
       // Revoke VIP role
-      this.viewerRolesRepo.revokeRole(viewer.id, 'vip');
-
-      // Record event
-      this.eventsRepo.storeEvent(
+      this.viewerRolesRepo.revokeRole(viewer.id, 'vip');      // Record event and emit to frontend
+      this.storeAndEmitEvent(
         'channel.vip.remove',
         { user_login: userLogin },
         currentSession.channel_id,
-        viewer.id
+        viewer.id,
+        userLogin,
+        viewer.display_name || undefined
       );
 
       console.log('[EventRouter] ✓ VIP remove event recorded for:', userLogin);
@@ -546,10 +589,8 @@ export class EventSubEventRouter extends EventEmitter {
       moderator_id: moderatorId,
       moderator_login: moderatorLogin,
       action_at: bannedAt,
-    });
-
-    // Record event
-    this.eventsRepo.storeEvent(
+    });    // Record event and emit to frontend
+    this.storeAndEmitEvent(
       'channel.ban',
       { 
         user_login: userLogin, 
@@ -559,7 +600,9 @@ export class EventSubEventRouter extends EventEmitter {
         duration_seconds: durationSeconds
       },
       currentSession.channel_id,
-      viewer.id
+      viewer.id,
+      userLogin,
+      userDisplayName
     );
 
     console.log(`[EventRouter] ✓ ${actionType} event recorded for:`, userLogin, durationSeconds ? `(${durationSeconds}s)` : '(permanent)');
@@ -611,14 +654,14 @@ export class EventSubEventRouter extends EventEmitter {
         moderator_id: moderatorId,
         moderator_login: moderatorLogin,
         action_at: unbannedAt,
-      });
-
-      // Record event
-      this.eventsRepo.storeEvent(
+      });      // Record event and emit to frontend
+      this.storeAndEmitEvent(
         'channel.unban',
         { user_login: userLogin, moderator_login: moderatorLogin },
         currentSession.channel_id,
-        viewer.id
+        viewer.id,
+        userLogin,
+        userDisplayName
       );
 
       console.log('[EventRouter] ✓ Unban event recorded for:', userLogin);
@@ -631,7 +674,61 @@ export class EventSubEventRouter extends EventEmitter {
         userLogin,
         userName: viewer.display_name,
         moderatorLogin,
-      });
+      });    }
+  }
+
+  /**
+   * Handle chat message event
+   */
+  private async handleChatMessageEvent(event: any, timestamp: string): Promise<void> {
+    console.log(`[EventRouter] Processing chat message from: ${event.chatter_user_login}`);
+
+    const userId = event.chatter_user_id;
+    const userLogin = event.chatter_user_login;
+    const userDisplayName = event.chatter_user_name;
+    const messageText = event.message?.text || '';
+
+    const currentSession = this.sessionsRepo.getCurrentSession();
+    if (!currentSession) {
+      console.warn('[EventRouter] No active session for chat message event');
+      return;
+    }
+
+    // Get or create viewer
+    const viewer = this.viewersRepo.getOrCreate(userId, userLogin, userDisplayName);
+    if (!viewer) {
+      console.error(`[EventRouter] Failed to get/create viewer ${userLogin}`);
+      return;
+    }    // Store chat message event and emit to frontend
+    const eventId = this.storeAndEmitEvent(
+      'channel.chat.message',
+      event,
+      currentSession.channel_id,
+      viewer.id,
+      userLogin,
+      userDisplayName
+    );
+
+    console.log(`[EventRouter] ✓ Chat message stored from: ${userLogin} (ID: ${eventId})`);
+
+    // Forward to TTS manager (EventSub chat messages only, not IRC)
+    if (this.ttsInitializer && messageText) {
+      console.log('[EventRouter→TTS] Forwarding chat to TTS:', userLogin, '-', messageText);
+      
+      // Initialize and invoke TTS manager in background (don't block)
+      this.ttsInitializer()
+        .then(manager => {
+          if (manager) {
+            try {
+              manager.handleChatMessage(userLogin, messageText, viewer.id);
+            } catch (err) {
+              console.warn('[TTS] Failed to handle chat message:', err);
+            }
+          }
+        })
+        .catch(err => {
+          console.warn('[TTS] Failed to initialize manager for chat forwarding:', err);
+        });
     }
   }
 
@@ -650,12 +747,17 @@ let eventSubRouter: EventSubEventRouter | null = null;
 /**
  * Get or create EventSub router instance
  */
-export function getEventSubRouter(mainWindow?: BrowserWindow | null): EventSubEventRouter {
+export function getEventSubRouter(mainWindow?: BrowserWindow | null, ttsInitializer?: () => Promise<any>): EventSubEventRouter {
   if (!eventSubRouter) {
-    eventSubRouter = new EventSubEventRouter(mainWindow);
-  } else if (mainWindow) {
-    // Update main window reference if provided
-    eventSubRouter.setMainWindow(mainWindow);
+    eventSubRouter = new EventSubEventRouter(mainWindow, ttsInitializer);
+  } else {
+    // Update references if provided
+    if (mainWindow) {
+      eventSubRouter.setMainWindow(mainWindow);
+    }
+    if (ttsInitializer) {
+      eventSubRouter.setTTSInitializer(ttsInitializer);
+    }
   }
   return eventSubRouter;
 }

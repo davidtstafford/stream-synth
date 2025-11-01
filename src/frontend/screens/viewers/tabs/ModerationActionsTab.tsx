@@ -29,9 +29,9 @@ export const ModerationActionsTab: React.FC<ModerationActionsTabProps> = ({
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [actionHistory, setActionHistory] = useState<ActionHistoryItem[]>([]);
-  const [actionReason, setActionReason] = useState('');
+  const [actionHistory, setActionHistory] = useState<ActionHistoryItem[]>([]);  const [actionReason, setActionReason] = useState('');
   const [timeoutDuration, setTimeoutDuration] = useState(600); // 10 minutes default
+  const [refreshingStatus, setRefreshingStatus] = useState(false);
   const [liveBanStatus, setLiveBanStatus] = useState<{
     isBanned: boolean;
     isTimedOut: boolean;
@@ -76,15 +76,23 @@ export const ModerationActionsTab: React.FC<ModerationActionsTabProps> = ({
     } finally {
       setLoading(false);
     }
-  };
-
-  const checkLiveBanStatus = async (viewerId: string) => {
+  };  const checkLiveBanStatus = async (viewerId: string) => {
+    console.log('[ModerationActions] Checking ban status for viewer:', viewerId);
+    setRefreshingStatus(true);
     try {
-      const status = await db.checkViewerBanStatus(viewerId);
+      const response = await db.checkViewerBanStatus(viewerId);
+      console.log('[ModerationActions] Ban status response:', response);
+      
+      // IPC framework wraps response: { success: true, data: { isBanned, isTimedOut, ... } }
+      const status = response?.data || response;
+      console.log('[ModerationActions] Extracted ban status:', status);
+      
       setLiveBanStatus(status);
     } catch (err) {
       console.error('Failed to check ban status:', err);
       setLiveBanStatus(null);
+    } finally {
+      setRefreshingStatus(false);
     }
   };
 
@@ -232,10 +240,20 @@ export const ModerationActionsTab: React.FC<ModerationActionsTabProps> = ({
         const successMsg = actionResult.message || `✓ ${actionType.replace('-', ' ')} successful`;
         setActionMessage(successMsg);
         setActionReason('');
-        // Refresh live ban status
-        await checkLiveBanStatus(selectedViewer.id);
-        // Reload viewer data
-        await loadViewerById(selectedViewer.id);
+        
+        // Wait a moment for Twitch API to update, then refresh ban status
+        console.log('[ModerationActions] Waiting 2 seconds before checking ban status...');
+        setTimeout(async () => {
+          console.log('[ModerationActions] Refreshing ban status now...');
+          await checkLiveBanStatus(selectedViewer.id);
+          console.log('[ModerationActions] Ban status refreshed:', liveBanStatus);
+        }, 2000);
+        
+        // Reload viewer data after a delay
+        setTimeout(async () => {
+          await loadViewerById(selectedViewer.id);
+        }, 2500);
+        
         setTimeout(() => setActionMessage(null), 5000);
       } else {
         const errorMsg = actionResult?.error || actionResult?.message || result?.error || 'Action failed';
@@ -351,14 +369,32 @@ export const ModerationActionsTab: React.FC<ModerationActionsTabProps> = ({
             borderRadius: '8px',
             padding: '16px',
             marginBottom: '20px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff' }}>
-                {selectedViewer.display_name || 'Unknown'}
+          }}>            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff' }}>
+                  {selectedViewer.display_name || 'Unknown'}
+                </div>
+                <div style={{ fontSize: '12px', color: '#888' }}>
+                  ID: {selectedViewer.id}
+                </div>
               </div>
-              <div style={{ fontSize: '12px', color: '#888' }}>
-                ID: {selectedViewer.id}
-              </div>
+              <button
+                onClick={() => checkLiveBanStatus(selectedViewer.id)}
+                disabled={refreshingStatus}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#9147ff',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: refreshingStatus ? 'not-allowed' : 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  opacity: refreshingStatus ? 0.5 : 1
+                }}
+              >
+                {refreshingStatus ? '🔄 Refreshing...' : '🔄 Refresh Status'}
+              </button>
             </div>
 
             {/* Current Status Grid */}
@@ -366,11 +402,10 @@ export const ModerationActionsTab: React.FC<ModerationActionsTabProps> = ({
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
               gap: '16px'
-            }}>
-              {/* Live Twitch Ban Status */}
+            }}>              {/* Live Twitch Ban Status */}
               <div>
                 <div style={{ fontSize: '12px', color: '#888', marginBottom: '5px' }}>
-                  Live Twitch Status
+                  Live Twitch Status {refreshingStatus && <span style={{ color: '#ffc107' }}>🔄 Refreshing...</span>}
                 </div>
                 <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
                   {liveBanStatus === null ? (
@@ -497,8 +532,7 @@ export const ModerationActionsTab: React.FC<ModerationActionsTabProps> = ({
             </h3>
 
             {/* Ban/Timeout Section */}
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{
+            <div style={{ marginBottom: '20px' }}>              <div style={{
                 display: 'flex',
                 gap: '10px',
                 marginBottom: '12px',
@@ -506,17 +540,17 @@ export const ModerationActionsTab: React.FC<ModerationActionsTabProps> = ({
               }}>
                 <button
                   onClick={() => handleAction('ban')}
-                  disabled={actionLoading || liveBanStatus?.isBanned || !broadcasterId}
+                  disabled={actionLoading || liveBanStatus?.isBanned || liveBanStatus?.isTimedOut || !broadcasterId}
                   style={{
                     padding: '10px 20px',
-                    backgroundColor: liveBanStatus?.isBanned ? '#555' : '#dc3545',
+                    backgroundColor: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) ? '#555' : '#dc3545',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '4px',
-                    cursor: liveBanStatus?.isBanned || actionLoading ? 'not-allowed' : 'pointer',
+                    cursor: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) || actionLoading ? 'not-allowed' : 'pointer',
                     fontSize: '14px',
                     fontWeight: 'bold',
-                    opacity: liveBanStatus?.isBanned || actionLoading ? 0.5 : 1
+                    opacity: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) || actionLoading ? 0.5 : 1
                   }}
                 >
                   {actionLoading ? '⏳ Processing...' : '⛔ Ban User'}
@@ -527,14 +561,14 @@ export const ModerationActionsTab: React.FC<ModerationActionsTabProps> = ({
                   disabled={actionLoading || (!liveBanStatus?.isBanned && !liveBanStatus?.isTimedOut) || !broadcasterId}
                   style={{
                     padding: '10px 20px',
-                    backgroundColor: (!liveBanStatus?.isBanned && !liveBanStatus?.isTimedOut) ? '#555' : '#28a745',
+                    backgroundColor: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) ? '#28a745' : '#555',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '4px',
-                    cursor: (!liveBanStatus?.isBanned && !liveBanStatus?.isTimedOut) || actionLoading ? 'not-allowed' : 'pointer',
+                    cursor: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) && !actionLoading ? 'pointer' : 'not-allowed',
                     fontSize: '14px',
                     fontWeight: 'bold',
-                    opacity: (!liveBanStatus?.isBanned && !liveBanStatus?.isTimedOut) || actionLoading ? 0.5 : 1
+                    opacity: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) && !actionLoading ? 1 : 0.5
                   }}
                 >
                   {actionLoading ? '⏳ Processing...' : '✓ Unban User'}
@@ -553,8 +587,7 @@ export const ModerationActionsTab: React.FC<ModerationActionsTabProps> = ({
                     fontSize: '14px',
                     fontWeight: 'bold',
                     opacity: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) || actionLoading ? 0.5 : 1
-                  }}
-                >
+                  }}                >
                   {actionLoading ? '⏳ Processing...' : '⏱️ Timeout User'}
                 </button>
               </div>

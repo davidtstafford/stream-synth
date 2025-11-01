@@ -1,7 +1,7 @@
 # ✅ CRITICAL FIX COMPLETE - RESTART REQUIRED
 
 **Date:** November 1, 2025  
-**Status:** 🎯 **ALL FIXES APPLIED & TESTED**
+**Status:** 🎯 **ALL FIXES APPLIED & TESTED** (Including Ban Status UI)
 
 ---
 
@@ -19,7 +19,7 @@
 
 ## 🎉 What Was Fixed
 
-### 5 Critical Issues Resolved
+### 6 Critical Issues Resolved
 
 | # | Issue | Impact | Status |
 |---|-------|--------|--------|
@@ -27,7 +27,8 @@
 | 2 | Missing OAuth scopes | ❌ All actions failed silently | ✅ FIXED |
 | 3 | Incorrect API body format | ❌ Ban/timeout failed | ✅ FIXED |
 | 4 | IPC response double-wrapping | ❌ Success shown as error | ✅ FIXED |
-| 5 | **Duplicate events (NEW!)** | ❌ Events stored 2-3 times | ✅ FIXED |
+| 5 | **Duplicate events** | ❌ Events stored 2x | ✅ FIXED |
+| 6 | **Ban status UI not updating** | ❌ Wrong buttons enabled | ✅ FIXED |
 
 ---
 

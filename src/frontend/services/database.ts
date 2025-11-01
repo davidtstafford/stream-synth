@@ -410,12 +410,7 @@ export async function removeVipViewer(
 }
 
 // Check viewer's real-time ban status from Twitch
-export async function checkViewerBanStatus(userId: string): Promise<{
-  isBanned: boolean;
-  isTimedOut: boolean;
-  expiresAt: string | null;
-  reason: string | null;
-}> {
+export async function checkViewerBanStatus(userId: string): Promise<any> {
   return await ipcRenderer.invoke('twitch:check-user-ban-status', { userId });
 }
 

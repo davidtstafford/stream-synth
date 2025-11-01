@@ -79,22 +79,39 @@ export const ViewerDetailModal: React.FC<ViewerDetailModalProps> = ({
   broadcasterId = '',
   accessToken = '',
   clientId = ''
-}) => {
-  const [history, setHistory] = useState<ViewerHistory | null>(null);
+}) => {  const [history, setHistory] = useState<ViewerHistory | null>(null);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showActionPanel, setShowActionPanel] = useState(false);
-  const [selectedAction, setSelectedAction] = useState<string | null>(null);  const [actionReason, setActionReason] = useState('');
+  const [selectedAction, setSelectedAction] = useState<string | null>(null);
+  const [actionReason, setActionReason] = useState('');
   const [timeoutDuration, setTimeoutDuration] = useState(300); // 5 minutes default
+  const [liveBanStatus, setLiveBanStatus] = useState<{
+    isBanned: boolean;
+    isTimedOut: boolean;
+    expiresAt: string | null;
+    reason: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       loadViewerDetails();
+      checkLiveBanStatus();
     }
-  }, [isOpen, viewer.id]);  const debugDatabase = async () => {
+  }, [isOpen, viewer.id]);
+
+  const checkLiveBanStatus = async () => {
+    try {
+      const status = await db.checkViewerBanStatus(viewer.id);
+      setLiveBanStatus(status);
+    } catch (err) {
+      console.error('Failed to check ban status:', err);
+      setLiveBanStatus(null);
+    }
+  };const debugDatabase = async () => {
     console.log('=== DEBUG DATABASE FOR VIEWER:', viewer.id, '(' + viewer.display_name + ') ===');
     console.log('Expected test viewer with data: 1362524977');
     console.log('Current viewer:', viewer.id === '1362524977' ? '✓ This is the test viewer!' : '✗ This is NOT the test viewer (no history expected)');
@@ -234,13 +251,14 @@ export const ViewerDetailModal: React.FC<ViewerDetailModalProps> = ({
 
       // IPC framework wraps response: { success: true, data: { success, error, ... } }
       // So we need to check result.data.success, not result.success
-      const actionResult = result?.data || result;
-
-      if (actionResult?.success) {
+      const actionResult = result?.data || result;      if (actionResult?.success) {
         setActionMessage(actionResult.message || `Action completed successfully`);
         setSelectedAction(null);
         setActionReason('');
         setTimeoutDuration(300);
+        
+        // Refresh ban status immediately
+        await checkLiveBanStatus();
         
         // Reload history after action
         setTimeout(() => {
@@ -481,57 +499,55 @@ export const ViewerDetailModal: React.FC<ViewerDetailModalProps> = ({
                   }}>
                     ✕ {actionError}
                   </div>
-                )}
-
-                {selectedAction === null && (
+                )}                {selectedAction === null && (
                   <>
                     <button
                       onClick={() => setSelectedAction('ban')}
-                      disabled={actionLoading}
+                      disabled={actionLoading || liveBanStatus?.isBanned || liveBanStatus?.isTimedOut}
                       style={{
                         padding: '8px',
-                        backgroundColor: '#ff6b6b',
+                        backgroundColor: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) ? '#555' : '#ff6b6b',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
-                        cursor: actionLoading ? 'not-allowed' : 'pointer',
+                        cursor: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) || actionLoading ? 'not-allowed' : 'pointer',
                         fontSize: '11px',
                         fontWeight: 'bold',
-                        opacity: actionLoading ? 0.6 : 1
+                        opacity: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) || actionLoading ? 0.6 : 1
                       }}
                     >
                       Ban User
                     </button>
                     <button
                       onClick={() => setSelectedAction('unban')}
-                      disabled={actionLoading}
+                      disabled={actionLoading || (!liveBanStatus?.isBanned && !liveBanStatus?.isTimedOut)}
                       style={{
                         padding: '8px',
-                        backgroundColor: '#51cf66',
+                        backgroundColor: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) ? '#51cf66' : '#555',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
-                        cursor: actionLoading ? 'not-allowed' : 'pointer',
+                        cursor: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) && !actionLoading ? 'pointer' : 'not-allowed',
                         fontSize: '11px',
                         fontWeight: 'bold',
-                        opacity: actionLoading ? 0.6 : 1
+                        opacity: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) && !actionLoading ? 1 : 0.6
                       }}
                     >
                       Unban User
                     </button>
                     <button
                       onClick={() => setSelectedAction('timeout')}
-                      disabled={actionLoading}
+                      disabled={actionLoading || liveBanStatus?.isBanned || liveBanStatus?.isTimedOut}
                       style={{
                         padding: '8px',
-                        backgroundColor: '#f57c00',
+                        backgroundColor: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) ? '#555' : '#f57c00',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
-                        cursor: actionLoading ? 'not-allowed' : 'pointer',
+                        cursor: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) || actionLoading ? 'not-allowed' : 'pointer',
                         fontSize: '11px',
                         fontWeight: 'bold',
-                        opacity: actionLoading ? 0.6 : 1
+                        opacity: (liveBanStatus?.isBanned || liveBanStatus?.isTimedOut) || actionLoading ? 0.6 : 1
                       }}
                     >
                       Timeout User

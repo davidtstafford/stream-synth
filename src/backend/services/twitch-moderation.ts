@@ -356,8 +356,7 @@ export class TwitchModerationService {
   /**
    * Check a specific user's ban status from Twitch API
    * Returns real-time status from Twitch, not from local database
-   */
-  async checkUserBanStatus(
+   */  async checkUserBanStatus(
     broadcasterId: string,
     userId: string,
     accessToken: string,
@@ -374,15 +373,31 @@ export class TwitchModerationService {
         user_id: userId
       });
 
-      const response = await fetch(`https://api.twitch.tv/helix/moderation/banned?${queryParams.toString()}`, {
+      const url = `https://api.twitch.tv/helix/moderation/banned?${queryParams.toString()}`;
+      console.log('[Moderation] Checking ban status:', {
+        url,
+        broadcasterId,
+        userId,
+        hasToken: !!accessToken,
+        hasClientId: !!clientId
+      });
+
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Client-Id': clientId
         }
       });
 
+      console.log('[Moderation] Ban status API response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
       if (!response.ok) {
         if (response.status === 404) {
+          console.log('[Moderation] 404 response - user not in banned list');
           // User not found in banned list = not banned
           return {
             isBanned: false,
@@ -392,13 +407,16 @@ export class TwitchModerationService {
           };
         }
         const errorText = await response.text();
+        console.error('[Moderation] API error response:', errorText);
         throw new Error(`Failed to check ban status: ${response.status} ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('[Moderation] Ban status API data:', JSON.stringify(data, null, 2));
       
       // If data.data is empty, user is not banned
       if (!data.data || data.data.length === 0) {
+        console.log('[Moderation] Empty data array - user not banned');
         return {
           isBanned: false,
           isTimedOut: false,
@@ -409,14 +427,24 @@ export class TwitchModerationService {
 
       // User is banned or timed out
       const bannedUser = data.data[0];
+      console.log('[Moderation] Banned user data:', bannedUser);
+      
       const isPermanent = this.isPermanentBan(bannedUser.expires_at);
+      console.log('[Moderation] isPermanentBan result:', {
+        expires_at: bannedUser.expires_at,
+        isPermanent,
+        reason: bannedUser.reason
+      });
 
-      return {
+      const result = {
         isBanned: isPermanent,
         isTimedOut: !isPermanent,
         expiresAt: bannedUser.expires_at,
         reason: bannedUser.reason || null
       };
+      console.log('[Moderation] Final ban status result:', result);
+
+      return result;
     } catch (error: any) {
       console.error('[Moderation] Error checking ban status:', error);
       // On error, return safe defaults (not banned)

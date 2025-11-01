@@ -43,4 +43,5 @@ export function setupAllIpcHandlers(mainWindow: BrowserWindow): void {
 }
 
 export { runStartupTasks } from './startup';
+export { initializeTTS };
 

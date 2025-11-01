@@ -134,10 +134,9 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
             
             console.log('📝 Event type:', eventType);
             console.log('📦 Event payload:', eventPayload);
-            
-            if (eventType && eventPayload) {
-              // Note: Backend receives events directly from WebSocket via eventsub-manager.
-              // Frontend only needs to handle viewer/event storage for UI display.
+              if (eventType && eventPayload) {
+              // Note: Backend receives events directly from WebSocket via eventsub-manager
+              // and stores them in the database. Frontend only needs to create/update viewers.
               
               // Extract viewer info if available based on event type
               let viewerId: string | undefined;
@@ -171,15 +170,6 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
                 console.log('👥 Creating/updating viewer:', viewerUsername);
                 const viewerResult = await db.getOrCreateViewer(viewerId, viewerUsername, viewerDisplayName);
                 console.log('👥 Viewer result:', viewerResult);
-              }          // Store the event using broadcaster_user_id from the event
-          const eventChannelId = eventPayload.broadcaster_user_id || lastChannelId || user.id;
-          console.log('💾 Storing event for channel:', eventChannelId);
-          const result = await db.storeEvent(eventType, eventPayload, eventChannelId, viewerId);
-              console.log('💾 Store result:', result);
-              if (result.success) {
-                console.log('✅ Event stored with ID:', result.id);
-              } else {
-                console.error('❌ Failed to store event:', result.error);
               }
             } else {
               console.log('⚠️ Missing event type or payload');
@@ -318,10 +308,9 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
         
         console.log('📝 Event type:', eventType);
         console.log('📦 Event payload:', eventPayload);
-        
-        if (eventType && eventPayload) {
-          // Note: Backend receives events directly from WebSocket via eventsub-manager.
-          // Frontend only needs to handle viewer/event storage for UI display.
+          if (eventType && eventPayload) {
+          // Note: Backend receives events directly from WebSocket via eventsub-manager
+          // and stores them in the database. Frontend only needs to create/update viewers.
           
           // Extract viewer info if available based on event type
           let viewerId: string | undefined;
@@ -349,22 +338,12 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = () => {
             viewerDisplayName = eventPayload.from_broadcaster_user_name;
             console.log('🎯 Raid from:', viewerUsername, '(ID:', viewerId, ')');
           }
-            // Create or update viewer if we have their info
+          
+          // Create or update viewer if we have their info
           if (viewerId && viewerUsername) {
             console.log('👥 Creating/updating viewer:', viewerUsername);
             const viewerResult = await db.getOrCreateViewer(viewerId, viewerUsername, viewerDisplayName);
             console.log('👥 Viewer result:', viewerResult);
-          }
-          
-          // Store the event - use broadcaster_user_id from event, fallback to userIdValue
-          const eventChannelId = eventPayload.broadcaster_user_id || userIdValue;
-          console.log('💾 Storing event for channel:', eventChannelId);
-          const result = await db.storeEvent(eventType, eventPayload, eventChannelId, viewerId);
-          console.log('💾 Store result:', result);
-          if (result.success) {
-            console.log('✅ Event stored with ID:', result.id);
-          } else {
-            console.error('❌ Failed to store event:', result.error);
           }
         } else {
           console.log('⚠️ Missing event type or payload');

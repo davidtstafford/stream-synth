@@ -9,6 +9,7 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { getEventSubManager } from './eventsub-manager';
 import { getEventSubRouter } from './eventsub-event-router';
+import { initializeTTS } from '../core/ipc-handlers/tts';
 
 let integrationActive = false;
 
@@ -21,10 +22,9 @@ export function initializeEventSubIntegration(mainWindow: BrowserWindow): void {
     console.log('[EventSubIntegration] Already initialized');
     return;
   }
-
   console.log('[EventSubIntegration] 🚀 Initializing event routing...');
   const manager = getEventSubManager();
-  const router = getEventSubRouter(mainWindow);
+  const router = getEventSubRouter(mainWindow, initializeTTS);
   console.log('[EventSubIntegration] Manager instance:', manager ? 'OK' : 'NULL');
   console.log('[EventSubIntegration] Router instance:', router ? 'OK' : 'NULL');
   console.log('[EventSubIntegration] MainWindow:', mainWindow ? 'OK' : 'NULL');
