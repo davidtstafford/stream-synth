@@ -231,23 +231,27 @@ interface EventAction {
 
 ---
 
-### ✅ Phase 2: Database Layer
+### ✅ Phase 2: Database Layer - **COMPLETE**
+
+**Status:** ✅ **COMPLETE** (November 1, 2025)  
+**Time Spent:** ~3 hours  
+**See:** `EVENT-ACTIONS-PHASE-2-COMPLETE.md` for details
 
 **Files:**
-- [ ] `src/backend/database/migrations.ts`
-- [ ] `src/backend/database/repositories/event-actions.ts`
+- [x] `src/backend/database/migrations.ts` (MODIFIED - added event_actions table)
+- [x] `src/backend/database/repositories/event-actions.ts` (CREATED - 480+ lines)
 
 **Tasks:**
-1. Add migration (version 15) for `event_actions` table
-2. Create `EventActionsRepository` extending `BaseRepository<EventAction>`
-3. Implement methods:
-   - `create()` - Create new action
-   - `update()` - Update existing action
-   - `getByChannelId()` - Get all actions for channel
-   - `getByEventType()` - Get action for specific event type
-   - `delete()` - Remove action
-4. Export from `repositories/index.ts`
-5. Test CRUD operations
+1. ✅ Add migration (version 15) for `event_actions` table
+2. ✅ Create `EventActionsRepository` extending `BaseRepository<EventAction>`
+3. ✅ Implement methods:
+   - ✅ `create()` - Create new action
+   - ✅ `updateById()` - Update existing action
+   - ✅ `getByChannelId()` - Get all actions for channel
+   - ✅ `getByEventType()` - Get action for specific event type
+   - ✅ `removeById()` - Remove action
+4. ✅ Added 14 repository methods total
+5. ✅ Build successful, no errors
 
 ---
 
@@ -520,8 +524,8 @@ interface EventAction {
 
 ### Week 1 (20-25 hours)
 - ✅ **Phase 1: Shared Event Formatter (6h)** - **COMPLETE** (Nov 1, 2025)
-- ⏳ Phase 2: Database Layer (3-4h) - **NEXT**
-- 🔜 Phase 3: Event Action Processor (5-6h)
+- ✅ **Phase 2: Database Layer (3h)** - **COMPLETE** (Nov 1, 2025)
+- ⏳ **Phase 3: Event Action Processor (5-6h)** - **NEXT**
 - 🔜 Phase 4: Browser Source Server (6-7h)
 
 ### Week 2 (15-20 hours)
@@ -537,8 +541,8 @@ interface EventAction {
 - 🔜 Phase 12: Testing & Refinement (4-6h)
 
 **Total:** 40-55 hours  
-**Completed:** 6 hours (Phase 1)  
-**Remaining:** 34-49 hours
+**Completed:** 9 hours (Phases 1-2)  
+**Remaining:** 31-46 hours
 
 ---
 

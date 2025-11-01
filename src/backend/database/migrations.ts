@@ -697,7 +697,6 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_command_usage_command ON chat_command_usage(command_name)
   `);
-
   db.exec(`
     INSERT OR IGNORE INTO chat_commands_config (command_name, command_prefix, enabled, permission_level, rate_limit_seconds)
     VALUES 
@@ -709,6 +708,68 @@ export function runMigrations(db: Database.Database): void {
       ('cooldownvoice', '~', 1, 'moderator', 5),
       ('mutetts', '~', 1, 'moderator', 30),
       ('unmutetts', '~', 1, 'moderator', 30)
+  `);
+
+  // ===== EVENT ACTIONS (Phase 2) =====
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS event_actions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      is_enabled BOOLEAN DEFAULT 1,
+      
+      -- Text Configuration
+      text_enabled BOOLEAN DEFAULT 0,
+      text_template TEXT,
+      text_duration INTEGER DEFAULT 5000,
+      text_position TEXT DEFAULT 'top-center',
+      text_style TEXT,
+      
+      -- Sound Configuration
+      sound_enabled BOOLEAN DEFAULT 0,
+      sound_file_path TEXT,
+      sound_volume REAL DEFAULT 1.0,
+      
+      -- Image Configuration
+      image_enabled BOOLEAN DEFAULT 0,
+      image_file_path TEXT,
+      image_duration INTEGER DEFAULT 5000,
+      image_position TEXT DEFAULT 'center',
+      image_width INTEGER,
+      image_height INTEGER,
+      
+      -- Video Configuration
+      video_enabled BOOLEAN DEFAULT 0,
+      video_file_path TEXT,
+      video_volume REAL DEFAULT 1.0,
+      video_position TEXT DEFAULT 'center',
+      video_width INTEGER,
+      video_height INTEGER,
+      
+      -- Metadata
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      
+      -- One action per event type per channel
+      UNIQUE(channel_id, event_type)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_actions_channel ON event_actions(channel_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_actions_event_type ON event_actions(event_type)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_actions_enabled ON event_actions(is_enabled)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_actions_channel_event ON event_actions(channel_id, event_type)
   `);
 
   console.log('[Migrations] Database schema initialization complete');
