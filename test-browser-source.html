@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Browser Source Alerts</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 {
+      color: #9147ff;
+    }
+    .section {
+      background: #16213e;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      border: 2px solid #9147ff;
+    }
+    button {
+      background: #9147ff;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #772ce8;
+    }
+    button:active {
+      transform: scale(0.98);
+    }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+    }
+    .connected {
+      background: #28a745;
+      color: white;
+    }
+    .disconnected {
+      background: #dc3545;
+      color: white;
+    }
+    code {
+      background: #0f3460;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .info {
+      background: #0f3460;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎬 Stream Synth - Browser Source Tester</h1>
+
+  <div class="section">
+    <h2>Connection Status</h2>
+    <div id="status" class="status disconnected">
+      ⏳ Connecting to server...
+    </div>
+    <div class="info">
+      <strong>Server:</strong> <code>http://localhost:3737</code><br>
+      <strong>Client ID:</strong> <code id="clientId">-</code><br>
+      <strong>Alerts Sent:</strong> <code id="alertCount">0</code>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>🎯 Quick Tests</h2>
+    <button onclick="sendTestAlert()">📢 Send Test Follow Alert</button>
+    <button onclick="sendTextAlert()">📝 Text Alert</button>
+    <button onclick="sendMultiAlert()">🎨 Text + Sound Alert</button>
+    <button onclick="sendRapidAlerts()">⚡ 3 Rapid Alerts (Queue Test)</button>
+  </div>
+
+  <div class="section">
+    <h2>🎨 Custom Alert</h2>
+    <label>Message: <input type="text" id="customMessage" value="Hello from Stream Synth!" style="width: 300px; padding: 8px;"></label><br><br>
+    <label>Position:
+      <select id="customPosition" style="padding: 8px;">
+        <option value="top-center">Top Center</option>
+        <option value="top-left">Top Left</option>
+        <option value="top-right">Top Right</option>
+        <option value="middle-center" selected>Middle Center</option>
+        <option value="middle-left">Middle Left</option>
+        <option value="middle-right">Middle Right</option>
+        <option value="bottom-center">Bottom Center</option>
+        <option value="bottom-left">Bottom Left</option>
+        <option value="bottom-right">Bottom Right</option>
+      </select>
+    </label><br><br>
+    <label>Duration: <input type="number" id="customDuration" value="5000" style="width: 100px; padding: 8px;"> ms</label><br><br>
+    <button onclick="sendCustomAlert()">🚀 Send Custom Alert</button>
+  </div>
+
+  <div class="section">
+    <h2>📋 Instructions</h2>
+    <ol>
+      <li>Make sure Stream Synth is running</li>
+      <li>Check connection status above is 🟢 <strong>Connected</strong></li>
+      <li>Click any button to test alerts</li>
+      <li>Open <code>http://localhost:3737/browser-source?debug=1</code> to see alerts</li>
+      <li>Add to OBS as Browser source to test on stream!</li>
+    </ol>
+  </div>
+
+  <div class="section">
+    <h2>🎬 OBS Setup</h2>
+    <p><strong>Add Browser Source in OBS:</strong></p>
+    <ol>
+      <li>Sources → Add → Browser</li>
+      <li>URL: <code>http://localhost:3737/browser-source</code></li>
+      <li>Width: <code>1920</code></li>
+      <li>Height: <code>1080</code></li>
+      <li>✅ Check "Shutdown source when not visible"</li>
+      <li>✅ Check "Refresh browser when scene becomes active"</li>
+    </ol>
+  </div>
+
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script>
+    let socket;
+    let alertCount = 0;
+
+    // Connect to server
+    function connect() {
+      socket = io('http://localhost:3737', {
+        transports: ['websocket', 'polling'],
+        reconnection: true
+      });
+
+      socket.on('connect', () => {
+        updateStatus('connected', '🟢 Connected to server');
+      });
+
+      socket.on('connected', (data) => {
+        document.getElementById('clientId').textContent = data.clientId || socket.id;
+      });
+
+      socket.on('disconnect', () => {
+        updateStatus('disconnected', '🔴 Disconnected from server');
+      });
+
+      socket.on('reconnecting', (attempt) => {
+        updateStatus('disconnected', `🟡 Reconnecting... (${attempt})`);
+      });
+    }
+
+    function updateStatus(status, message) {
+      const statusEl = document.getElementById('status');
+      statusEl.className = `status ${status}`;
+      statusEl.textContent = message;
+    }
+
+    function sendTestAlert() {
+      const alert = {
+        event_type: 'channel.follow',
+        channel_id: 'test-channel',
+        formatted: {
+          html: '<strong>TestUser</strong> followed!',
+          plainText: 'TestUser followed!',
+          emoji: '❤️',
+          variables: { username: 'TestUser', display_name: 'TestUser' }
+        },
+        text: {
+          content: 'TestUser just followed! ❤️',
+          duration: 5000,
+          position: 'top-center',
+          style: {
+            fontSize: '32px',
+            fontFamily: 'Arial, sans-serif',
+            color: '#ffffff',
+            backgroundColor: 'rgba(145, 71, 255, 0.9)',
+            padding: '20px 40px',
+            borderRadius: '10px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
+          }
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      socket.emit('alert', alert);
+      alertCount++;
+      document.getElementById('alertCount').textContent = alertCount;
+      console.log('Sent test follow alert');
+    }
+
+    function sendTextAlert() {
+      const alert = {
+        event_type: 'test',
+        channel_id: 'test',
+        formatted: {
+          html: 'Simple Text Alert',
+          plainText: 'Simple Text Alert',
+          emoji: '📝',
+          variables: {}
+        },
+        text: {
+          content: 'This is a simple text alert!',
+          duration: 4000,
+          position: 'middle-center'
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      socket.emit('alert', alert);
+      alertCount++;
+      document.getElementById('alertCount').textContent = alertCount;
+      console.log('Sent text alert');
+    }
+
+    function sendMultiAlert() {
+      const alert = {
+        event_type: 'channel.subscribe',
+        channel_id: 'test',
+        formatted: {
+          html: '<strong>Someone</strong> subscribed!',
+          plainText: 'Someone subscribed!',
+          emoji: '⭐',
+          variables: { username: 'NewSubscriber' }
+        },
+        text: {
+          content: 'NewSubscriber just subscribed! ⭐',
+          duration: 6000,
+          position: 'top-center',
+          style: {
+            fontSize: '28px',
+            color: '#ffd700',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            padding: '15px 30px',
+            borderRadius: '8px'
+          }
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      socket.emit('alert', alert);
+      alertCount++;
+      document.getElementById('alertCount').textContent = alertCount;
+      console.log('Sent multi-media alert');
+    }
+
+    function sendRapidAlerts() {
+      for (let i = 1; i <= 3; i++) {
+        setTimeout(() => {
+          const alert = {
+            event_type: 'test',
+            channel_id: 'test',
+            formatted: {
+              html: `Alert ${i}`,
+              plainText: `Alert ${i}`,
+              emoji: '⚡',
+              variables: {}
+            },
+            text: {
+              content: `Rapid Alert #${i}`,
+              duration: 3000,
+              position: 'bottom-center'
+            },
+            timestamp: new Date().toISOString()
+          };
+
+          socket.emit('alert', alert);
+          alertCount++;
+          document.getElementById('alertCount').textContent = alertCount;
+          console.log(`Sent rapid alert ${i}`);
+        }, i * 100);
+      }
+    }
+
+    function sendCustomAlert() {
+      const message = document.getElementById('customMessage').value;
+      const position = document.getElementById('customPosition').value;
+      const duration = parseInt(document.getElementById('customDuration').value);
+
+      const alert = {
+        event_type: 'custom',
+        channel_id: 'test',
+        formatted: {
+          html: message,
+          plainText: message,
+          emoji: '🎨',
+          variables: {}
+        },
+        text: {
+          content: message,
+          duration: duration,
+          position: position,
+          style: {
+            fontSize: '36px',
+            color: '#ffffff',
+            backgroundColor: 'rgba(145, 71, 255, 0.95)',
+            padding: '25px 50px',
+            borderRadius: '15px',
+            boxShadow: '0 6px 12px rgba(0, 0, 0, 0.4)'
+          }
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      socket.emit('alert', alert);
+      alertCount++;
+      document.getElementById('alertCount').textContent = alertCount;
+      console.log('Sent custom alert:', message);
+    }
+
+    // Connect on load
+    connect();
+  </script>
+</body>
+</html>
