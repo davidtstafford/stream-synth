@@ -397,8 +397,7 @@ export async function addVipViewer(
 export async function removeVipViewer(
   broadcasterId: string,
   userId: string,
-  displayName: string,
-  accessToken: string,
+  displayName: string,  accessToken: string,
   clientId: string
 ): Promise<any> {
   return await ipcRenderer.invoke('viewer:remove-vip', {
@@ -408,6 +407,10 @@ export async function removeVipViewer(
     accessToken,
     clientId
   });
+}
+
+export async function debugViewerData(viewerId: string): Promise<any> {
+  return await ipcRenderer.invoke('debug:viewer-data', { viewerId });
 }
 
 

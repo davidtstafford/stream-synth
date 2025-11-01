@@ -379,12 +379,25 @@ export const ViewersScreen: React.FC = () => {
                   onMouseLeave={(e) => {
                     (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
                   }}
-                >
-                  <td style={{ padding: '10px' }}>
-                    <span style={{ color: '#9147ff', fontWeight: 'bold' }}>
-                      {viewer.display_name || 'Unknown'}
-                    </span>
-                  </td>                  <td style={{ padding: '10px' }}>
+                >                  <td style={{ padding: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#9147ff', fontWeight: 'bold' }}>
+                        {viewer.display_name || 'Unknown'}
+                      </span>
+                      {viewer.id === '1362524977' && (
+                        <span style={{
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                          fontSize: '10px',
+                          fontWeight: 'bold',
+                          backgroundColor: '#28a745',
+                          color: 'white'
+                        }} title="This viewer has history data">
+                          ✓ HAS DATA
+                        </span>
+                      )}
+                    </div>
+                  </td><td style={{ padding: '10px' }}>
                     {roles.length > 0 ? (
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {viewer.is_broadcaster && (

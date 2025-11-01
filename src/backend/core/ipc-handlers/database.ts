@@ -792,8 +792,7 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
         input.clientId
       )
     }
-  );
-  ipcRegistry.register<{
+  );  ipcRegistry.register<{
     broadcasterId: string;
     userId: string;
     displayName: string;
@@ -817,6 +816,31 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
         input.accessToken,
         input.clientId
       )
+    }
+  );
+
+  // Debug handler to check raw database tables
+  ipcRegistry.register<{ viewerId: string }, any>(
+    'debug:viewer-data',
+    {
+      validate: (input) => {
+        if (!input?.viewerId) return 'Viewer ID is required';
+        return null;
+      },
+      execute: async (input) => {
+        const { getDatabase } = await import('../../database/connection');
+        const db = getDatabase();
+        
+        return {
+          viewer: db.prepare('SELECT * FROM viewers WHERE id = ?').get(input.viewerId),
+          moderation: db.prepare('SELECT * FROM moderation_history WHERE viewer_id = ? ORDER BY action_at DESC').all(input.viewerId),
+          roles: db.prepare('SELECT * FROM viewer_roles WHERE viewer_id = ? ORDER BY granted_at DESC').all(input.viewerId),
+          follower: db.prepare('SELECT * FROM follower_history WHERE viewer_id = ? ORDER BY detected_at DESC').all(input.viewerId),
+          subscriptions: db.prepare('SELECT * FROM viewer_subscriptions WHERE viewer_id = ? ORDER BY start_date DESC').all(input.viewerId),
+          status: db.prepare('SELECT * FROM viewer_subscription_status WHERE id = ?').get(input.viewerId),
+          events: db.prepare('SELECT * FROM events WHERE viewer_id = ? ORDER BY created_at DESC LIMIT 10').all(input.viewerId)
+        };
+      }
     }
   );
 }

@@ -87,30 +87,64 @@ export const ViewerDetailModal: React.FC<ViewerDetailModalProps> = ({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showActionPanel, setShowActionPanel] = useState(false);
-  const [selectedAction, setSelectedAction] = useState<string | null>(null);
-  const [actionReason, setActionReason] = useState('');
+  const [selectedAction, setSelectedAction] = useState<string | null>(null);  const [actionReason, setActionReason] = useState('');
   const [timeoutDuration, setTimeoutDuration] = useState(300); // 5 minutes default
 
   useEffect(() => {
     if (isOpen) {
       loadViewerDetails();
     }
-  }, [isOpen, viewer.id]);
-
+  }, [isOpen, viewer.id]);  const debugDatabase = async () => {
+    console.log('=== DEBUG DATABASE FOR VIEWER:', viewer.id, '(' + viewer.display_name + ') ===');
+    console.log('Expected test viewer with data: 1362524977');
+    console.log('Current viewer:', viewer.id === '1362524977' ? '✓ This is the test viewer!' : '✗ This is NOT the test viewer (no history expected)');
+    
+    try {
+      const debugData = await db.debugViewerData(viewer.id);
+      console.log('Raw Database Data:', JSON.stringify(debugData, null, 2));
+      
+      // Access data from wrapped response
+      const data = debugData.data || debugData;
+      console.log('Viewer:', data.viewer);
+      console.log('Moderation History:', data.moderation);
+      console.log('Roles:', data.roles);
+      console.log('Follower History:', data.follower);
+      console.log('Subscriptions:', data.subscriptions);
+      console.log('Status:', data.status);
+      console.log('Recent Events:', data.events);
+      
+      const totalEvents = (data.moderation?.length || 0) + (data.roles?.length || 0) + (data.follower?.length || 0);
+      alert(`Debug data logged to console (F12)\n\nViewer: ${viewer.display_name} (${viewer.id})\nTotal events in DB: ${totalEvents}`);
+    } catch (err: any) {
+      console.error('Debug failed:', err);
+      alert('Debug failed: ' + err.message);
+    }
+  };
   const loadViewerDetails = async () => {
     setLoading(true);
     setActionMessage(null);
     setActionError(null);
 
     try {
-      const historyData = await db.getViewerDetailedHistory(viewer.id);
-      const statsData = await db.getViewerStats(viewer.id);
+      const historyResponse = await db.getViewerDetailedHistory(viewer.id);
+      const statsResponse = await db.getViewerStats(viewer.id);
+      
+      console.log('[ViewerModal] History response received:', historyResponse);
+      console.log('[ViewerModal] Stats response received:', statsResponse);
+      
+      // Unwrap the response if it's wrapped in { success, data }
+      const historyData = historyResponse?.data || historyResponse;
+      const statsData = statsResponse?.data || statsResponse;
       
       if (historyData && !historyData.error) {
+        console.log('[ViewerModal] Setting history with timeline length:', historyData.timeline?.length);
         setHistory(historyData);
+      } else {
+        console.warn('[ViewerModal] History data invalid or has error:', historyData);
       }
       setStats(statsData);
     } catch (err: any) {
+      console.error('[ViewerModal] Error loading details:', err);
       setActionError(err.message || 'Failed to load viewer details');
     } finally {
       setLoading(false);
@@ -260,21 +294,38 @@ export const ViewerDetailModal: React.FC<ViewerDetailModalProps> = ({
               User ID: {viewer.id}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              width: '32px',
-              height: '32px',
-              border: 'none',
-              borderRadius: '4px',
-              backgroundColor: '#333',
-              color: '#fff',
-              fontSize: '18px',
-              cursor: 'pointer'
-            }}
-          >
-            ✕
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={debugDatabase}
+              style={{
+                padding: '8px 12px',
+                border: 'none',
+                borderRadius: '4px',
+                backgroundColor: '#ff9800',
+                color: '#fff',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              🐛 Debug DB
+            </button>
+            <button
+              onClick={onClose}
+              style={{
+                width: '32px',
+                height: '32px',
+                border: 'none',
+                borderRadius: '4px',
+                backgroundColor: '#333',
+                color: '#fff',
+                fontSize: '18px',
+                cursor: 'pointer'
+              }}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Content */}
