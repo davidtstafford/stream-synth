@@ -280,4 +280,134 @@ export async function checkSubscriptionStatus(viewerId: string): Promise<{ succe
   return await ipcRenderer.invoke('db:check-subscription-status', viewerId);
 }
 
+// Viewer History & Details
+export async function getViewerDetailedHistory(viewerId: string): Promise<any> {
+  const response = await ipcRenderer.invoke('viewer:get-detailed-history', viewerId);
+  return response;
+}
+
+export async function getViewerStats(viewerId: string): Promise<any> {
+  const response = await ipcRenderer.invoke('viewer:get-stats', viewerId);
+  return response;
+}
+
+// Viewer Moderation Actions
+export async function banViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  reason: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:ban', {
+    broadcasterId,
+    userId,
+    displayName,
+    reason,
+    accessToken,
+    clientId
+  });
+}
+
+export async function unbanViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:unban', {
+    broadcasterId,
+    userId,
+    displayName,
+    accessToken,
+    clientId
+  });
+}
+
+export async function timeoutViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  durationSeconds: number,
+  reason: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:timeout', {
+    broadcasterId,
+    userId,
+    displayName,
+    durationSeconds,
+    reason,
+    accessToken,
+    clientId
+  });
+}
+
+export async function addModViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:add-mod', {
+    broadcasterId,
+    userId,
+    displayName,
+    accessToken,
+    clientId
+  });
+}
+
+export async function removeModViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:remove-mod', {
+    broadcasterId,
+    userId,
+    displayName,
+    accessToken,
+    clientId
+  });
+}
+
+export async function addVipViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:add-vip', {
+    broadcasterId,
+    userId,
+    displayName,
+    accessToken,
+    clientId
+  });
+}
+
+export async function removeVipViewer(
+  broadcasterId: string,
+  userId: string,
+  displayName: string,
+  accessToken: string,
+  clientId: string
+): Promise<any> {
+  return await ipcRenderer.invoke('viewer:remove-vip', {
+    broadcasterId,
+    userId,
+    displayName,
+    accessToken,
+    clientId
+  });
+}
+
 

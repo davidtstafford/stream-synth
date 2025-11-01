@@ -11,6 +11,12 @@ export async function subscribeToEvent(
   broadcasterId: string,
   userId: string
 ): Promise<void> {
+  // Filter out IRC events - they are handled by IRC connection, not EventSub
+  if (eventType.startsWith('irc.')) {
+    console.log(`[EventSub] Skipping IRC event ${eventType} - handled by IRC connection`);
+    return;
+  }
+
   if (!accessToken || !sessionId) {
     console.error('Cannot subscribe: missing token or session', { 
       hasToken: !!accessToken, 

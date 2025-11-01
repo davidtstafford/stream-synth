@@ -55,15 +55,15 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
           const newSubscriptions = {} as EventSubscriptionsType;
           Object.values(EVENT_GROUPS).flat().forEach(event => {
             newSubscriptions[event as keyof EventSubscriptionsType] = savedEvents.includes(event);
-          });
-          setSubscriptions(newSubscriptions);
+          });          setSubscriptions(newSubscriptions);
 
-          // Re-subscribe to saved events
+          // Re-subscribe to saved events (filter out IRC events)
           savedEvents.forEach(eventType => {
-            if (!MANDATORY_SUBSCRIPTIONS.includes(eventType as keyof EventSubscriptionsType)) {
+            if (!MANDATORY_SUBSCRIPTIONS.includes(eventType as keyof EventSubscriptionsType) &&
+                !eventType.startsWith('irc.')) {
               subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);
             }
-          });        } else {
+          });} else {
           // No saved preferences, enable all events by default (already in initial state)
           const allEvents = Object.values(EVENT_GROUPS).flat();
           

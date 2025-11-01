@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as db from '../../services/database';
+import { ViewerDetailModal } from './viewer-detail-modal';
 
 export const ViewersScreen: React.FC = () => {
   const [viewers, setViewers] = useState<db.ViewerWithSubscription[]>([]);
@@ -9,6 +10,11 @@ export const ViewersScreen: React.FC = () => {
   const [totalCount, setTotalCount] = useState<number>(0);
   const [syncing, setSyncing] = useState<boolean>(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [selectedViewer, setSelectedViewer] = useState<db.ViewerWithSubscription | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [broadcasterId, setBroadcasterId] = useState<string>('');
+  const [accessToken, setAccessToken] = useState<string>('');
+  const [clientId, setClientId] = useState<string>('');
 
   const loadViewers = async () => {
     setLoading(true);
@@ -67,6 +73,29 @@ export const ViewersScreen: React.FC = () => {
       ipcRenderer.removeListener('eventsub:role-changed', handleRoleChanged);
       ipcRenderer.removeListener('eventsub:moderation-changed', handleModerationChanged);
     };
+  }, []);
+
+  // Load credentials for moderation actions
+  useEffect(() => {
+    const loadCredentials = async () => {
+      try {
+        // Get current session for channel ID
+        const session = await db.getCurrentSession();
+        if (session) {
+          // Get OAuth token (using channel_id as user_id since they're the same for the authenticated user)
+          const token = await db.getToken(session.user_id);
+          if (token) {
+            setBroadcasterId(session.channel_id);
+            setAccessToken(token.accessToken);
+            setClientId(token.clientId);
+          }
+        }
+      } catch (err) {
+        console.error('[Viewers] Failed to load credentials:', err);
+      }
+    };
+
+    loadCredentials();
   }, []);
 
   const handleDeleteViewer = async (id: string) => {
@@ -333,11 +362,22 @@ export const ViewersScreen: React.FC = () => {
                 if (viewer.is_moderator) roles.push('Moderator');
                 if (viewer.is_vip) roles.push('VIP');
                 
-                return (
-                <tr
+                return (                <tr
                   key={viewer.id}
+                  onClick={() => {
+                    setSelectedViewer(viewer);
+                    setDetailModalOpen(true);
+                  }}
                   style={{
-                    borderBottom: '1px solid #333'
+                    borderBottom: '1px solid #333',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = '#2a2a2a';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
                   }}
                 >
                   <td style={{ padding: '10px' }}>
@@ -441,8 +481,25 @@ export const ViewersScreen: React.FC = () => {
               );
               })}
             </tbody>
-          </table>
-        </div>
+          </table>        </div>
+      )}
+
+      {/* Viewer Detail Modal */}
+      {selectedViewer && (
+        <ViewerDetailModal
+          viewer={selectedViewer}
+          isOpen={detailModalOpen}
+          onClose={() => {
+            setDetailModalOpen(false);
+            setSelectedViewer(null);
+          }}
+          onActionComplete={() => {
+            loadViewers(); // Reload viewers after action
+          }}
+          broadcasterId={broadcasterId}
+          accessToken={accessToken}
+          clientId={clientId}
+        />
       )}
     </div>
   );

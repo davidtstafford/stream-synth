@@ -85,10 +85,45 @@ export class EventSubEventRouter extends EventEmitter {
           await this.handleVIPRemoveEvent(eventData, timestamp);
           break;        case 'channel.ban':
           await this.handleBanEvent(eventData, timestamp);
+          break;        case 'channel.unban':
+          await this.handleUnbanEvent(eventData, timestamp);
           break;
 
-        case 'channel.unban':
-          await this.handleUnbanEvent(eventData, timestamp);
+        case 'channel.chat.message':
+          // Chat messages are handled by the eventsub-integration.ts file
+          // which forwards them to TTS. We just log them here.
+          console.log(`[EventRouter] Chat message from ${eventData.chatter_user_login}: ${eventData.message?.text}`);
+          break;
+
+        case 'channel.chat.clear':
+        case 'channel.chat.clear_user_messages':
+        case 'channel.chat.message_delete':
+        case 'channel.chat_settings.update':
+        case 'channel.cheer':
+        case 'channel.channel_points_custom_reward.add':
+        case 'channel.channel_points_custom_reward.remove':
+        case 'channel.channel_points_custom_reward.update':
+        case 'channel.channel_points_custom_reward_redemption.add':
+        case 'channel.channel_points_custom_reward_redemption.update':
+        case 'channel.goal.begin':
+        case 'channel.goal.end':
+        case 'channel.goal.progress':
+        case 'channel.hype_train.begin':
+        case 'channel.hype_train.end':
+        case 'channel.hype_train.progress':
+        case 'channel.poll.begin':
+        case 'channel.poll.end':
+        case 'channel.poll.progress':
+        case 'channel.prediction.begin':
+        case 'channel.prediction.end':
+        case 'channel.prediction.lock':
+        case 'channel.prediction.progress':
+        case 'channel.raid':
+        case 'channel.update':
+        case 'stream.online':
+        case 'stream.offline':
+          // These events are logged but don't need special routing
+          console.log(`[EventRouter] Received ${eventType} event`);
           break;
 
         default:

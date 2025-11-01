@@ -25,18 +25,45 @@ import { TwitchSubscriptionsService } from '../../services/twitch-subscriptions'
 import { TTSAccessRepository } from '../../database/repositories/tts-access';
 import { ChannelPointGrantsRepository } from '../../database/repositories/channel-point-grants';
 import { ViewerTTSRulesRepository } from '../../database/repositories/viewer-tts-rules';
+import { ViewerHistoryRepository } from '../../database/repositories/viewer-history';
+import { ViewerModerationActionsService } from '../../services/viewer-moderation-actions';
 
-// Initialize repositories
-const settingsRepo = new SettingsRepository();
-const sessionsRepo = new SessionsRepository();
-const eventsRepo = new EventsRepository();
-const tokensRepo = new TokensRepository();
-const viewersRepo = new ViewersRepository();
-const subscriptionsRepo = new SubscriptionsRepository();
-const twitchSubsService = new TwitchSubscriptionsService();
-const ttsAccessRepo = new TTSAccessRepository();
-const channelPointGrantsRepo = new ChannelPointGrantsRepository();
-const viewerTTSRulesRepo = new ViewerTTSRulesRepository();
+// Initialize repositories with lazy getters to avoid early initialization
+let settingsRepoInstance: SettingsRepository | null = null;
+const getSettingsRepo = () => settingsRepoInstance ??= new SettingsRepository();
+
+let sessionsRepoInstance: SessionsRepository | null = null;
+const getSessionsRepo = () => sessionsRepoInstance ??= new SessionsRepository();
+
+let eventsRepoInstance: EventsRepository | null = null;
+const getEventsRepo = () => eventsRepoInstance ??= new EventsRepository();
+
+let tokensRepoInstance: TokensRepository | null = null;
+const getTokensRepo = () => tokensRepoInstance ??= new TokensRepository();
+
+let viewersRepoInstance: ViewersRepository | null = null;
+const getViewersRepo = () => viewersRepoInstance ??= new ViewersRepository();
+
+let subscriptionsRepoInstance: SubscriptionsRepository | null = null;
+const getSubscriptionsRepo = () => subscriptionsRepoInstance ??= new SubscriptionsRepository();
+
+let twitchSubsServiceInstance: TwitchSubscriptionsService | null = null;
+const getTwitchSubsService = () => twitchSubsServiceInstance ??= new TwitchSubscriptionsService();
+
+let ttsAccessRepoInstance: TTSAccessRepository | null = null;
+const getTTSAccessRepo = () => ttsAccessRepoInstance ??= new TTSAccessRepository();
+
+let channelPointGrantsRepoInstance: ChannelPointGrantsRepository | null = null;
+const getChannelPointGrantsRepo = () => channelPointGrantsRepoInstance ??= new ChannelPointGrantsRepository();
+
+let viewerTTSRulesRepoInstance: ViewerTTSRulesRepository | null = null;
+const getViewerTTSRulesRepo = () => viewerTTSRulesRepoInstance ??= new ViewerTTSRulesRepository();
+
+let viewerHistoryRepoInstance: ViewerHistoryRepository | null = null;
+const getViewerHistoryRepo = () => viewerHistoryRepoInstance ??= new ViewerHistoryRepository();
+
+let moderationActionsServiceInstance: ViewerModerationActionsService | null = null;
+const getModerationActionsService = () => moderationActionsServiceInstance ??= new ViewerModerationActionsService();
 
 export function setupDatabaseHandlers(): void {
   // ===== Database: Settings =====
@@ -44,7 +71,7 @@ export function setupDatabaseHandlers(): void {
     'db:get-setting',
     {
       validate: (key) => key ? null : 'Setting key is required',
-      execute: async (key) => settingsRepo.get(key)
+      execute: async (key) => getSettingsRepo().get(key)
     }
   );
 
@@ -55,17 +82,15 @@ export function setupDatabaseHandlers(): void {
         if (!input.key) return 'Setting key is required';
         if (input.value === undefined || input.value === null) return 'Setting value is required';
         return null;
-      },
-      execute: async (input) => {
-        settingsRepo.set(input.key, input.value);
+      },      execute: async (input) => {
+        getSettingsRepo().set(input.key, input.value);
         return { success: true };
       }
     }
-  );
-  ipcRegistry.register<void, any[]>(
+  );  ipcRegistry.register<void, any[]>(
     'db:get-all-settings',
     {
-      execute: async () => settingsRepo.getAll()
+      execute: async () => getSettingsRepo().getAll()
     }
   );
 
@@ -79,7 +104,7 @@ export function setupDatabaseHandlers(): void {
         return null;
       },
       execute: async (session) => {
-        const id = sessionsRepo.create(session);
+        const id = getSessionsRepo().create(session);
         return { success: true, id };
       }
     }
@@ -88,7 +113,7 @@ export function setupDatabaseHandlers(): void {
   ipcRegistry.register<void, any>(
     'db:get-current-session',
     {
-      execute: async () => sessionsRepo.getCurrentSession()
+      execute: async () => getSessionsRepo().getCurrentSession()
     }
   );
 
@@ -96,7 +121,7 @@ export function setupDatabaseHandlers(): void {
     'db:end-current-session',
     {
       execute: async () => {
-        sessionsRepo.endCurrentSession();
+        getSessionsRepo().endCurrentSession();
         return { success: true };
       }
     }
@@ -105,7 +130,7 @@ export function setupDatabaseHandlers(): void {
   ipcRegistry.register<number, any[]>(
     'db:get-recent-sessions',
     {
-      execute: async (limit = 10) => sessionsRepo.getRecentSessions(limit)
+      execute: async (limit = 10) => getSessionsRepo().getRecentSessions(limit)
     }
   );
 
@@ -120,7 +145,7 @@ export function setupDatabaseHandlers(): void {
         return null;
       },
       execute: async (input) => {
-        eventsRepo.saveSubscription(input.userId, input.channelId, input.eventType, input.isEnabled);
+        getEventsRepo().saveSubscription(input.userId, input.channelId, input.eventType, input.isEnabled);
         return { success: true };
       }
     }
@@ -134,7 +159,7 @@ export function setupDatabaseHandlers(): void {
         if (!input.channelId) return 'Channel ID is required';
         return null;
       },
-      execute: async (input) => eventsRepo.getSubscriptions(input.userId, input.channelId)
+      execute: async (input) => getEventsRepo().getSubscriptions(input.userId, input.channelId)
     }
   );
 
@@ -146,7 +171,7 @@ export function setupDatabaseHandlers(): void {
         if (!input.channelId) return 'Channel ID is required';
         return null;
       },
-      execute: async (input) => eventsRepo.getEnabledEvents(input.userId, input.channelId)
+      execute: async (input) => getEventsRepo().getEnabledEvents(input.userId, input.channelId)
     }
   );
 
@@ -159,7 +184,7 @@ export function setupDatabaseHandlers(): void {
         return null;
       },
       execute: async (input) => {
-        eventsRepo.clearSubscriptions(input.userId, input.channelId);
+        getEventsRepo().clearSubscriptions(input.userId, input.channelId);
         return { success: true };
       }
     }
@@ -175,7 +200,7 @@ export function setupDatabaseHandlers(): void {
         return null;
       },
       execute: async (token) => {
-        tokensRepo.save(token);
+        getTokensRepo().save(token);
         return { success: true };
       }
     }
@@ -185,7 +210,7 @@ export function setupDatabaseHandlers(): void {
     'db:get-token',
     {
       validate: (userId) => userId ? null : 'User ID is required',
-      execute: async (userId) => tokensRepo.get(userId)
+      execute: async (userId) => getTokensRepo().get(userId)
     }
   );
 
@@ -194,7 +219,7 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (userId) => userId ? null : 'User ID is required',
       execute: async (userId) => {
-        tokensRepo.invalidate(userId);
+        getTokensRepo().invalidate(userId);
         return { success: true };
       }
     }
@@ -205,12 +230,11 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (userId) => userId ? null : 'User ID is required',
       execute: async (userId) => {
-        tokensRepo.delete(userId);
+        getTokensRepo().delete(userId);
         return { success: true };
       }
     }
-  );
-  // ===== Database: Viewers =====
+  );  // ===== Database: Viewers =====
   ipcRegistry.register<{ id: string; username: string; displayName?: string }, { success: boolean; viewer: any }>(
     'db:get-or-create-viewer',
     {
@@ -220,7 +244,7 @@ export function setupDatabaseHandlers(): void {
         return null;
       },
       execute: async (input) => {
-        const viewer = viewersRepo.getOrCreate(input.id, input.username, input.displayName);
+        const viewer = getViewersRepo().getOrCreate(input.id, input.username, input.displayName);
         if (!viewer) {
           throw new Error('Viewer not created: numeric ID required');
         }
@@ -234,7 +258,7 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (id) => id ? null : 'Viewer ID is required',
       execute: async (id) => {
-        const viewer = viewersRepo.getViewerById(id);
+        const viewer = getViewersRepo().getViewerById(id);
         return { success: true, viewer };
       }
     }
@@ -244,7 +268,7 @@ export function setupDatabaseHandlers(): void {
     'db:get-all-viewers',
     {
       execute: async (input) => {
-        const viewers = viewersRepo.getAllViewers(input.limit, input.offset);
+        const viewers = getViewersRepo().getAllViewers(input.limit, input.offset);
         return { success: true, viewers };
       }
     }
@@ -255,7 +279,7 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (input) => input.query ? null : 'Search query is required',
       execute: async (input) => {
-        const viewers = viewersRepo.search(input.query, input.limit);
+        const viewers = getViewersRepo().search(input.query, input.limit);
         return { success: true, viewers };
       }
     }
@@ -266,7 +290,7 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (id) => id ? null : 'Viewer ID is required',
       execute: async (id) => {
-        viewersRepo.deleteViewer(id);
+        getViewersRepo().deleteViewer(id);
         return { success: true };
       }
     }
@@ -276,7 +300,7 @@ export function setupDatabaseHandlers(): void {
     'db:delete-all-viewers',
     {
       execute: async () => {
-        viewersRepo.deleteAllViewers();
+        getViewersRepo().deleteAllViewers();
         return { success: true };
       }
     }
@@ -286,7 +310,7 @@ export function setupDatabaseHandlers(): void {
     'db:get-viewer-count',
     {
       execute: async () => {
-        const count = viewersRepo.getCount();
+        const count = getViewersRepo().getCount();
         return { success: true, count };
       }
     }
@@ -296,7 +320,7 @@ export function setupDatabaseHandlers(): void {
     'db:get-events',
     {
       execute: async (filters) => {
-        const events = eventsRepo.getEvents(filters);
+        const events = getEventsRepo().getEvents(filters);
         return { success: true, events };
       }
     }
@@ -307,7 +331,7 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (input) => input.channelId ? null : 'Channel ID is required',
       execute: async (input) => {
-        const events = eventsRepo.getChatEvents(input.channelId, input.limit);
+        const events = getEventsRepo().getChatEvents(input.channelId, input.limit);
         return { success: true, events };
       }
     }
@@ -317,7 +341,7 @@ export function setupDatabaseHandlers(): void {
     'db:get-event-count',
     {
       execute: async (input) => {
-        const count = eventsRepo.getEventCount(input.channelId, input.eventType);
+        const count = getEventsRepo().getEventCount(input.channelId, input.eventType);
         return { success: true, count };
       }
     }
@@ -329,7 +353,7 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (subscription) => subscription ? null : 'Subscription data is required',
       execute: async (subscription) => {
-        subscriptionsRepo.upsert(subscription);
+        getSubscriptionsRepo().upsert(subscription);
         return { success: true };
       }
     }
@@ -340,7 +364,7 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (viewerId) => viewerId ? null : 'Viewer ID is required',
       execute: async (viewerId) => {
-        const subscription = subscriptionsRepo.getByViewerId(viewerId);
+        const subscription = getSubscriptionsRepo().getByViewerId(viewerId);
         return { success: true, subscription };
       }
     }
@@ -349,7 +373,7 @@ export function setupDatabaseHandlers(): void {
     'db:get-all-viewers-with-status',
     {
       execute: async (input) => {
-        return subscriptionsRepo.getAllViewersWithStatus(input.limit, input.offset);
+        return getSubscriptionsRepo().getAllViewersWithStatus(input.limit, input.offset);
       }
     }
   );
@@ -359,7 +383,7 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (input) => input.query ? null : 'Search query is required',
       execute: async (input) => {
-        return subscriptionsRepo.searchViewersWithStatus(input.query, input.limit);
+        return getSubscriptionsRepo().searchViewersWithStatus(input.query, input.limit);
       }
     }
   );
@@ -369,7 +393,7 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (viewerId) => viewerId ? null : 'Viewer ID is required',
       execute: async (viewerId) => {
-        subscriptionsRepo.deleteByViewerId(viewerId);
+        getSubscriptionsRepo().deleteByViewerId(viewerId);
         return { success: true };
       }
     }
@@ -384,7 +408,7 @@ export function setupDatabaseHandlers(): void {
         return null;
       },
       execute: async (input) => {
-        return await twitchSubsService.syncSubscriptionsFromTwitch(input.broadcasterId, input.userId);
+        return await getTwitchSubsService().syncSubscriptionsFromTwitch(input.broadcasterId, input.userId);
       }
     }
   );
@@ -394,7 +418,7 @@ export function setupDatabaseHandlers(): void {
     {
       validate: (viewerId) => viewerId ? null : 'Viewer ID is required',
       execute: async (viewerId) => {
-        const result = await twitchSubsService.checkSubscriptionStatus(viewerId);
+        const result = await getTwitchSubsService().checkSubscriptionStatus(viewerId);
         return { success: true, ...result };
       }
     }
@@ -402,14 +426,14 @@ export function setupDatabaseHandlers(): void {
 
   }
 
-export { settingsRepo, sessionsRepo, eventsRepo, tokensRepo, viewersRepo, subscriptionsRepo };
+export { getSettingsRepo, getSessionsRepo, getEventsRepo, getTokensRepo, getViewersRepo, getSubscriptionsRepo };
 
 // Database: Store Event (special handler that also forwards to TTS)
 // This needs to be defined here because it needs access to the TTS manager
 export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mainWindow: any): void {
   ipcMain.handle('db:store-event', async (event, eventType: string, eventData: any, channelId: string, viewerId?: string) => {
     try {
-      const id = eventsRepo.storeEvent(eventType, eventData, channelId, viewerId);
+      const id = getEventsRepo().storeEvent(eventType, eventData, channelId, viewerId);
 
       // Send event to renderer for real-time updates
       const storedEvent = {
@@ -421,7 +445,7 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
         created_at: new Date().toISOString()
       };      // Add viewer info if available
       if (viewerId) {
-        const viewer = viewersRepo.getViewerById(viewerId);
+        const viewer = getViewersRepo().getViewerById(viewerId);
         if (viewer) {
           (storedEvent as any).viewer_username = viewer.username;
           (storedEvent as any).viewer_display_name = viewer.display_name;
@@ -465,12 +489,12 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
           }
 
           // Get TTS access config to check if this redeem should grant access
-          const config = ttsAccessRepo.getConfig();
+          const config = getTTSAccessRepo().getConfig();
           
           // Check if this is a limited access grant redeem
           if (config.limited_redeem_name && rewardTitle === config.limited_redeem_name) {
             const durationMinutes = config.limited_redeem_duration_mins || 60;
-            channelPointGrantsRepo.createGrant(
+            getChannelPointGrantsRepo().createGrant(
               redeemerUserId,
               'limited_access',
               rewardTitle,
@@ -483,7 +507,7 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
           // Check if this is a premium voice access grant redeem
           if (config.premium_redeem_name && rewardTitle === config.premium_redeem_name) {
             const durationMinutes = config.premium_redeem_duration_mins || 60;
-            channelPointGrantsRepo.createGrant(
+            getChannelPointGrantsRepo().createGrant(
               redeemerUserId,
               'premium_voice_access',
               rewardTitle,
@@ -500,14 +524,13 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
       return { success: false, error: error.message };
     }
   });
-
   // ===== Phase 4: Viewer TTS Rules (Mute & Cooldown) =====
   
   ipcRegistry.register<{ viewerId: string }, any>(
     'viewer-tts-rules:get',
     {
       validate: (input) => input?.viewerId ? null : 'Viewer ID is required',
-      execute: async (input) => viewerTTSRulesRepo.getByViewerId(input.viewerId)
+      execute: async (input) => getViewerTTSRulesRepo().getByViewerId(input.viewerId)
     }
   );
 
@@ -519,7 +542,7 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
         return null;
       },
       execute: async (input) => {
-        return viewerTTSRulesRepo.setMute(input.viewerId, {
+        return getViewerTTSRulesRepo().setMute(input.viewerId, {
           mute_period_mins: input.mutePeriodMins
         });
       }
@@ -530,7 +553,7 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
     'viewer-tts-rules:remove-mute',
     {
       validate: (input) => input?.viewerId ? null : 'Viewer ID is required',
-      execute: async (input) => viewerTTSRulesRepo.removeMute(input.viewerId)
+      execute: async (input) => getViewerTTSRulesRepo().removeMute(input.viewerId)
     }
   );
 
@@ -545,7 +568,7 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
         return null;
       },
       execute: async (input) => {
-        return viewerTTSRulesRepo.setCooldown(input.viewerId, {
+        return getViewerTTSRulesRepo().setCooldown(input.viewerId, {
           cooldown_gap_seconds: input.cooldownGapSeconds,
           cooldown_period_mins: input.cooldownPeriodMins
         });
@@ -557,7 +580,7 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
     'viewer-tts-rules:remove-cooldown',
     {
       validate: (input) => input?.viewerId ? null : 'Viewer ID is required',
-      execute: async (input) => viewerTTSRulesRepo.removeCooldown(input.viewerId)
+      execute: async (input) => getViewerTTSRulesRepo().removeCooldown(input.viewerId)
     }
   );
 
@@ -565,21 +588,235 @@ export function setupEventStorageHandler(ttsInitializer: () => Promise<any>, mai
     'viewer-tts-rules:clear-all',
     {
       validate: (input) => input?.viewerId ? null : 'Viewer ID is required',
-      execute: async (input) => viewerTTSRulesRepo.clearRules(input.viewerId)
+      execute: async (input) => getViewerTTSRulesRepo().clearRules(input.viewerId)
     }
   );
 
   ipcRegistry.register<void, any[]>(
     'viewer-tts-rules:get-all-muted',
     {
-      execute: async () => viewerTTSRulesRepo.getAllMuted()
+      execute: async () => getViewerTTSRulesRepo().getAllMuted()
     }
   );
 
   ipcRegistry.register<void, any[]>(
     'viewer-tts-rules:get-all-cooldown',
     {
-      execute: async () => viewerTTSRulesRepo.getAllWithCooldown()
+      execute: async () => getViewerTTSRulesRepo().getAllWithCooldown()
+    }
+  );
+  // ===== Viewer History & Details =====
+  ipcRegistry.register<string, any>(
+    'viewer:get-detailed-history',
+    {
+      validate: (viewerId) => viewerId ? null : 'Viewer ID is required',
+      execute: async (viewerId) => {
+        const history = getViewerHistoryRepo().getViewerDetailedHistory(viewerId);
+        return history || { error: 'Viewer not found' };
+      }
+    }
+  );
+
+  ipcRegistry.register<string, any>(
+    'viewer:get-stats',
+    {
+      validate: (viewerId) => viewerId ? null : 'Viewer ID is required',
+      execute: async (viewerId) => getViewerHistoryRepo().getViewerStats(viewerId)
+    }
+  );
+
+  // ===== Viewer Moderation Actions =====
+  ipcRegistry.register<{
+    broadcasterId: string;
+    userId: string;
+    displayName: string;
+    reason: string;
+    accessToken: string;
+    clientId: string;
+  }, any>(
+    'viewer:ban',
+    {
+      validate: (input) => {
+        if (!input?.broadcasterId) return 'Broadcaster ID is required';
+        if (!input?.userId) return 'User ID is required';
+        if (!input?.displayName) return 'Display name is required';
+        if (!input?.accessToken) return 'Access token is required';
+        if (!input?.clientId) return 'Client ID is required';
+        return null;
+      },
+      execute: async (input) => getModerationActionsService().banUser(
+        input.broadcasterId,
+        input.userId,
+        input.displayName,
+        input.reason,
+        input.accessToken,
+        input.clientId
+      )
+    }
+  );
+  ipcRegistry.register<{
+    broadcasterId: string;
+    userId: string;
+    displayName: string;
+    accessToken: string;
+    clientId: string;
+  }, any>(
+    'viewer:unban',
+    {
+      validate: (input) => {
+        if (!input?.broadcasterId) return 'Broadcaster ID is required';
+        if (!input?.userId) return 'User ID is required';
+        if (!input?.displayName) return 'Display name is required';
+        if (!input?.accessToken) return 'Access token is required';
+        if (!input?.clientId) return 'Client ID is required';
+        return null;
+      },
+      execute: async (input) => getModerationActionsService().unbanUser(
+        input.broadcasterId,
+        input.userId,
+        input.displayName,
+        input.accessToken,
+        input.clientId
+      )
+    }
+  );
+
+  ipcRegistry.register<{
+    broadcasterId: string;
+    userId: string;
+    displayName: string;
+    durationSeconds: number;
+    reason: string;
+    accessToken: string;
+    clientId: string;
+  }, any>(
+    'viewer:timeout',
+    {
+      validate: (input) => {
+        if (!input?.broadcasterId) return 'Broadcaster ID is required';
+        if (!input?.userId) return 'User ID is required';
+        if (!input?.displayName) return 'Display name is required';
+        if (!input?.durationSeconds) return 'Duration is required';
+        if (!input?.accessToken) return 'Access token is required';
+        if (!input?.clientId) return 'Client ID is required';
+        return null;
+      },
+      execute: async (input) => getModerationActionsService().timeoutUser(
+        input.broadcasterId,
+        input.userId,
+        input.displayName,
+        input.durationSeconds,
+        input.reason,
+        input.accessToken,
+        input.clientId
+      )
+    }
+  );
+
+  ipcRegistry.register<{
+    broadcasterId: string;
+    userId: string;
+    displayName: string;
+    accessToken: string;
+    clientId: string;
+  }, any>(
+    'viewer:add-mod',
+    {
+      validate: (input) => {
+        if (!input?.broadcasterId) return 'Broadcaster ID is required';
+        if (!input?.userId) return 'User ID is required';
+        if (!input?.displayName) return 'Display name is required';
+        if (!input?.accessToken) return 'Access token is required';
+        if (!input?.clientId) return 'Client ID is required';
+        return null;
+      },
+      execute: async (input) => getModerationActionsService().addModerator(
+        input.broadcasterId,
+        input.userId,
+        input.displayName,
+        input.accessToken,
+        input.clientId
+      )
+    }
+  );
+
+  ipcRegistry.register<{
+    broadcasterId: string;
+    userId: string;
+    displayName: string;
+    accessToken: string;
+    clientId: string;
+  }, any>(
+    'viewer:remove-mod',
+    {
+      validate: (input) => {
+        if (!input?.broadcasterId) return 'Broadcaster ID is required';
+        if (!input?.userId) return 'User ID is required';
+        if (!input?.displayName) return 'Display name is required';
+        if (!input?.accessToken) return 'Access token is required';
+        if (!input?.clientId) return 'Client ID is required';
+        return null;
+      },
+      execute: async (input) => getModerationActionsService().removeModerator(
+        input.broadcasterId,
+        input.userId,
+        input.displayName,
+        input.accessToken,
+        input.clientId
+      )
+    }
+  );
+
+  ipcRegistry.register<{
+    broadcasterId: string;
+    userId: string;
+    displayName: string;
+    accessToken: string;
+    clientId: string;
+  }, any>(
+    'viewer:add-vip',
+    {
+      validate: (input) => {
+        if (!input?.broadcasterId) return 'Broadcaster ID is required';
+        if (!input?.userId) return 'User ID is required';
+        if (!input?.displayName) return 'Display name is required';
+        if (!input?.accessToken) return 'Access token is required';
+        if (!input?.clientId) return 'Client ID is required';
+        return null;
+      },
+      execute: async (input) => getModerationActionsService().addVIP(
+        input.broadcasterId,
+        input.userId,
+        input.displayName,
+        input.accessToken,
+        input.clientId
+      )
+    }
+  );
+  ipcRegistry.register<{
+    broadcasterId: string;
+    userId: string;
+    displayName: string;
+    accessToken: string;
+    clientId: string;
+  }, any>(
+    'viewer:remove-vip',
+    {
+      validate: (input) => {
+        if (!input?.broadcasterId) return 'Broadcaster ID is required';
+        if (!input?.userId) return 'User ID is required';
+        if (!input?.displayName) return 'Display name is required';
+        if (!input?.accessToken) return 'Access token is required';
+        if (!input?.clientId) return 'Client ID is required';
+        return null;
+      },
+      execute: async (input) => getModerationActionsService().removeVIP(
+        input.broadcasterId,
+        input.userId,
+        input.displayName,
+        input.accessToken,
+        input.clientId
+      )
     }
   );
 }
