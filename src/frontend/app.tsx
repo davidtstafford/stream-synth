@@ -9,7 +9,6 @@ import { ViewersScreen } from './screens/viewers/viewers';
 import { TTS } from './screens/tts/tts';
 import { Discord } from './screens/discord/discord';
 import { AdvancedScreen } from './screens/advanced/advanced';
-import { EventSubDashboard } from './screens/system/eventsub-dashboard';
 import * as db from './services/database';
 import * as ttsService from './services/tts';
 import * as eventsubService from './services/eventsub';
@@ -99,7 +98,6 @@ const App: React.FC = () => {
     // Also listen for session changes
     const interval = setInterval(loadSession, 5000);
     return () => clearInterval(interval);  }, []);  
-
   const menuItems = [
     { id: 'connection', label: 'Connection' },
     { id: 'events', label: 'Events' },
@@ -108,10 +106,8 @@ const App: React.FC = () => {
     { id: 'viewers', label: 'Viewers' },
     { id: 'tts', label: 'TTS' },
     { id: 'discord', label: 'Discord' },
-    { id: 'eventsub', label: 'EventSub', isBottom: true },
     { id: 'advanced', label: 'Advanced', isBottom: true }
   ];
-
   const renderScreen = () => {
     switch (activeScreen) {
       case 'connection':
@@ -125,15 +121,9 @@ const App: React.FC = () => {
       case 'viewers':
         return <ViewersScreen />;
       case 'tts':
-        return <TTS />;      case 'discord':
+        return <TTS />;
+      case 'discord':
         return <Discord />;
-      case 'eventsub':
-        return <EventSubDashboard 
-          userId={connectionState.userId}
-          accessToken={connectionState.accessToken}
-          clientId={connectionState.clientId}
-          broadcasterId={connectionState.broadcasterId}
-        />;
       case 'advanced':
         return <AdvancedScreen 
           userId={connectionState.userId}
