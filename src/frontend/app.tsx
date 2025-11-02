@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { Menu } from './components/Menu';
 import { ConnectionScreen } from './screens/connection/connection';
 import { EventsScreen } from './screens/events/events';
+import { EventActionsScreen } from './screens/events/event-actions';
 import { ChatScreen } from './screens/chat/chat';
 import { ChatCommandsScreen } from './screens/chat/chat-commands';
 import { ViewersScreen } from './screens/viewers/viewers';
@@ -97,23 +98,24 @@ const App: React.FC = () => {
 
     // Also listen for session changes
     const interval = setInterval(loadSession, 5000);
-    return () => clearInterval(interval);  }, []);  
-  const menuItems = [
+    return () => clearInterval(interval);  }, []);    const menuItems = [
     { id: 'connection', label: 'Connection' },
     { id: 'events', label: 'Events' },
+    { id: 'event-actions', label: 'Event Actions' },
     { id: 'chat', label: 'Chat' },
     { id: 'chat-commands', label: 'Chat Commands' },
     { id: 'viewers', label: 'Viewers' },
     { id: 'tts', label: 'TTS' },
     { id: 'discord', label: 'Discord' },
     { id: 'advanced', label: 'Advanced', isBottom: true }
-  ];
-  const renderScreen = () => {
+  ];  const renderScreen = () => {
     switch (activeScreen) {
       case 'connection':
         return <ConnectionScreen />;
       case 'events':
         return <EventsScreen channelId={channelId} />;
+      case 'event-actions':
+        return <EventActionsScreen channelId={channelId} />;
       case 'chat':
         return <ChatScreen channelId={channelId} />;
       case 'chat-commands':
