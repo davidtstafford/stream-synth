@@ -14,6 +14,8 @@ import { EVENT_DISPLAY_INFO, EventSubscriptions } from '../../config/event-types
 import { TemplateBuilder, AlertPreview } from './components';
 import './edit-action.css';
 
+const { ipcRenderer } = (window as any).require('electron');
+
 interface EditActionProps {
   action?: EventAction;           // undefined = create mode
   channelId: string;
@@ -239,22 +241,33 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
       });
     }
   };
-  
   // File picker
   const handleFilePicker = async (
     field: 'sound_file_path' | 'image_file_path' | 'video_file_path',
     accept: string
   ) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = accept;
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        updateField(field, file.path);
+    const filters: any[] = [];
+    
+    // Build filters based on accept type
+    if (accept === 'audio/*') {
+      filters.push({ name: 'Audio Files', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'flac'] });
+    } else if (accept === 'image/*') {
+      filters.push({ name: 'Image Files', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] });
+    } else if (accept === 'video/*') {
+      filters.push({ name: 'Video Files', extensions: ['mp4', 'webm', 'mkv', 'avi', 'mov', 'flv'] });
+    }
+    
+    filters.push({ name: 'All Files', extensions: ['*'] });
+
+    try {
+      const filePath = await ipcRenderer.invoke('file:open-dialog', { filters });
+      if (filePath) {
+        updateField(field, filePath);
       }
-    };
-    input.click();
+    } catch (error) {
+      console.error('[EditActionScreen] File picker error:', error);
+      alert('Failed to open file picker');
+    }
   };
   
   return (

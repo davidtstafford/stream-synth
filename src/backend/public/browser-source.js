@@ -253,7 +253,24 @@ class BrowserSourceClient {  constructor() {
       }
     }, 300);
   }
-  
+  /**
+   * Convert file path to media server URL
+   */
+  getMediaUrl(filePath) {
+    if (!filePath) return '';
+    
+    // Encode the file path as base64 for safe transmission in URL
+    // Use btoa() which is available in all browsers
+    try {
+      // btoa() requires the string to be in UTF-8
+      const encoded = btoa(unescape(encodeURIComponent(filePath)));
+      return `http://localhost:3737/media/${encodeURIComponent(encoded)}`;
+    } catch (error) {
+      console.error('[BrowserSource] Error encoding file path:', error);
+      return '';
+    }
+  }
+
   /**
    * Create text element
    */
@@ -269,14 +286,13 @@ class BrowserSourceClient {  constructor() {
     
     return textEl;
   }
-  
-  /**
+    /**
    * Create image element
    */
   createImageElement(imageConfig) {
     const imageEl = document.createElement('img');
     imageEl.className = 'alert-image';
-    imageEl.src = `file://${imageConfig.file_path}`;
+    imageEl.src = this.getMediaUrl(imageConfig.file_path);
     
     if (imageConfig.width) {
       imageEl.style.width = `${imageConfig.width}px`;
@@ -287,14 +303,13 @@ class BrowserSourceClient {  constructor() {
     
     return imageEl;
   }
-  
-  /**
+    /**
    * Create video element
    */
   createVideoElement(videoConfig) {
     const videoEl = document.createElement('video');
     videoEl.className = 'alert-video';
-    videoEl.src = `file://${videoConfig.file_path}`;
+    videoEl.src = this.getMediaUrl(videoConfig.file_path);
     videoEl.autoplay = true;
     videoEl.muted = false;
     videoEl.volume = videoConfig.volume !== undefined ? videoConfig.volume / 100 : 1.0;
@@ -308,14 +323,13 @@ class BrowserSourceClient {  constructor() {
     
     return videoEl;
   }
-  
-  /**
+    /**
    * Create audio element
    */
   createAudioElement(soundConfig) {
     const audioEl = document.createElement('audio');
     audioEl.className = 'alert-audio';
-    audioEl.src = `file://${soundConfig.file_path}`;
+    audioEl.src = this.getMediaUrl(soundConfig.file_path);
     audioEl.autoplay = true;
     audioEl.volume = soundConfig.volume !== undefined ? soundConfig.volume / 100 : 1.0;
     

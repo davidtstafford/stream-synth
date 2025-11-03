@@ -100,7 +100,7 @@ export class BrowserSourceServer {
       this.connectedClients.clear();
     });
   }
-    /**
+  /**
    * Handle HTTP requests
    */
   private handleHttpRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -120,6 +120,10 @@ export class BrowserSourceServer {
     // Route: /browser-source.css -> serve browser-source.css
     else if (url === '/browser-source.css') {
       this.serveFile(res, 'browser-source.css', 'text/css');
+    }
+    // Route: /media/* -> serve media files (audio, image, video)
+    else if (url.startsWith('/media/')) {
+      this.serveMediaFile(req, res, url);
     }
     // Route: /health -> health check endpoint
     else if (url === '/health') {
@@ -186,15 +190,109 @@ export class BrowserSourceServer {
         res.end('Internal Server Error');
         return;
       }
-      
-      res.writeHead(200, { 'Content-Type': contentType });
+        res.writeHead(200, { 'Content-Type': contentType });
       res.end(data);
     });
   }
-  
+
   /**
-   * Setup Socket.IO event handlers
+   * Serve media files from file system
+   * URL format: /media/base64-encoded-path
    */
+  private serveMediaFile(req: http.IncomingMessage, res: http.ServerResponse, url: string): void {
+    try {
+      // Extract base64-encoded file path from URL: /media/BASE64
+      const encodedPath = url.substring('/media/'.length);
+      
+      if (!encodedPath) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('Bad Request: No file path provided');
+        return;
+      }
+
+      // Decode the base64 path
+      let filePath: string;
+      try {
+        filePath = Buffer.from(decodeURIComponent(encodedPath), 'base64').toString('utf-8');
+      } catch (error) {
+        console.error('[BrowserSourceServer] Error decoding file path:', error);
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('Bad Request: Invalid file path encoding');
+        return;
+      }
+
+      // Verify file exists
+      if (!fs.existsSync(filePath)) {
+        console.error(`[BrowserSourceServer] File not found: ${filePath}`);
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('File Not Found');
+        return;
+      }
+
+      // Get file extension for content type
+      const ext = path.extname(filePath).toLowerCase();
+      let contentType = 'application/octet-stream';
+      
+      // Map extensions to content types
+      const contentTypeMap: Record<string, string> = {
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg',
+        '.m4a': 'audio/mp4',
+        '.flac': 'audio/flac',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.bmp': 'image/bmp',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mkv': 'video/x-matroska',
+        '.avi': 'video/x-msvideo',
+        '.mov': 'video/quicktime',
+        '.flv': 'video/x-flv'
+      };
+      
+      contentType = contentTypeMap[ext] || 'application/octet-stream';
+
+      // Get file stats for proper headers
+      fs.stat(filePath, (err, stats) => {
+        if (err) {
+          console.error(`[BrowserSourceServer] Error getting file stats: ${filePath}`, err);
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Internal Server Error');
+          return;
+        }
+
+        // Stream the file instead of loading it all into memory
+        const fileStream = fs.createReadStream(filePath);
+        
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Length': stats.size,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        });
+
+        fileStream.pipe(res);
+
+        fileStream.on('error', (error) => {
+          console.error(`[BrowserSourceServer] Error streaming file: ${filePath}`, error);
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+          }
+          res.end('Internal Server Error');
+        });
+      });
+
+    } catch (error) {
+      console.error('[BrowserSourceServer] Error serving media file:', error);
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Internal Server Error');
+    }
+  }
   private setupSocketHandlers(): void {
     if (!this.io) return;
     
