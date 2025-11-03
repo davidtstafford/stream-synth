@@ -253,14 +253,14 @@ export class BrowserSourceServer {
     
     this.alertsSent++;
   }
-  
-  /**
+    /**
    * Send test alert to specific client
    */
   private sendTestAlert(socket: any): void {
     const testPayload: AlertPayload = {
       event_type: 'channel.follow',
       channel_id: 'test-channel',
+      channel: 'default',  // Browser source channel
       formatted: {
         html: '<strong>TestUser</strong> followed!',
         plainText: 'TestUser followed!',

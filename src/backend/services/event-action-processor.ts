@@ -23,6 +23,9 @@ export interface AlertPayload {
   event_type: string;
   channel_id: string;
   
+  // Browser Source Channel Assignment (Phase 10.5)
+  channel: string;  // Browser source channel name (e.g., 'default', 'main-alerts', 'tts')
+  
   // Formatted event
   formatted: {
     html: string;
@@ -130,15 +133,14 @@ export class EventActionProcessor {
       if (!hasAnyMedia) {
         console.log(`[EventActionProcessor] No media enabled for ${event_type}`);
         return;
-      }
-
-      // Format event using shared formatter
+      }      // Format event using shared formatter
       const formatted = formatEvent(eventData);
 
       // Build alert payload
       const payload: AlertPayload = {
         event_type,
         channel_id,
+        channel: action.browser_source_channel || 'default',  // Browser source channel assignment
         formatted,
         timestamp: new Date().toISOString()
       };

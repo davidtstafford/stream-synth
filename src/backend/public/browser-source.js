@@ -13,6 +13,10 @@ class BrowserSourceClient {
     this.debugMode = false;
     this.clientId = null;
     
+    // Browser Source Channel (Phase 10.5)
+    const urlParams = new URLSearchParams(window.location.search);
+    this.channel = urlParams.get('channel') || 'default';  // Filter alerts by channel
+    
     // DOM elements
     this.alertContainer = null;
     this.statusIndicator = null;
@@ -22,15 +26,14 @@ class BrowserSourceClient {
     this.clientIdEl = null;
     
     // Check for debug mode in URL
-    const urlParams = new URLSearchParams(window.location.search);
     this.debugMode = urlParams.get('debug') === '1';
   }
-  
-  /**
+    /**
    * Initialize client
    */
   init() {
     console.log('[BrowserSource] Initializing...');
+    console.log(`[BrowserSource] Listening to channel: "${this.channel}"`);
     
     // Get DOM elements
     this.alertContainer = document.getElementById('alert-container');
@@ -127,11 +130,18 @@ class BrowserSourceClient {
       console.log('[BrowserSource] Pong received:', data);
     });
   }
-  
-  /**
+    /**
    * Handle incoming alert
    */
   handleAlert(payload) {
+    // Filter by channel (Phase 10.5)
+    if (payload.channel && payload.channel !== this.channel) {
+      console.log(`[BrowserSource] Ignoring alert - wrong channel (want: "${this.channel}", got: "${payload.channel}")`);
+      return;
+    }
+    
+    console.log(`[BrowserSource] Alert accepted for channel "${this.channel}"`);
+    
     this.alertCount++;
     this.updateDebugInfo();
     

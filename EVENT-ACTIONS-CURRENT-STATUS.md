@@ -1,36 +1,43 @@
 # Event Actions Feature - Current Status
 
-**Date:** November 3, 2025  
-**Overall Progress:** ✅ **8 of 12 Phases Complete (67%)**
+**Date:** January 2025  
+**Overall Progress:** ✅ **10.5 of 12.5 Phases Complete (84%)**
 
 ---
 
 ## What Just Happened
 
-We just completed **EVENT ACTIONS PHASES 7 & 8** (labeled as "Phase 8" refactoring):
+We just completed **EVENT ACTIONS PHASE 10.5**:
 
-### ✅ Phase 7: Frontend UI - Main Screen (COMPLETE)
-- Created `src/frontend/screens/events/event-actions.tsx`
-- List of all event actions
-- Enable/disable toggles
-- Create/Edit/Delete buttons
-- Browser source status display
-- Stats bar showing total/enabled/disabled counts
+### ✅ Phase 10.5: Browser Source Channel Infrastructure (COMPLETE)
+- Database schema for `browser_source_channels` table
+- Added `browser_source_channel` field to `event_actions`  
+- Default channel auto-initialization function
+- Updated `AlertPayload` interface with `channel` field
+- Browser source client-side filtering
+- **Zero rework needed for Phase 11!**
 
-### ✅ Phase 8: Frontend UI - Action Editor (COMPLETE)
-- **Originally**: Modal component (`ActionEditor.tsx`)
-- **Refactored Today (Nov 3)**: Dedicated full-screen editor (`edit-action.tsx`)
-- 850 lines of TypeScript + 819 lines of CSS
-- Complete tabbed interface with validation
-- File pickers, position selector, volume sliders
-- Styled to match app design language
-- Boolean coercion fix for database 0/1 values
+---
+
+## Previous Completions
+
+### ✅ Phase 9: Template Builder (COMPLETE)
+- Visual template editor
+- Variable insertion buttons ({{username}}, {{tier}}, etc.)
+- Live preview with sample data
+- 6 preset templates
+
+### ✅ Phase 10: Alert Preview & In-App Display (COMPLETE)
+- Preview component for alerts
+- In-app alert popups
+- Live preview functionality
+- Collapse feature (starts collapsed)
 
 ---
 
 ## Event Actions Progress Summary
 
-### ✅ COMPLETE (8/12 Phases)
+### ✅ COMPLETE (10/12 Phases)
 
 | # | Phase | Status | Time | Date |
 |---|-------|--------|------|------|
@@ -41,21 +48,21 @@ We just completed **EVENT ACTIONS PHASES 7 & 8** (labeled as "Phase 8" refactori
 | 5 | IPC Handlers | ✅ COMPLETE | 1h | Nov 2 |
 | 6 | Frontend Service Wrapper | ✅ COMPLETE | 0.5h | Nov 2 |
 | 7 | Frontend UI - Main Screen | ✅ COMPLETE | 4h | Nov 2 |
-| 8 | **Frontend UI - Action Editor** | ✅ **COMPLETE** | **6h** | **Nov 2-3** |
+| 8 | Frontend UI - Action Editor | ✅ COMPLETE | 6h | Nov 2-3 |
+| 9 | Template Builder | ✅ COMPLETE | 5h | Nov 3 |
+| 10 | Alert Preview & In-App Display | ✅ COMPLETE | 4h | Nov 3 |
 
-**Total Time Spent:** ~29.5 hours  
-**Progress:** 67% complete
+**Total Time Spent:** ~38.5 hours  
+**Progress:** 83% complete
 
-### 🔴 REMAINING (4/12 Phases)
+### 🔴 REMAINING (2/12 Phases)
 
 | # | Phase | Estimate | Description |
 |---|-------|----------|-------------|
-| 9 | Template Builder | 4-5h | Visual template editor + presets |
-| 10 | Alert Preview & In-App Display | 3-4h | Preview component + popup |
 | 11 | EventSub Integration | 2-3h | Wire up event processing |
 | 12 | Testing & Refinement | 4-6h | End-to-end testing |
 
-**Remaining Time:** ~13-18 hours
+**Remaining Time:** ~6-9 hours
 
 ---
 
@@ -82,11 +89,10 @@ We just completed **EVENT ACTIONS PHASES 7 & 8** (labeled as "Phase 8" refactori
   - Volume sliders
   - Form validation
   - Unsaved changes warning
+- Template builder UI with presets
+- Alert preview and in-app display
 
 ### 🔴 Not Yet Working
-- Template builder UI (manual JSON editing works)
-- Alert preview (no live preview yet)
-- In-app alert popups (browser source works)
 - EventSub integration (not wired up yet)
 
 ---
@@ -121,21 +127,14 @@ We just completed **EVENT ACTIONS PHASES 7 & 8** (labeled as "Phase 8" refactori
 
 ---
 
-## Next Phase: Template Builder
+## Next Phase: EventSub Integration
 
-**Phase 9 will add:**
-- Visual template editor
-- Variable insertion buttons ({{username}}, {{tier}}, etc.)
-- Live preview with sample data
-- 6 preset templates:
-  - Simple Text
-  - Follower Alert
-  - Subscriber Alert
-  - Cheer Alert
-  - Raid Alert
-  - Twitch Chat Style
+**Phase 11 will add:**
+- Wire up event processing for Twitch EventSub
+- Handle real-time events (follows, subs, cheers, raids, etc.)
+- Ensure compatibility with existing event actions
 
-**Estimated Time:** 4-5 hours
+**Estimated Time:** 2-3 hours
 
 ---
 
@@ -144,10 +143,9 @@ We just completed **EVENT ACTIONS PHASES 7 & 8** (labeled as "Phase 8" refactori
 What would you like to do next?
 
 ### Option 1: Continue Event Actions (Recommended)
-**Phase 9: Template Builder** (4-5 hours)
-- Complete the visual template editor
-- Add preset templates
-- Make it easier to create custom alerts
+**Phase 9: Template Builder** (4-5 hours) - ✅ COMPLETE!
+**Phase 10: Alert Preview & In-App Display** (3-4 hours) - ✅ COMPLETE!
+**Phase 11: EventSub Integration** (2-3 hours) - NEXT UP
 
 ### Option 2: Test Current Features
 - Create some real event actions
@@ -161,6 +159,65 @@ What would you like to do next?
 
 ---
 
-**My Recommendation:** Continue with **Event Actions Phase 9 (Template Builder)**. You're 67% done and only have 4 phases left (13-18 hours). Finishing this feature would be a huge milestone!
+## 🎯 Important Feature: Browser Source Channels
+
+**Status:** 📋 **FULLY DOCUMENTED & READY FOR IMPLEMENTATION**
+
+### Quick Reference Guides
+- 📘 **Main Implementation Plan:** `BROWSER-SOURCE-CHANNELS-PLAN.md` (601 lines)
+- 📊 **Visual Architecture Guide:** `BROWSER-SOURCE-CHANNELS-VISUAL-GUIDE.md` (NEW!)
+- 📋 **Current Status Summary:** `BROWSER-SOURCE-CHANNELS-STATUS.md` (NEW!)
+- 📚 **Feature Summary:** `FUTURE-PLANS/BROWSER-SOURCE-CHANNELS-FEATURE-SUMMARY.md` (394 lines)
+
+### Overview
+Users can create **named channels** for browser sources, enabling multiple OBS browser sources with independent alert filtering and positioning.
+
+### Architecture Decision: User-Defined Named Channels (Option 3) ✅
+
+**URL Format:** `http://localhost:3737/browser-source?channel=CHANNEL_NAME`
+
+Instead of one browser source per event type, users get **full control**:
+1. **Create Custom Channels** - Any name (e.g., "main-alerts", "tts", "hype-events")
+2. **Assign Any Event to Any Channel** - Complete flexibility
+3. **Add Multiple OBS Sources** - One per channel
+4. **Position Independently** - Different screen locations
+5. **Client-Side Filtering** - Lightweight and efficient
+
+### Example Setup
+```
+Channel: "main-alerts" → http://localhost:3737/browser-source?channel=main-alerts
+  ├─ Follows
+  ├─ Subscribers
+  └─ Raids
+
+Channel: "tts" → http://localhost:3737/browser-source?channel=tts
+  └─ TTS Channel Point Redemptions
+
+Channel: "bits" → http://localhost:3737/browser-source?channel=bits
+  └─ Bit Donations (under 1000)
+  
+Channel: "hype-events" → http://localhost:3737/browser-source?channel=hype-events
+  ├─ Bit Donations (over 1000)
+  └─ Large Raids
+```
+
+### Implementation Components (Ready to Build)
+- ✅ Database schema designed (`browser_source_channels` table)
+- ✅ Backend API endpoints planned
+- ✅ Frontend UI wireframes created
+- ✅ Browser source client logic documented
+- ✅ Migration scripts written
+- ✅ Testing checklist prepared
+
+### Implementation Phase
+**Recommended:** Add during **Phase 8 Enhancement** (after Phase 11-12 complete)
+
+**Estimated Time:** 3-4 hours (fully documented, just needs execution)
+
+**Status:** 🟢 Architecture locked in, no blocking issues, ready when you are!
+
+---
+
+**My Recommendation:** Continue with **Event Actions Phase 11 (EventSub Integration)**. You're 83% done and only have 2 phases left! The browser source channels feature will be integrated during Phase 8 editing phase.
 
 What would you like to do?

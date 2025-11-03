@@ -10,6 +10,9 @@ export interface EventAction {
   event_type: string;
   is_enabled: boolean;
   
+  // Browser Source Channel Assignment (Phase 10.5)
+  browser_source_channel: string;  // Channel name (e.g., 'default', 'main-alerts', 'tts')
+  
   // Text Configuration
   text_enabled: boolean;
   text_template: string | null;
@@ -50,6 +53,9 @@ export interface EventActionPayload {
   channel_id: string;
   event_type: string;
   is_enabled?: boolean;
+  
+  // Browser Source Channel Assignment (Phase 10.5)
+  browser_source_channel?: string;  // Channel name (e.g., 'default', 'main-alerts', 'tts')
   
   // Text Configuration
   text_enabled?: boolean;
