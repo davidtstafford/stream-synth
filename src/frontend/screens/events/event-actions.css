@@ -387,8 +387,8 @@
 }
 
 .list-header {
-  display: grid;
-  grid-template-columns: 2fr 1.5fr 2fr 1fr 2fr;
+  display: flex;
+  align-items: center;
   gap: 12px;
   padding: 12px 16px;
   background: #1a1a1a;
@@ -400,14 +400,61 @@
   color: #aaa;
 }
 
+.list-header .header-cell {
+  display: flex;
+  align-items: center;
+}
+
+.list-header .header-cell.event-type {
+  flex: 0 0 200px;
+}
+
+.list-header .header-cell.media-types {
+  flex: 1 1 auto;
+  min-width: 150px;
+}
+
+.list-header .header-cell.status {
+  flex: 0 0 80px;
+  text-align: right;
+}
+
+.list-header .header-cell.actions-header {
+  flex: 0 0 160px;
+  text-align: right;
+}
+
 .action-item {
-  display: grid;
-  grid-template-columns: 2fr 1.5fr 2fr 1fr 2fr;
+  display: flex;
+  align-items: center;
   gap: 12px;
   padding: 16px;
   border-bottom: 1px solid #333;
   transition: background 0.2s ease;
+}
+
+.action-item .cell {
+  display: flex;
   align-items: center;
+}
+
+.action-item .cell.event-type {
+  flex: 0 0 200px;
+}
+
+.action-item .cell.media-types {
+  flex: 1 1 auto;
+  min-width: 150px;
+}
+
+.action-item .cell.status {
+  flex: 0 0 80px;
+  justify-content: flex-end;
+}
+
+.action-item .cell.actions-cell {
+  flex: 0 0 160px;
+  justify-content: flex-end;
 }
 
 .action-item:hover {

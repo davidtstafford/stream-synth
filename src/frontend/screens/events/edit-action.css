@@ -887,3 +887,116 @@
     height: 200px;
   }
 }
+
+/* ============================================================================
+   CUSTOM STYLE EXAMPLES PANEL
+   ============================================================================ */
+
+.label-with-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+
+.label-with-link label {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.examples-link {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid #9147ff;
+  background: transparent;
+  color: #9147ff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.examples-link:hover {
+  background: rgba(145, 71, 255, 0.1);
+  border-color: #a55fff;
+  color: #a55fff;
+}
+
+.examples-link:active {
+  transform: translateY(1px);
+}
+
+.examples-panel {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: #2a2a2a;
+  border: 1px solid #555;
+  border-radius: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.examples-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.examples-panel::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+.examples-panel::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.examples-panel::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+.example-item {
+  padding: 12px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.example-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9147ff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.example-code {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 8px;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 3px;
+  color: #ccc;
+  overflow-x: auto;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.example-preview {
+  padding: 16px;
+  background: #333;
+  border-radius: 4px;
+  text-align: center;
+  line-height: 1.2;
+  word-break: break-word;
+}

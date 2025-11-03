@@ -103,6 +103,7 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showStyleExamples, setShowStyleExamples] = useState(false);
   
   // Load browser source channels
   useEffect(() => {
@@ -484,9 +485,57 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
                       ))}
                     </div>
                   </div>
-                  
-                  <div className="form-group">
-                    <label htmlFor="text_style">Custom Style (JSON)</label>
+                    <div className="form-group">
+                    <div className="label-with-link">
+                      <label htmlFor="text_style">Custom Style (JSON)</label>
+                      <button
+                        type="button"
+                        className="examples-link"
+                        onClick={() => setShowStyleExamples(!showStyleExamples)}
+                        title="Show style examples"
+                      >
+                        📋 Examples
+                      </button>
+                    </div>
+                    {showStyleExamples && (
+                      <div className="examples-panel">
+                        <div className="example-item">
+                          <div className="example-title">Large Bold Text:</div>
+                          <code className="example-code">{`{"fontSize": "48px", "fontWeight": "bold", "color": "#fff"}`}</code>
+                          <div className="example-preview" style={{fontSize: "48px", fontWeight: "bold", color: "#fff"}}>Example Text</div>
+                        </div>
+                        
+                        <div className="example-item">
+                          <div className="example-title">Gradient Text:</div>
+                          <code className="example-code">{`{"fontSize": "36px", "background": "linear-gradient(45deg, #ff00ff, #00ffff)", "backgroundClip": "text", "color": "transparent", "fontWeight": "bold"}`}</code>
+                          <div className="example-preview" style={{fontSize: "36px", background: "linear-gradient(45deg, #ff00ff, #00ffff)", backgroundClip: "text", WebkitBackgroundClip: "text", color: "transparent", fontWeight: "bold"}}>Gradient Text</div>
+                        </div>
+                        
+                        <div className="example-item">
+                          <div className="example-title">Shadowed Text:</div>
+                          <code className="example-code">{`{"fontSize": "40px", "fontWeight": "bold", "color": "#fff", "textShadow": "0 0 10px #ff00ff, 0 0 20px #00ffff"}`}</code>
+                          <div className="example-preview" style={{fontSize: "40px", fontWeight: "bold", color: "#fff", textShadow: "0 0 10px #ff00ff, 0 0 20px #00ffff"}}>Shadow Text</div>
+                        </div>
+                        
+                        <div className="example-item">
+                          <div className="example-title">Outlined Text:</div>
+                          <code className="example-code">{`{"fontSize": "36px", "fontWeight": "bold", "color": "#fff", "WebkitTextStroke": "2px #00ff00", "textStroke": "2px #00ff00"}`}</code>
+                          <div className="example-preview" style={{fontSize: "36px", fontWeight: "bold", color: "#fff", WebkitTextStroke: "2px #00ff00"}}>Outlined</div>
+                        </div>
+                        
+                        <div className="example-item">
+                          <div className="example-title">Italic Rotated:</div>
+                          <code className="example-code">{`{"fontSize": "32px", "fontStyle": "italic", "color": "#ffaa00", "transform": "rotate(-15deg)", "transformOrigin": "center"}`}</code>
+                          <div className="example-preview" style={{fontSize: "32px", fontStyle: "italic", color: "#ffaa00", transform: "rotate(-15deg)"}}>Rotated</div>
+                        </div>
+                        
+                        <div className="example-item">
+                          <div className="example-title">Uppercase Animated:</div>
+                          <code className="example-code">{`{"fontSize": "44px", "fontWeight": "900", "color": "#ff4444", "textTransform": "uppercase", "letterSpacing": "4px"}`}</code>
+                          <div className="example-preview" style={{fontSize: "44px", fontWeight: "900", color: "#ff4444", textTransform: "uppercase", letterSpacing: "4px"}}>Animated</div>
+                        </div>
+                      </div>
+                    )}
                     <textarea
                       id="text_style"
                       value={formData.text_style || ''}
