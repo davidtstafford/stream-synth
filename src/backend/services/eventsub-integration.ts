@@ -4,12 +4,15 @@
  * Bridges EventSubManager and EventSubEventRouter to process real-time events.
  * This service listens to EventSub WebSocket events and routes them to handlers
  * that update the database (viewer roles, subscriptions, events, etc.)
+ * 
+ * Phase 11: Connects EventActionProcessor for alert processing.
  */
 
 import { BrowserWindow, ipcMain } from 'electron';
 import { getEventSubManager } from './eventsub-manager';
 import { getEventSubRouter } from './eventsub-event-router';
 import { initializeTTS } from '../core/ipc-handlers/tts';
+import { getEventActionProcessor } from '../main';
 
 let integrationActive = false;
 
@@ -25,9 +28,20 @@ export function initializeEventSubIntegration(mainWindow: BrowserWindow): void {
   console.log('[EventSubIntegration] 🚀 Initializing event routing...');
   const manager = getEventSubManager();
   const router = getEventSubRouter(mainWindow, initializeTTS);
+  const eventActionProcessor = getEventActionProcessor();
+  
   console.log('[EventSubIntegration] Manager instance:', manager ? 'OK' : 'NULL');
   console.log('[EventSubIntegration] Router instance:', router ? 'OK' : 'NULL');
   console.log('[EventSubIntegration] MainWindow:', mainWindow ? 'OK' : 'NULL');
+  console.log('[EventSubIntegration] EventActionProcessor:', eventActionProcessor ? 'OK' : 'NULL');
+
+  // Connect Event Action Processor to router (Phase 11)
+  if (eventActionProcessor) {
+    router.setEventActionProcessor(eventActionProcessor);
+    console.log('[EventSubIntegration] ✓ Event Action Processor connected to router');
+  } else {
+    console.warn('[EventSubIntegration] ⚠ Event Action Processor not available - alerts disabled');
+  }
 
   // Listen to EventSub events from WebSocket
   manager.on('event', async (eventData: any) => {

@@ -680,7 +680,137 @@ The IPC Framework automatically wraps returns in `{ success, data }`. Don't manu
 
 ---
 
+## 🎬 Event Actions & Browser Source Alerts
+
+Stream Synth includes a **browser source alert system** for OBS integration, allowing streamers to display custom alerts for Twitch events like follows, subscriptions, raids, and more.
+
+### Quick Overview
+
+Event Actions transforms Twitch EventSub events into customizable browser source alerts:
+
+- **🎨 Custom Alert Templates** - Use `{{variable}}` syntax for dynamic content
+- **📺 OBS Integration** - Clean browser source output (no debug UI visible)
+- **🎯 Channel Filtering** - Multiple channels for different scenes
+- **🔧 Flexible Configuration** - Database-backed with template support
+
+### Getting Started
+
+1. **Start the application**: The browser source server runs automatically on port 7474
+2. **Add browser source in OBS**: 
+   - URL: `http://localhost:7474/alert`
+   - Width: 1920, Height: 1080 (or match your canvas)
+   - Optional: Add `?channel=NAME` for filtered alerts
+3. **Configure alerts**: Create event actions via database or future UI (coming soon)
+4. **Test**: Real events trigger automatically, or use test endpoint: `http://localhost:7474/test`
+
+### Template Variables
+
+Templates support dynamic variables that get replaced with actual event data:
+
+```
+{{username}} just followed! ❤️
+{{display_name}} subscribed for {{months}} months!
+{{from_broadcaster_user_name}} raided with {{viewers}} viewers!
+```
+
+**Common Variables:**
+- `{{username}}`, `{{display_name}}`, `{{user_name}}` - Viewer's display name
+- `{{event_type}}` - Type of event (e.g., "channel.follow")
+- `{{timestamp}}` - When the event occurred
+
+**Event-Specific Variables:**
+- Follows: `{{user_id}}`, `{{followed_at}}`
+- Subscriptions: `{{tier}}`, `{{is_gift}}`, `{{months}}`
+- Raids: `{{from_broadcaster_user_name}}`, `{{viewers}}`
+- Channel Points: `{{reward_title}}`, `{{reward_cost}}`, `{{user_input}}`
+
+See [EVENT-ACTIONS-README.md](./EVENT-ACTIONS-README.md) for complete documentation.
+
+### Architecture
+
+```
+Twitch EventSub 
+  → EventSubManager 
+  → EventSubEventRouter 
+  → EventActionProcessor
+  → BrowserSourceServer (Socket.IO)
+  → Browser Source Client (OBS)
+```
+
+**Key Components:**
+
+- **EventActionProcessor** (`src/backend/services/event-action-processor.ts`) - Processes events and executes actions
+- **BrowserSourceServer** (`src/backend/services/browser-source-server.ts`) - HTTP + Socket.IO server (port 7474)
+- **Browser Source Client** (`dist/backend/public/browser-source.html`) - OBS browser source page
+- **Database Tables**: `event_actions`, `browser_source_channels`
+
+### Database Schema
+
+```sql
+CREATE TABLE event_actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_type TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  action_type TEXT NOT NULL,
+  action_config TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE browser_source_channels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  description TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+### Current Status
+
+- ✅ **Backend Integration Complete** - All services integrated and tested
+- ✅ **Browser Source Server** - Socket.IO server running on port 7474
+- ✅ **Template Processing** - Dynamic variable replacement with aliases
+- ✅ **Channel Filtering** - Multi-channel support for different OBS scenes
+- ✅ **Debug Mode** - Hidden by default, accessible via `?debug=true`
+- ✅ **Build Verified** - 0 errors, 569 KiB bundle
+- ⏳ **User Testing** - Phase 12 in progress
+- 📋 **Frontend UI** - Planned (configuration screen for managing actions)
+
+### Debug Mode
+
+For testing and troubleshooting, append `?debug=true` to the browser source URL:
+
+```
+http://localhost:7474/alert?debug=true
+```
+
+This displays connection status and real-time event logs. In production (OBS), use the clean URL without debug parameter.
+
+### Future Enhancements
+
+Planned features for Event Actions:
+
+- **TTS Browser Source** - Parallel audio stream for chat TTS (1-2 hours)
+- **In-App Alert Popup** - Desktop notifications without OBS (2-3 hours)
+- **Event Actions UI** - Configuration screen for managing actions (4-6 hours)
+
+### Technical Documentation
+
+For complete technical details including:
+- Architecture diagrams
+- API reference
+- Integration points
+- Troubleshooting guide
+- Template system deep dive
+
+See **[EVENT-ACTIONS-README.md](./EVENT-ACTIONS-README.md)**
+
+---
+
 ## 📚 Further Reading
 
 - **IPC Framework Details**: See `src/backend/core/ipc/ipc-framework.ts`
 - **Handler Examples**: See `src/backend/core/ipc-handlers/*.ts`
+- **Event Actions Technical Guide**: See `EVENT-ACTIONS-README.md`

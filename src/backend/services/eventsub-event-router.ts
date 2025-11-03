@@ -7,12 +7,14 @@ import { ViewersRepository } from '../database/repositories/viewers';
 import { EventsRepository } from '../database/repositories/events';
 import { SessionsRepository } from '../database/repositories/sessions';
 import { ModerationHistoryRepository } from '../database/repositories/moderation-history';
+import { EventActionProcessor } from './event-action-processor';
 
 /**
  * EventSub Event Router
  * 
  * Routes incoming EventSub events to appropriate handlers.
  * Applies the same business logic that polling was doing.
+ * Integrated with EventActionProcessor for alert processing (Phase 11).
  */
 export class EventSubEventRouter extends EventEmitter {
   private followerHistoryRepo = new FollowerHistoryRepository();
@@ -24,6 +26,7 @@ export class EventSubEventRouter extends EventEmitter {
   private moderationHistoryRepo = new ModerationHistoryRepository();
   private mainWindow: BrowserWindow | null = null;
   private ttsInitializer: (() => Promise<any>) | null = null;
+  private eventActionProcessor: EventActionProcessor | null = null;
 
   constructor(mainWindow?: BrowserWindow | null, ttsInitializer?: () => Promise<any>) {
     super();
@@ -36,13 +39,21 @@ export class EventSubEventRouter extends EventEmitter {
   setMainWindow(mainWindow: BrowserWindow | null): void {
     this.mainWindow = mainWindow;
   }
-
   /**
    * Set TTS initializer for chat message handling
    */
   setTTSInitializer(ttsInitializer: () => Promise<any>): void {
     this.ttsInitializer = ttsInitializer;
   }
+
+  /**
+   * Set Event Action Processor for alert processing (Phase 11)
+   */
+  setEventActionProcessor(eventActionProcessor: EventActionProcessor): void {
+    this.eventActionProcessor = eventActionProcessor;
+    console.log('[EventSubEventRouter] Event Action Processor connected');
+  }
+
   /**
    * Emit IPC event to frontend
    */
@@ -51,7 +62,6 @@ export class EventSubEventRouter extends EventEmitter {
       this.mainWindow.webContents.send(channel, data);
     }
   }
-
   /**
    * Store event and emit to frontend for real-time UI updates
    */
@@ -77,6 +87,20 @@ export class EventSubEventRouter extends EventEmitter {
         viewer_username: viewerUsername,
         viewer_display_name: viewerDisplayName,
         created_at: new Date().toISOString()
+      });
+    }
+
+    // Process event actions (Phase 11)
+    if (this.eventActionProcessor) {
+      this.eventActionProcessor.processEvent({
+        event_type: eventType,
+        event_data: eventData,
+        viewer_username: viewerUsername,
+        viewer_display_name: viewerDisplayName,
+        channel_id: channelId,
+        created_at: new Date().toISOString()
+      }).catch((error) => {
+        console.error('[EventSubEventRouter] Error processing event action:', error);
       });
     }
 

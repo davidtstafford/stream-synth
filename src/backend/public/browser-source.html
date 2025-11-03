@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Stream Synth Browser Source</title>
+  <link rel="stylesheet" href="browser-source.css">
+</head>
+<body>
+  <!-- Alert Container -->
+  <div id="alert-container"></div>
+
+  <!-- Connection Status (hidden in production) -->
+  <div id="connection-status" class="debug-info">
+    <span id="status-indicator">●</span>
+    <span id="status-text">Connecting...</span>
+  </div>
+
+  <!-- Debug Info (hidden in production) -->
+  <div id="debug-info" class="debug-info">
+    <div>Alerts Received: <span id="alert-count">0</span></div>
+    <div>Queue Length: <span id="queue-length">0</span></div>
+    <div>Client ID: <span id="client-id">-</span></div>
+  </div>
+
+  <!-- Socket.IO Client -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="browser-source.js?v=20251101"></script>
+</body>
+</html>

@@ -697,7 +697,6 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_command_usage_command ON chat_command_usage(command_name)
   `);
-
   db.exec(`
     INSERT OR IGNORE INTO chat_commands_config (command_name, command_prefix, enabled, permission_level, rate_limit_seconds)
     VALUES 
@@ -710,6 +709,132 @@ export function runMigrations(db: Database.Database): void {
       ('mutetts', '~', 1, 'moderator', 30),
       ('unmutetts', '~', 1, 'moderator', 30)
   `);
+  // ===== BROWSER SOURCE CHANNELS (Phase 10.5) =====
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS browser_source_channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      description TEXT,
+      color TEXT DEFAULT '#9147ff',
+      icon TEXT DEFAULT '📺',
+      is_default BOOLEAN DEFAULT 0,
+      is_enabled BOOLEAN DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      
+      -- One channel per name per Twitch channel
+      UNIQUE(channel_id, name)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_browser_source_channels_channel ON browser_source_channels(channel_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_browser_source_channels_name ON browser_source_channels(name)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_browser_source_channels_default ON browser_source_channels(is_default)
+  `);
+
+  // ===== EVENT ACTIONS (Phase 2) =====
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS event_actions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      is_enabled BOOLEAN DEFAULT 1,
+      
+      -- Browser Source Channel Assignment (Phase 10.5)
+      browser_source_channel TEXT DEFAULT 'default',
+      
+      -- Text Configuration
+      text_enabled BOOLEAN DEFAULT 0,
+      text_template TEXT,
+      text_duration INTEGER DEFAULT 5000,
+      text_position TEXT DEFAULT 'top-center',
+      text_style TEXT,
+      
+      -- Sound Configuration
+      sound_enabled BOOLEAN DEFAULT 0,
+      sound_file_path TEXT,
+      sound_volume REAL DEFAULT 1.0,
+      
+      -- Image Configuration
+      image_enabled BOOLEAN DEFAULT 0,
+      image_file_path TEXT,
+      image_duration INTEGER DEFAULT 5000,
+      image_position TEXT DEFAULT 'center',
+      image_width INTEGER,
+      image_height INTEGER,
+      
+      -- Video Configuration
+      video_enabled BOOLEAN DEFAULT 0,
+      video_file_path TEXT,
+      video_volume REAL DEFAULT 1.0,
+      video_position TEXT DEFAULT 'center',
+      video_width INTEGER,
+      video_height INTEGER,
+      
+      -- Metadata
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      
+      -- One action per event type per channel
+      UNIQUE(channel_id, event_type)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_actions_channel ON event_actions(channel_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_actions_event_type ON event_actions(event_type)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_actions_enabled ON event_actions(is_enabled)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_actions_channel_event ON event_actions(channel_id, event_type)
+  `);
+
+  // Initialize default browser source channel
+  initializeDefaultChannel(db);
 
   console.log('[Migrations] Database schema initialization complete');
+}
+
+/**
+ * Initialize default browser source channel for all connected channels
+ * This ensures backwards compatibility and provides a starting point for users
+ */
+function initializeDefaultChannel(db: Database.Database): void {
+  console.log('[Migrations] Initializing default browser source channels...');
+
+  // Get all unique channel_ids from connection_sessions or event_actions
+  const channels = db.prepare(`
+    SELECT DISTINCT channel_id 
+    FROM connection_sessions 
+    WHERE channel_id IS NOT NULL
+  `).all() as Array<{ channel_id: string }>;
+
+  const insertChannel = db.prepare(`
+    INSERT OR IGNORE INTO browser_source_channels 
+    (channel_id, name, display_name, description, color, icon, is_default, is_enabled)
+    VALUES (?, 'default', 'Default Channel', 'All unassigned alerts', '#9147ff', '📺', 1, 1)
+  `);
+
+  for (const { channel_id } of channels) {
+    insertChannel.run(channel_id);
+  }
+
+  console.log(`[Migrations] Created default channels for ${channels.length} channel(s)`);
 }
