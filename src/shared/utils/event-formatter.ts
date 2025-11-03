@@ -711,7 +711,7 @@ export function processTemplate(template: string, variables: Record<string, any>
  * Get available template variables for an event type
  */
 export function getAvailableVariables(eventType: string): string[] {
-  const commonVars = ['username', 'event_type', 'timestamp'];
+  const commonVars = ['username', 'display_name', 'user_name', 'event_type', 'timestamp'];
   
   const eventSpecificVars: Record<string, string[]> = {
     'channel.chat.message': ['message'],
@@ -721,7 +721,7 @@ export function getAvailableVariables(eventType: string): string[] {
     'channel.subscription.message': ['tier', 'months', 'streak', 'message'],
     'channel.cheer': ['bits', 'message'],
     'channel.raid': ['viewers'],
-    'channel.follow': ['followed_at'],
+    'channel.follow': ['followed_at', 'user_login', 'user_id'],
     'stream.online': ['stream_type', 'started_at'],
     'channel.update': ['title', 'category'],
     'channel.channel_points_custom_reward.add': ['reward_title', 'cost'],

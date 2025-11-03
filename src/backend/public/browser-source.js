@@ -4,18 +4,19 @@
    Connects to Socket.IO and displays alerts
    ======================================== */
 
-class BrowserSourceClient {
-  constructor() {
+class BrowserSourceClient {  constructor() {
     this.socket = null;
     this.alertQueue = [];
     this.isProcessing = false;
     this.alertCount = 0;
-    this.debugMode = false;
     this.clientId = null;
     
     // Browser Source Channel (Phase 10.5)
     const urlParams = new URLSearchParams(window.location.search);
     this.channel = urlParams.get('channel') || 'default';  // Filter alerts by channel
+    
+    // Check for debug mode in URL (?debug=true)
+    this.debugMode = urlParams.get('debug') === 'true';
     
     // DOM elements
     this.alertContainer = null;
@@ -24,11 +25,8 @@ class BrowserSourceClient {
     this.alertCountEl = null;
     this.queueLengthEl = null;
     this.clientIdEl = null;
-    
-    // Check for debug mode in URL
-    this.debugMode = urlParams.get('debug') === '1';
   }
-    /**
+  /**
    * Initialize client
    */
   init() {
@@ -43,10 +41,12 @@ class BrowserSourceClient {
     this.queueLengthEl = document.getElementById('queue-length');
     this.clientIdEl = document.getElementById('client-id');
     
-    // Show debug info if enabled
+    // Enable debug mode if URL parameter is set (?debug=true)
     if (this.debugMode) {
-      document.getElementById('connection-status').style.display = 'block';
-      document.getElementById('debug-info').style.display = 'block';
+      document.body.classList.add('debug-mode');
+      console.log('[BrowserSource] Debug mode enabled');
+    } else {
+      console.log('[BrowserSource] Production mode (debug hidden). Add ?debug=true to URL to show debug info.');
     }
     
     // Connect to Socket.IO server
