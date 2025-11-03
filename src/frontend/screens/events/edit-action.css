@@ -816,3 +816,34 @@
   outline: 2px solid #9147ff;
   outline-offset: 2px;
 }
+
+/* ============================================================================
+   ALERT PREVIEW SECTION
+   ============================================================================ */
+
+/* Ensure alert preview doesn't compress main content */
+.edit-action-content .alert-preview-container {
+  margin-top: 24px;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+/* Make preview more compact in the editor */
+.edit-action-content .preview-stage {
+  height: 250px;
+}
+
+.edit-action-content .preview-placeholder {
+  height: 250px;
+}
+
+/* Responsive preview in editor */
+@media (max-width: 768px) {
+  .edit-action-content .preview-stage {
+    height: 200px;
+  }
+  
+  .edit-action-content .preview-placeholder {
+    height: 200px;
+  }
+}

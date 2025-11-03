@@ -1,0 +1,332 @@
+/**
+ * Alert Preview Styles
+ * 
+ * Phase 10: Alert Preview & In-App Display
+ */
+
+.alert-preview-container {
+  width: 100%;
+  margin-top: 20px;
+  background: #1e1e1e;
+  border-radius: 8px;
+  border: 1px solid #333;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+/* Collapsed State */
+.alert-preview-container.collapsed .preview-stage,
+.alert-preview-container.collapsed .preview-info {
+  display: none;
+}
+
+.alert-preview-container.collapsed {
+  margin-bottom: 0;
+}
+
+/* Preview Header */
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #252525;
+  border-bottom: 1px solid #333;
+}
+
+.alert-preview-container.collapsed .preview-header {
+  border-bottom: none;
+}
+
+.preview-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.preview-icon {
+  font-size: 18px;
+}
+
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-trigger-btn {
+  padding: 6px 16px;
+  background: #9147ff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-trigger-btn:hover {
+  background: #7c3aed;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(145, 71, 255, 0.3);
+}
+
+.preview-trigger-btn:active {
+  transform: translateY(0);
+}
+
+.preview-collapse-btn {
+  padding: 6px 12px;
+  background: #333;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+}
+
+.preview-collapse-btn:hover {
+  background: #444;
+  transform: translateY(-1px);
+}
+
+.preview-collapse-btn:active {
+  transform: translateY(0);
+}
+
+/* Preview Stage */
+.preview-stage {
+  position: relative;
+  width: 100%;
+  height: 250px;
+  background: #000;
+  overflow: hidden;
+}
+
+.preview-background {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+.preview-grid {
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  opacity: 0.5;
+}
+
+/* Preview Alert Container */
+.preview-alert {
+  position: absolute;
+  max-width: 80%;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: scale(0.8);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+
+.preview-alert.show {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Position Classes */
+.preview-alert.position-top-left {
+  top: 20px;
+  left: 20px;
+}
+
+.preview-alert.position-top-center {
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.8);
+}
+
+.preview-alert.position-top-center.show {
+  transform: translateX(-50%) scale(1);
+}
+
+.preview-alert.position-top-right {
+  top: 20px;
+  right: 20px;
+}
+
+.preview-alert.position-middle-left {
+  top: 50%;
+  left: 20px;
+  transform: translateY(-50%) scale(0.8);
+}
+
+.preview-alert.position-middle-left.show {
+  transform: translateY(-50%) scale(1);
+}
+
+.preview-alert.position-middle-center {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+}
+
+.preview-alert.position-middle-center.show {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.preview-alert.position-middle-right {
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%) scale(0.8);
+}
+
+.preview-alert.position-middle-right.show {
+  transform: translateY(-50%) scale(1);
+}
+
+.preview-alert.position-bottom-left {
+  bottom: 20px;
+  left: 20px;
+}
+
+.preview-alert.position-bottom-center {
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.8);
+}
+
+.preview-alert.position-bottom-center.show {
+  transform: translateX(-50%) scale(1);
+}
+
+.preview-alert.position-bottom-right {
+  bottom: 20px;
+  right: 20px;
+}
+
+/* Alert Content */
+.preview-text {
+  color: white;
+  font-size: 24px;
+  font-weight: 600;
+  text-align: center;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  line-height: 1.4;
+}
+
+.preview-text strong {
+  color: #9147ff;
+}
+
+.preview-image-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.preview-image {
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.preview-video-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.preview-video {
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Preview Info */
+.preview-info {
+  display: flex;
+  gap: 20px;
+  padding: 12px 16px;
+  background: #252525;
+  border-top: 1px solid #333;
+  font-size: 12px;
+}
+
+.preview-info-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.info-label {
+  color: #888;
+  font-weight: 500;
+}
+
+.info-value {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Preview Placeholder */
+.preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 250px;
+  gap: 12px;
+}
+
+.preview-placeholder .preview-icon {
+  font-size: 64px;
+  opacity: 0.3;
+}
+
+.preview-placeholder p {
+  color: #888;
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.preview-placeholder small {
+  color: #666;
+  font-size: 13px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .preview-stage {
+    height: 200px;
+  }
+  
+  .preview-alert {
+    max-width: 90%;
+    padding: 15px;
+  }
+  
+  .preview-text {
+    font-size: 18px;
+  }
+  
+  .preview-info {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

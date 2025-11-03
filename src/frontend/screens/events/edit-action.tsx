@@ -10,6 +10,7 @@
 import React, { useState, useEffect } from 'react';
 import { EventAction, EventActionPayload } from '../../services/event-actions';
 import { EVENT_DISPLAY_INFO, EventSubscriptions } from '../../config/event-types';
+import { TemplateBuilder, AlertPreview } from './components';
 import './edit-action.css';
 
 interface EditActionProps {
@@ -386,27 +387,20 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
                   <span>Enable Text Alert</span>
                 </label>
               </div>
-              
-              {formData.text_enabled && (
-                <>
-                  <div className="form-group">
+                {formData.text_enabled && (
+                <>                  <div className="form-group">
                     <label htmlFor="text_template">
                       Text Template <span className="required">*</span>
                     </label>
-                    <textarea
-                      id="text_template"
+                    <TemplateBuilder
+                      eventType={formData.event_type}
                       value={formData.text_template || ''}
-                      onChange={(e) => updateField('text_template', e.target.value || null)}
-                      placeholder="Enter text template with variables..."
-                      rows={4}
-                      className={errors.text_template ? 'error' : ''}
+                      onChange={(template: string) => updateField('text_template', template || null)}
+                      placeholder="Enter text template or use a preset..."
                     />
                     {errors.text_template && (
                       <span className="error-message">{errors.text_template}</span>
                     )}
-                    <p className="help-text">
-                      Available variables: {'{'}user{'}'}, {'{'}message{'}'}, {'{'}amount{'}'}, etc.
-                    </p>
                   </div>
                   
                   <div className="form-row">
@@ -786,6 +780,24 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
           </div>
         )}
       </div>
+        {/* Alert Preview Section */}
+      <AlertPreview
+        eventType={formData.event_type}
+        textEnabled={formData.text_enabled ?? false}
+        textTemplate={formData.text_template ?? null}
+        textPosition={formData.text_position || 'top-center'}
+        textDuration={formData.text_duration ?? 5000}
+        imageEnabled={formData.image_enabled ?? false}
+        imageFilePath={formData.image_file_path ?? null}
+        imagePosition={formData.image_position || 'middle-center'}
+        imageWidth={formData.image_width ?? null}
+        imageHeight={formData.image_height ?? null}
+        videoEnabled={formData.video_enabled ?? false}
+        videoFilePath={formData.video_file_path ?? null}
+        videoPosition={formData.video_position || 'middle-center'}
+        videoWidth={formData.video_width ?? null}
+        videoHeight={formData.video_height ?? null}
+      />
       
       {/* Footer - FIXED */}
       <div className="edit-action-footer">

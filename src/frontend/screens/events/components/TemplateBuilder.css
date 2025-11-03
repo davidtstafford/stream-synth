@@ -1,0 +1,470 @@
+/**
+ * Template Builder Styles
+ * Matches the app's design language
+ */
+
+.template-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ============================================================================
+   TEMPLATE INPUT
+   ============================================================================ */
+
+.template-input-container {
+  position: relative;
+}
+
+.template-input {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  font-size: 14px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  line-height: 1.6;
+  border-radius: 6px;
+  border: 1px solid #555;
+  background-color: #333;
+  color: white;
+  resize: vertical;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.template-input:hover {
+  border-color: #777;
+  background-color: #3a3a3a;
+}
+
+.template-input:focus {
+  border-color: #9147ff;
+  box-shadow: 0 0 0 3px rgba(145, 71, 255, 0.2);
+  background-color: #3a3a3a;
+}
+
+.template-input::placeholder {
+  color: #888;
+  font-style: italic;
+}
+
+.template-char-count {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  font-size: 11px;
+  color: #888;
+  background: rgba(42, 42, 42, 0.9);
+  padding: 2px 6px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* ============================================================================
+   ACTION BUTTONS
+   ============================================================================ */
+
+.template-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.template-action-btn {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background: #555;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.template-action-btn:hover:not(:disabled) {
+  background: #666;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.template-action-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.template-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.template-action-btn.variables-btn {
+  background: #9147ff;
+}
+
+.template-action-btn.variables-btn:hover:not(:disabled) {
+  background: #a55fff;
+  box-shadow: 0 4px 8px rgba(145, 71, 255, 0.3);
+}
+
+.template-action-btn.presets-btn {
+  background: #3b82f6;
+}
+
+.template-action-btn.presets-btn:hover:not(:disabled) {
+  background: #60a5fa;
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.template-action-btn.clear-btn {
+  background: #dc2626;
+}
+
+.template-action-btn.clear-btn:hover:not(:disabled) {
+  background: #ef4444;
+  box-shadow: 0 4px 8px rgba(220, 38, 38, 0.3);
+}
+
+.variable-count,
+.preset-count {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* ============================================================================
+   PANELS (Variables & Presets)
+   ============================================================================ */
+
+.template-panel {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 0;
+  animation: slideDown 0.2s ease-out;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #444;
+  flex-shrink: 0;
+}
+
+.panel-header h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+}
+
+.panel-close {
+  background: transparent;
+  border: none;
+  color: #aaa;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.panel-close:hover {
+  background: #444;
+  color: white;
+}
+
+.panel-hint {
+  padding: 12px 20px;
+  font-size: 13px;
+  color: #aaa;
+  border-top: 1px solid #444;
+  background: rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.panel-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #aaa;
+  font-size: 14px;
+}
+
+.panel-empty p {
+  margin: 8px 0;
+}
+
+.panel-empty .hint {
+  font-size: 13px;
+  color: #888;
+}
+
+.panel-divider {
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #aaa;
+  border-top: 1px solid #444;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================================================
+   VARIABLES LIST
+   ============================================================================ */
+
+.variable-list {
+  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 250px;
+}
+
+.variable-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.variable-list::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.variable-list::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.variable-list::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+.variable-item {
+  padding: 8px 12px;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+}
+
+.variable-item:hover {
+  background: #9147ff;
+  border-color: #9147ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(145, 71, 255, 0.3);
+}
+
+.variable-item code {
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  color: inherit;
+  background: transparent;
+}
+
+/* ============================================================================
+   PRESETS LIST
+   ============================================================================ */
+
+.preset-list {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: 300px;
+}
+
+.preset-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.preset-list::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.preset-list::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.preset-list::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+.preset-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: #333;
+  border: 1px solid #444;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.preset-item:hover {
+  background: #3a3a3a;
+  border-color: #555;
+}
+
+.preset-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.preset-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+}
+
+.preset-description {
+  font-size: 13px;
+  color: #aaa;
+}
+
+.preset-template {
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.preset-template::-webkit-scrollbar {
+  height: 4px;
+}
+
+.preset-template::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.preset-template::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 2px;
+}
+
+.preset-template code {
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  color: #9147ff;
+}
+
+.preset-apply-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background: #3b82f6;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: fit-content;
+  align-self: center;
+  white-space: nowrap;
+}
+
+.preset-apply-btn:hover {
+  background: #60a5fa;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.preset-apply-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================================================
+   HELP TEXT
+   ============================================================================ */
+
+.template-help {
+  padding: 12px;
+  background: rgba(145, 71, 255, 0.1);
+  border: 1px solid rgba(145, 71, 255, 0.3);
+  border-radius: 6px;
+  font-size: 13px;
+  color: #aaa;
+  line-height: 1.5;
+}
+
+.template-help strong {
+  color: white;
+  font-weight: 600;
+}
+
+.template-help code {
+  background: rgba(145, 71, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  color: #9147ff;
+  font-size: 12px;
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .template-actions {
+    flex-direction: column;
+  }
+
+  .template-action-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .variable-list {
+    max-height: 200px;
+  }
+
+  .preset-list {
+    max-height: 250px;
+  }
+
+  .preset-item {
+    flex-direction: column;
+  }
+
+  .preset-apply-btn {
+    width: 100%;
+  }
+}
