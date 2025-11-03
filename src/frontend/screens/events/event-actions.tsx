@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { eventActionsService, EventAction, EventActionPayload, ActionStats, BrowserSourceStats } from '../../services/event-actions';
+import { browserSourceChannelsService, BrowserSourceChannel } from '../../services/browser-source-channels';
 import { EVENT_DISPLAY_INFO } from '../../config/event-types';
 import { EditActionScreen } from './edit-action';
+import { ChannelManager } from '../../components/ChannelManager';
 import './event-actions.css';
 
 const { ipcRenderer } = window.require('electron');
@@ -18,6 +20,11 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<ActionStats | null>(null);
   const [browserSourceStats, setBrowserSourceStats] = useState<BrowserSourceStats | null>(null);
+  
+  // Browser Source Channels
+  const [channels, setChannels] = useState<BrowserSourceChannel[]>([]);
+  const [selectedChannelFilter, setSelectedChannelFilter] = useState<string>('all');
+  const [showChannelManager, setShowChannelManager] = useState<boolean>(false);
   
   // Filter states
   const [showOnlyEnabled, setShowOnlyEnabled] = useState<boolean>(false);
@@ -69,14 +76,28 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
   // Load on mount and when filters change
   useEffect(() => {
     loadActions();
-  }, [channelId, showOnlyEnabled]);
-
-  // Load browser source stats periodically
+  }, [channelId, showOnlyEnabled]);  // Load browser source stats periodically
   useEffect(() => {
     loadBrowserSourceStats();
     const interval = setInterval(loadBrowserSourceStats, 5000); // Every 5 seconds
     return () => clearInterval(interval);
   }, []);
+
+  // Load browser source channels
+  const loadChannels = async () => {
+    if (!channelId) return;
+    try {
+      const data = await browserSourceChannelsService.getAll(channelId);
+      setChannels(data);
+    } catch (err) {
+      console.error('[Event Actions] Failed to load browser source channels:', err);
+    }
+  };
+
+  // Load channels on mount and when channelId changes
+  useEffect(() => {
+    loadChannels();
+  }, [channelId]);
 
   // Toggle action enabled state
   const handleToggleAction = async (action: EventAction) => {
@@ -180,16 +201,25 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
     const info = EVENT_DISPLAY_INFO[eventType as keyof typeof EVENT_DISPLAY_INFO];
     return info ? info.name : eventType;
   };
-
   // Filter actions by search text
   const filteredActions = actions.filter(action => {
-    if (!searchText) return true;
-    const searchLower = searchText.toLowerCase();
-    return (
-      action.event_type.toLowerCase().includes(searchLower) ||
-      getEventDisplayName(action.event_type).toLowerCase().includes(searchLower) ||
-      (action.text_template && action.text_template.toLowerCase().includes(searchLower))
-    );
+    // Search text filter
+    if (searchText) {
+      const searchLower = searchText.toLowerCase();
+      const matchesSearch = (
+        action.event_type.toLowerCase().includes(searchLower) ||
+        getEventDisplayName(action.event_type).toLowerCase().includes(searchLower) ||
+        (action.text_template && action.text_template.toLowerCase().includes(searchLower))
+      );
+      if (!matchesSearch) return false;
+    }
+    
+    // Channel filter
+    if (selectedChannelFilter !== 'all') {
+      if (action.browser_source_channel !== selectedChannelFilter) return false;
+    }
+    
+    return true;
   });
 
   // Render no connection state
@@ -258,9 +288,7 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
             <span className="stat-value disabled">{stats.total - stats.enabled}</span>
           </div>
         </div>
-      )}
-
-      {/* Toolbar */}
+      )}      {/* Toolbar */}
       <div className="toolbar">
         <div className="search-box">
           <input
@@ -282,6 +310,23 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
         </div>
         
         <div className="filter-controls">
+          <label className="filter-label">
+            <span>Channel:</span>
+            <select
+              value={selectedChannelFilter}
+              onChange={(e) => setSelectedChannelFilter(e.target.value)}
+              className="channel-filter-select"
+              title="Filter by browser source channel"
+            >
+              <option value="all">All Channels</option>
+              {channels.map(channel => (
+                <option key={channel.id} value={channel.name}>
+                  {channel.icon} {channel.display_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          
           <label className="filter-checkbox">
             <input
               type="checkbox"
@@ -290,7 +335,18 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
             />
             <span>Show only enabled</span>
           </label>
-        </div>        <button 
+        </div>
+        
+        <button 
+          className="secondary-button"
+          onClick={() => setShowChannelManager(true)}
+          title="Manage browser source channels"
+          disabled={!channelId}
+        >
+          📺 Manage Channels
+        </button>
+        
+        <button 
           className="create-button primary-button"
           onClick={handleCreateAction}
           title="Create new event action"
@@ -352,12 +408,10 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
       )}
 
       {/* Actions List */}
-      {!loading && !error && filteredActions.length > 0 && (
-        <div className="actions-list">
+      {!loading && !error && filteredActions.length > 0 && (        <div className="actions-list">
           <div className="list-header">
             <span className="header-cell event-type">Event Type</span>
             <span className="header-cell media-types">Media</span>
-            <span className="header-cell template">Template</span>
             <span className="header-cell status">Status</span>
             <span className="header-cell actions-header">Actions</span>
           </div>
@@ -365,33 +419,26 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
           {filteredActions.map(action => (            <div 
               key={action.id} 
               className={`action-item ${!action.is_enabled ? 'disabled' : ''}`}
-            >
-              <div className="cell event-type">
+            >              <div className="cell event-type">
                 <span className="event-icon">📢</span>
                 <div className="event-info">
                   <span className="event-name">{getEventDisplayName(action.event_type)}</span>
-                  <span className="event-code">{action.event_type}</span>
+                  {action.browser_source_channel && action.browser_source_channel !== 'default' && (
+                    <span className="channel-badge" title={`Browser Source Channel: ${action.browser_source_channel}`}>
+                      {channels.find(c => c.name === action.browser_source_channel)?.icon || '📺'} {action.browser_source_channel}
+                    </span>
+                  )}
                 </div>
-              </div>
-
-              <div className="cell media-types">
+              </div><div className="cell media-types">
                 <div className="media-badges">
-                  {action.text_enabled && <span className="media-badge text">📝 Text</span>}
-                  {action.sound_enabled && <span className="media-badge sound">🔊 Sound</span>}
-                  {action.image_enabled && <span className="media-badge image">🖼️ Image</span>}
-                  {action.video_enabled && <span className="media-badge video">🎬 Video</span>}
+                  {!!action.text_enabled && <span className="media-badge text">📝 Text</span>}
+                  {!!action.sound_enabled && <span className="media-badge sound">🔊 Sound</span>}
+                  {!!action.image_enabled && <span className="media-badge image">🖼️ Image</span>}
+                  {!!action.video_enabled && <span className="media-badge video">🎬 Video</span>}
                   {!action.text_enabled && !action.sound_enabled && !action.image_enabled && !action.video_enabled && (
                     <span className="media-badge none">None</span>
                   )}
                 </div>
-              </div>
-
-              <div className="cell template">
-                {action.text_template ? (
-                  <span className="template-preview">{action.text_template}</span>
-                ) : (
-                  <span className="no-template">No template</span>
-                )}
               </div>
 
               <div className="cell status">
@@ -433,15 +480,25 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
               </div>
             </div>          ))}
         </div>
-      )}
-
-      {/* Edit/Create Action Screen (replaces modal) */}
+      )}      {/* Edit/Create Action Screen (replaces modal) */}
       {activeView !== 'list' && channelId && (
         <EditActionScreen
           action={editingActionId !== null ? actions.find(a => a.id === editingActionId) : undefined}
           channelId={channelId}
+          defaultChannel={selectedChannelFilter !== 'all' ? selectedChannelFilter : undefined}
           onSave={handleSaveAction}
           onCancel={handleCancelEdit}
+        />
+      )}
+
+      {/* Channel Manager Modal */}
+      {showChannelManager && channelId && (
+        <ChannelManager
+          channelId={channelId}
+          onClose={() => {
+            setShowChannelManager(false);
+            loadChannels(); // Reload channels after closing
+          }}
         />
       )}
     </div>

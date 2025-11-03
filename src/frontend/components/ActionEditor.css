@@ -294,6 +294,40 @@
   line-height: 1.4;
 }
 
+.browser-source-url-preview {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(145, 71, 255, 0.1);
+  border: 1px solid rgba(145, 71, 255, 0.3);
+  border-radius: 6px;
+}
+
+.browser-source-url-preview label {
+  display: block;
+  font-size: 12px;
+  color: #b794f4;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.browser-source-url-preview input[type="text"] {
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(145, 71, 255, 0.4);
+  border-radius: 4px;
+  color: white;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  cursor: pointer;
+}
+
+.browser-source-url-preview input[type="text"]:focus {
+  outline: none;
+  border-color: #9147ff;
+  box-shadow: 0 0 0 2px rgba(145, 71, 255, 0.2);
+}
+
 .error-message {
   display: block;
   margin-top: 6px;

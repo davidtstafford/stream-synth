@@ -801,15 +801,44 @@ export function runMigrations(db: Database.Database): void {
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_event_actions_enabled ON event_actions(is_enabled)
-  `);
-  db.exec(`
+  `);  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_event_actions_channel_event ON event_actions(channel_id, event_type)
   `);
+
+  // Run schema updates for existing databases
+  runSchemaUpdates(db);
 
   // Initialize default browser source channel
   initializeDefaultChannel(db);
 
   console.log('[Migrations] Database schema initialization complete');
+}
+
+/**
+ * Run schema updates to add missing columns to existing databases
+ * This handles backwards compatibility for databases created before certain features
+ */
+function runSchemaUpdates(db: Database.Database): void {
+  console.log('[Migrations] Running schema updates for existing databases...');
+
+  // Add browser_source_channel column if it doesn't exist (Phase 8)
+  try {
+    const tableInfo = db.prepare(`PRAGMA table_info(event_actions)`).all() as Array<{ name: string }>;
+    const hasBrowserSourceChannel = tableInfo.some(col => col.name === 'browser_source_channel');
+    
+    if (!hasBrowserSourceChannel) {
+      console.log('[Migrations] Adding browser_source_channel column to event_actions...');
+      db.exec(`
+        ALTER TABLE event_actions 
+        ADD COLUMN browser_source_channel TEXT DEFAULT 'default'
+      `);
+      console.log('[Migrations] ✓ Added browser_source_channel column');
+    }
+  } catch (err) {
+    console.error('[Migrations] Error checking/adding browser_source_channel column:', err);
+  }
+
+  console.log('[Migrations] Schema updates complete');
 }
 
 /**

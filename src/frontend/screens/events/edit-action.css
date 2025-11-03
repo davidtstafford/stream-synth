@@ -818,6 +818,46 @@
 }
 
 /* ============================================================================
+   BROWSER SOURCE CHANNEL
+   ============================================================================ */
+
+.browser-source-url-preview {
+  margin-top: 12px;
+  padding: 12px;
+  background: #2a2a2a;
+  border-radius: 6px;
+  border: 1px solid #555;
+}
+
+.browser-source-url-preview label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ccc;
+}
+
+.browser-source-url-preview .url-code {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  background: #1e1e1e;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #4fc3f7;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  word-break: break-all;
+  user-select: all;
+  cursor: text;
+}
+
+.browser-source-url-preview .url-code:hover {
+  background: #252525;
+  border-color: #666;
+}
+
+/* ============================================================================
    ALERT PREVIEW SECTION
    ============================================================================ */
 

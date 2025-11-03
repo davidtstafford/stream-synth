@@ -9,6 +9,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { EventAction, EventActionPayload } from '../services/event-actions';
+import { browserSourceChannelsService, BrowserSourceChannel } from '../services/browser-source-channels';
 import { EVENT_DISPLAY_INFO, EventSubscriptions } from '../config/event-types';
 import './ActionEditor.css';
 
@@ -54,17 +55,20 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({
   eventType: initialEventType,
   onSave,
   onCancel
-}) => {
-  const isEditMode = !!action;
+}) => {  const isEditMode = !!action;
   
   // Tab state
   const [activeTab, setActiveTab] = useState<TabType>('general');
+  
+  // Browser Source Channels
+  const [channels, setChannels] = useState<BrowserSourceChannel[]>([]);
   
   // Form state
   const [formData, setFormData] = useState<EventActionPayload>({
     channel_id: channelId,
     event_type: action?.event_type || initialEventType || '',
     is_enabled: action?.is_enabled ?? true,
+    browser_source_channel: action?.browser_source_channel || 'default',
     
     // Text
     text_enabled: action?.text_enabled ?? false,
@@ -100,13 +104,26 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Track form changes
+  // Load browser source channels
+  useEffect(() => {
+    const loadChannels = async () => {
+      try {
+        const data = await browserSourceChannelsService.getAll(channelId);
+        setChannels(data);
+      } catch (err) {
+        console.error('[ActionEditor] Failed to load channels:', err);
+      }
+    };
+    loadChannels();
+  }, [channelId]);
+    // Track form changes
   useEffect(() => {
     if (isEditMode) {
       setHasUnsavedChanges(JSON.stringify(formData) !== JSON.stringify({
         channel_id: action.channel_id,
         event_type: action.event_type,
         is_enabled: action.is_enabled,
+        browser_source_channel: action.browser_source_channel,
         text_enabled: action.text_enabled,
         text_template: action.text_template,
         text_duration: action.text_duration,
@@ -321,6 +338,37 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({
                   </select>
                   {errors.event_type && (
                     <span className="error-message">{errors.event_type}</span>
+                  )}
+                </div>
+                  <div className="form-group">
+                  <label htmlFor="browser_source_channel">
+                    Browser Source Channel
+                  </label>
+                  <select
+                    id="browser_source_channel"
+                    value={formData.browser_source_channel || 'default'}
+                    onChange={(e) => updateField('browser_source_channel', e.target.value)}
+                  >
+                    {channels.map(channel => (
+                      <option key={channel.id} value={channel.name}>
+                        {channel.icon} {channel.display_name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="help-text">
+                    Choose which browser source channel will display this alert. Use different channels to position alerts in different locations on your stream.
+                  </p>
+                  {formData.browser_source_channel && formData.browser_source_channel !== 'default' && (
+                    <div className="browser-source-url-preview">
+                      <label>Browser Source URL for this channel:</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={browserSourceChannelsService.getBrowserSourceUrl(formData.browser_source_channel)}
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                        title="Click to select, then copy to clipboard"
+                      />
+                    </div>
                   )}
                 </div>
                 

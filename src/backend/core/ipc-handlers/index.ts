@@ -13,6 +13,7 @@ import { setupIRCHandlers, setMainWindowForIRC } from './irc';
 import { setupTTSAccessHandlers } from './tts-access';
 import { setupChatCommandHandlers } from './chat-commands';
 import { setupEventActionHandlers } from './event-actions';
+import { registerBrowserSourceChannelHandlers } from './browser-source-channels';
 import { ViewerTTSRulesRepository } from '../../database/repositories/viewer-tts-rules';
 import './twitch-polling'; // Auto-registers handlers
 
@@ -25,6 +26,7 @@ export function setupIpcHandlers(): void {
   setupTTSAccessHandlers();
   setupChatCommandHandlers(); // Phase 5: Chat Commands
   setupEventActionHandlers(); // Phase 5: Event Actions
+  registerBrowserSourceChannelHandlers(); // Phase 8: Browser Source Channels
   // setupEventSubHandlers(); // Phase 7: EventSub WebSocket - temporarily disabled
   // twitch-polling handlers auto-registered on import
 }

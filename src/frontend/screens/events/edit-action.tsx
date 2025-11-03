@@ -9,6 +9,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { EventAction, EventActionPayload } from '../../services/event-actions';
+import { browserSourceChannelsService, BrowserSourceChannel } from '../../services/browser-source-channels';
 import { EVENT_DISPLAY_INFO, EventSubscriptions } from '../../config/event-types';
 import { TemplateBuilder, AlertPreview } from './components';
 import './edit-action.css';
@@ -16,6 +17,7 @@ import './edit-action.css';
 interface EditActionProps {
   action?: EventAction;           // undefined = create mode
   channelId: string;
+  defaultChannel?: string;        // Default channel for new actions
   onSave: (payload: EventActionPayload) => Promise<void>;
   onCancel: () => void;
 }
@@ -51,6 +53,7 @@ const POSITION_LABELS: Record<string, string> = {
 export const EditActionScreen: React.FC<EditActionProps> = ({
   action,
   channelId,
+  defaultChannel,
   onSave,
   onCancel
 }) => {
@@ -63,6 +66,7 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
     channel_id: channelId,
     event_type: action?.event_type || '',
     is_enabled: action ? !!action.is_enabled : true,
+    browser_source_channel: action?.browser_source_channel || defaultChannel || 'default',
     
     // Text
     text_enabled: action ? !!action.text_enabled : false,
@@ -90,21 +94,36 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
     video_volume: action?.video_volume ?? 0.5,
     video_position: action?.video_position || 'middle-center',
     video_width: action?.video_width || null,
-    video_height: action?.video_height || null
-  });
+    video_height: action?.video_height || null  });
+  
+  // Browser Source Channels
+  const [channels, setChannels] = useState<BrowserSourceChannel[]>([]);
   
   // UI state
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
+  // Load browser source channels
+  useEffect(() => {
+    const loadChannels = async () => {
+      try {
+        const data = await browserSourceChannelsService.getAll(channelId);
+        setChannels(data);
+      } catch (err) {
+        console.error('[EditActionScreen] Failed to load channels:', err);
+      }
+    };
+    loadChannels();
+  }, [channelId]);
+  
   // Track form changes
   useEffect(() => {
-    if (isEditMode) {
-      setHasUnsavedChanges(JSON.stringify(formData) !== JSON.stringify({
+    if (isEditMode) {      setHasUnsavedChanges(JSON.stringify(formData) !== JSON.stringify({
         channel_id: action.channel_id,
         event_type: action.event_type,
         is_enabled: action.is_enabled,
+        browser_source_channel: action.browser_source_channel,
         text_enabled: action.text_enabled,
         text_template: action.text_template,
         text_duration: action.text_duration,
@@ -319,6 +338,34 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
                 </select>
                 {errors.event_type && (
                   <span className="error-message">{errors.event_type}</span>
+                )}
+              </div>
+              
+              <div className="form-group">
+                <label htmlFor="browser_source_channel">
+                  Browser Source Channel
+                </label>
+                <select
+                  id="browser_source_channel"
+                  value={formData.browser_source_channel || 'default'}
+                  onChange={(e) => updateField('browser_source_channel', e.target.value)}
+                >
+                  {channels.map(channel => (
+                    <option key={channel.id} value={channel.name}>
+                      {channel.icon} {channel.display_name}
+                    </option>
+                  ))}
+                </select>
+                <p className="help-text">
+                  Choose which browser source channel will display this alert. Use different channels to position alerts in different locations on your stream.
+                </p>
+                {formData.browser_source_channel && formData.browser_source_channel !== 'default' && (
+                  <div className="browser-source-url-preview">
+                    <label>Browser Source URL for this channel:</label>
+                    <code className="url-code">
+                      {browserSourceChannelsService.getBrowserSourceUrl(formData.browser_source_channel)}
+                    </code>
+                  </div>
                 )}
               </div>
               
