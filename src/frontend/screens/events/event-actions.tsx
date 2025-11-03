@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { eventActionsService, EventAction, ActionStats, BrowserSourceStats } from '../../services/event-actions';
+import { eventActionsService, EventAction, EventActionPayload, ActionStats, BrowserSourceStats } from '../../services/event-actions';
 import { EVENT_DISPLAY_INFO } from '../../config/event-types';
+import { EditActionScreen } from './edit-action';
 import './event-actions.css';
 
 const { ipcRenderer } = window.require('electron');
@@ -8,6 +9,8 @@ const { ipcRenderer } = window.require('electron');
 interface EventActionsScreenProps {
   channelId?: string;
 }
+
+type ViewState = 'list' | 'edit' | 'create';
 
 export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelId }) => {
   const [actions, setActions] = useState<EventAction[]>([]);
@@ -20,8 +23,9 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
   const [showOnlyEnabled, setShowOnlyEnabled] = useState<boolean>(false);
   const [searchText, setSearchText] = useState<string>('');
   
-  // Selected action for editing
-  const [selectedAction, setSelectedAction] = useState<EventAction | null>(null);
+  // View state management (replaces modal approach)
+  const [activeView, setActiveView] = useState<ViewState>('list');
+  const [editingActionId, setEditingActionId] = useState<number | null>(null);
   
   // Load actions
   const loadActions = async () => {
@@ -97,7 +101,6 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
       alert(`Failed to delete action: ${err.message}`);
     }
   };
-
   // Send test alert
   const handleTestAlert = async (action: EventAction) => {
     try {
@@ -133,6 +136,44 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
     } catch (err: any) {
       alert(`Failed to send test alert: ${err.message}`);
     }
+  };
+  // Save action (create or update)
+  const handleSaveAction = async (payload: EventActionPayload) => {
+    try {
+      if (activeView === 'edit' && editingActionId !== null) {
+        // Update existing action
+        await eventActionsService.updateAction(editingActionId, payload);
+      } else {
+        // Create new action
+        await eventActionsService.createAction(payload);
+      }
+      
+      // Return to list view and refresh
+      setActiveView('list');
+      setEditingActionId(null);
+      await loadActions();
+    } catch (err: any) {
+      console.error('[Event Actions] Save error:', err);
+      throw err; // Re-throw to let EditActionScreen handle it
+    }
+  };
+
+  // Cancel editing/creating
+  const handleCancelEdit = () => {
+    setActiveView('list');
+    setEditingActionId(null);
+  };
+
+  // Open edit view
+  const handleEditAction = (action: EventAction) => {
+    setEditingActionId(action.id);
+    setActiveView('edit');
+  };
+
+  // Open create view
+  const handleCreateAction = () => {
+    setEditingActionId(null);
+    setActiveView('create');
   };
   // Get event display name
   const getEventDisplayName = (eventType: string): string => {
@@ -249,12 +290,11 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
             />
             <span>Show only enabled</span>
           </label>
-        </div>
-
-        <button 
+        </div>        <button 
           className="create-button primary-button"
-          onClick={() => {/* TODO: Open create modal */}}
+          onClick={handleCreateAction}
           title="Create new event action"
+          disabled={!channelId}
         >
           ➕ Create Action
         </button>
@@ -301,10 +341,9 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
             </>
           ) : (
             <>
-              <p className="empty-icon">🎬</p>
-              <p className="empty-title">No event actions configured</p>
+              <p className="empty-icon">🎬</p>              <p className="empty-title">No event actions configured</p>
               <p className="empty-subtitle">Create your first alert to get started!</p>
-              <button className="primary-button" onClick={() => {/* TODO: Open create modal */}}>
+              <button className="primary-button" onClick={handleCreateAction}>
                 ➕ Create Your First Action
               </button>
             </>
@@ -377,10 +416,9 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
                   disabled={!action.is_enabled}
                 >
                   🧪 Test
-                </button>
-                <button
+                </button>                <button
                   className="action-button edit-button"
-                  onClick={() => setSelectedAction(action)}
+                  onClick={() => handleEditAction(action)}
                   title="Edit action"
                 >
                   ✏️ Edit
@@ -393,28 +431,18 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
                   🗑️ Delete
                 </button>
               </div>
-            </div>
-          ))}
+            </div>          ))}
         </div>
       )}
 
-      {/* TODO: Action Editor Modal (Phase 8) */}
-      {selectedAction && (
-        <div className="modal-backdrop" onClick={() => setSelectedAction(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Edit Action: {getEventDisplayName(selectedAction.event_type)}</h3>
-            <p className="coming-soon">Action editor coming in Phase 8! 🚀</p>
-            <p>For now, you can:</p>
-            <ul>
-              <li>Toggle actions on/off</li>
-              <li>Send test alerts</li>
-              <li>Delete actions</li>
-            </ul>
-            <button className="primary-button" onClick={() => setSelectedAction(null)}>
-              Close
-            </button>
-          </div>
-        </div>
+      {/* Edit/Create Action Screen (replaces modal) */}
+      {activeView !== 'list' && channelId && (
+        <EditActionScreen
+          action={editingActionId !== null ? actions.find(a => a.id === editingActionId) : undefined}
+          channelId={channelId}
+          onSave={handleSaveAction}
+          onCancel={handleCancelEdit}
+        />
       )}
     </div>
   );
