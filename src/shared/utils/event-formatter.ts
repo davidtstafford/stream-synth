@@ -72,10 +72,11 @@ export function formatEvent(event: EventData): FormattedEvent {
   if (!displayName) {
     displayName = 'Unknown';
   }
-
   // Base variables available for all events
   const variables: Record<string, any> = {
     username: displayName,
+    display_name: displayName,  // Alias for username
+    user_name: displayName,      // Alias for username (matches EventSub field)
     event_type: event.event_type,
     timestamp: event.created_at,
     ...data  // Include all event data as variables
