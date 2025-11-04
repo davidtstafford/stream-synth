@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TTS Browser Source</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: transparent;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #status {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      border-radius: 4px;
+      font-size: 14px;
+      display: none; /* Hidden by default for production */
+    }
+
+    #status.connected {
+      background: rgba(40, 167, 69, 0.8);
+    }
+
+    #status.disconnected {
+      background: rgba(220, 53, 69, 0.8);
+    }    #queue-info {
+      position: absolute;
+      top: 50px;
+      left: 10px;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      border-radius: 4px;
+      font-size: 12px;
+      display: none; /* Hidden by default for production */
+    }
+
+    #unlock-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    #unlock-overlay.hidden {
+      display: none;
+    }
+
+    #unlock-button {
+      padding: 20px 40px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      transition: all 0.2s;
+    }
+
+    #unlock-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    #unlock-button:active {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body>
+  <!-- Unlock overlay (only needed for browser testing, not OBS) -->
+  <div id="unlock-overlay">
+    <button id="unlock-button">🔊 Click to Enable Audio</button>
+  </div>
+
+  <div id="status" class="disconnected">Disconnected</div>
+  <div id="queue-info">Queue: 0 | Playing: None</div>  <!-- Hidden audio element for Azure/Google audio playback -->
+  <audio id="audioPlayer" style="display: none;"></audio>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    console.log('[TTS Browser Source] Initializing...');
+
+    // Connect to Socket.IO server
+    const socket = io('http://localhost:3737');
+    const audioPlayer = document.getElementById('audioPlayer');
+    const statusDiv = document.getElementById('status');
+    const queueDiv = document.getElementById('queue-info');
+    const unlockOverlay = document.getElementById('unlock-overlay');
+    const unlockButton = document.getElementById('unlock-button');
+
+    let isPlaying = false;
+    let currentProvider = null;
+    let audioUnlocked = false;
+
+    // Detect if running in OBS (OBS doesn't have Navigator.userAgentData)
+    const isOBS = !navigator.userAgentData && navigator.userAgent.includes('Chrome');
+
+    // Hide unlock button in OBS
+    if (isOBS) {
+      unlockOverlay.classList.add('hidden');
+      audioUnlocked = true;
+      console.log('[TTS Browser Source] Running in OBS - autoplay enabled');
+    } else {
+      console.log('[TTS Browser Source] Running in browser - click required to enable audio');
+    }
+
+    // Handle unlock button click
+    unlockButton.addEventListener('click', () => {
+      console.log('[TTS Browser Source] User clicked unlock button');
+      
+      // Play silent audio to unlock
+      audioPlayer.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+      audioPlayer.volume = 0;
+      
+      const playPromise = audioPlayer.play();
+      
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          console.log('[TTS Browser Source] ✓ Audio unlocked successfully');
+          audioPlayer.pause();
+          audioPlayer.currentTime = 0;
+          audioPlayer.src = '';
+          audioPlayer.volume = 1;
+          audioUnlocked = true;
+          unlockOverlay.classList.add('hidden');
+        }).catch((error) => {
+          console.error('[TTS Browser Source] Failed to unlock audio:', error);
+        });
+      }
+    });
+
+    // Socket connection events
+    socket.on('connect', () => {
+      console.log('[TTS Browser Source] ✓ Connected to server');
+      statusDiv.textContent = 'Connected';
+      statusDiv.className = 'connected';
+    });
+
+    socket.on('disconnect', () => {
+      console.log('[TTS Browser Source] ✗ Disconnected from server');
+      statusDiv.textContent = 'Disconnected';
+      statusDiv.className = 'disconnected';
+      isPlaying = false;
+    });
+
+    socket.on('error', (error) => {
+      console.error('[TTS Browser Source] Socket error:', error);
+    });
+
+    // Listen for TTS audio events
+    socket.on('tts-audio', (data) => {
+      console.log('[TTS Browser Source] 📢 Received TTS audio:', {
+        provider: data.provider,
+        id: data.id,
+        hasAudioData: !!data.audioData,
+        hasText: !!data.text
+      });
+
+      if (isPlaying) {
+        console.warn('[TTS Browser Source] Already playing, queuing is handled server-side');
+        return;
+      }
+
+      playTTS(data);
+    });
+
+    // Play TTS based on provider
+    async function playTTS(data) {
+      isPlaying = true;
+      currentProvider = data.provider;
+      updateQueueInfo('Playing...', data.provider);
+
+      try {
+        if (data.provider === 'webspeech') {
+          // WebSpeech: Synthesize text client-side
+          await playWebSpeech(data);
+        } else if (data.provider === 'azure' || data.provider === 'google') {
+          // Azure/Google: Play audio file
+          await playAudioFile(data);
+        } else {
+          console.error('[TTS Browser Source] Unknown provider:', data.provider);
+        }
+      } catch (error) {
+        console.error('[TTS Browser Source] Playback error:', error);
+      } finally {
+        isPlaying = false;
+        currentProvider = null;
+        updateQueueInfo('Idle', null);
+        
+        // Notify server that audio finished
+        socket.emit('tts-finished');
+        console.log('[TTS Browser Source] ✓ Audio finished, notified server');
+      }
+    }
+
+    // Play WebSpeech audio (client-side synthesis)
+    function playWebSpeech(data) {
+      return new Promise((resolve, reject) => {
+        if (!window.speechSynthesis) {
+          console.error('[TTS Browser Source] Web Speech API not available');
+          reject(new Error('Web Speech API not available'));
+          return;
+        }        console.log('[TTS Browser Source] Playing WebSpeech:', {
+          text: data.text,
+          voiceId: data.voiceId,
+          rate: data.rate,
+          pitch: data.pitch,
+          volume: data.volume
+        });        const utterance = new SpeechSynthesisUtterance(data.text);
+        
+        // Find the voice by voiceURI (we now send the actual voiceURI from backend)
+        const voices = window.speechSynthesis.getVoices();
+        const voice = voices.find(v => v.voiceURI === data.voiceId);
+        
+        if (voice) {
+          utterance.voice = voice;
+          console.log('[TTS Browser Source] Using voice:', voice.name, '(URI:', voice.voiceURI, ')');
+        } else {
+          console.warn('[TTS Browser Source] Voice not found:', data.voiceId);
+          console.log('[TTS Browser Source] Available voices:', voices.map(v => `${v.name} (${v.voiceURI})`).slice(0, 10).join(', '), '...');
+        }
+
+        // Apply settings
+        utterance.rate = data.rate || 1.0;
+        utterance.pitch = data.pitch || 1.0;
+        utterance.volume = (data.volume || 80) / 100;
+
+        utterance.onend = () => {
+          console.log('[TTS Browser Source] WebSpeech finished');
+          resolve();
+        };
+
+        utterance.onerror = (event) => {
+          console.error('[TTS Browser Source] WebSpeech error:', event);
+          reject(event.error);
+        };
+
+        window.speechSynthesis.speak(utterance);
+      });
+    }
+
+    // Play Azure/Google audio file
+    function playAudioFile(data) {
+      return new Promise((resolve, reject) => {
+        if (!data.audioData) {
+          console.error('[TTS Browser Source] No audio data provided');
+          reject(new Error('No audio data'));
+          return;
+        }
+
+        console.log('[TTS Browser Source] Playing audio file:', {
+          provider: data.provider,
+          format: data.audioFormat,
+          dataLength: data.audioData.length
+        });
+
+        // Convert base64 to blob
+        const binaryString = atob(data.audioData);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const blob = new Blob([bytes], { 
+          type: data.audioFormat === 'mp3' ? 'audio/mpeg' : 'audio/wav' 
+        });
+        const url = URL.createObjectURL(blob);
+
+        audioPlayer.src = url;
+        audioPlayer.volume = (data.volume || 80) / 100;
+
+        audioPlayer.onended = () => {
+          console.log('[TTS Browser Source] Audio file finished');
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+
+        audioPlayer.onerror = (event) => {
+          console.error('[TTS Browser Source] Audio playback error:', event);
+          URL.revokeObjectURL(url);
+          reject(new Error('Audio playback failed'));
+        };
+
+        audioPlayer.play().catch(err => {
+          console.error('[TTS Browser Source] Failed to play audio:', err);
+          URL.revokeObjectURL(url);
+          reject(err);
+        });
+      });
+    }
+
+    // Update queue info display
+    function updateQueueInfo(status, provider) {
+      queueDiv.textContent = `Status: ${status}${provider ? ` (${provider})` : ''}`;
+    }    // Load voices when available (for WebSpeech)
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        const voices = window.speechSynthesis.getVoices();
+        console.log(`[TTS Browser Source] Loaded ${voices.length} WebSpeech voices`);
+      };
+    }
+
+    console.log('[TTS Browser Source] Ready');
+  </script>
+</body>
+</html>

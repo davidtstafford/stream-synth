@@ -350,8 +350,8 @@ export class EventSubManager extends EventEmitter {
                eventType === 'channel.chat.clear_user_messages' ||
                eventType === 'channel.chat.message_delete' ||
                eventType === 'channel.chat_settings.update') {
-      // Chat events require user_id
-      condition.user_id = this.channelId;
+      // Chat events require user_id to be the authenticated user's ID
+      condition.user_id = this.userId;
     }
 
     // Determine the correct version for each event type

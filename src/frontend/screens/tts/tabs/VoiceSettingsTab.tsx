@@ -631,9 +631,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           onChange={(e) => onTestMessageChange(e.target.value)}
           rows={3}
           className="test-textarea"        />
-      </div>
-
-      {/* Test Buttons */}
+      </div>      {/* Test Buttons */}
       <div className="button-group" style={{ marginTop: '15px' }}>
         <button
           onClick={onTestVoice}
@@ -649,6 +647,100 @@ export const VoiceSettingsTab: React.FC<Props> = ({
         >
           ⏹️ Stop
         </button>
+      </div>
+
+      {/* Browser Source Output Section */}
+      <div style={{ marginTop: '30px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
+        <h3 style={{ margin: '0 0 15px 0', fontSize: '1.1em' }}>📺 Browser Source Output (OBS)</h3>
+        
+        <div style={{ marginBottom: '15px' }}>
+          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={settings.browserSourceEnabled ?? false}
+              onChange={(e) => onSettingChange('browserSourceEnabled', e.target.checked)}
+            />
+            <span className="checkbox-text">Enable TTS Browser Source for OBS</span>
+          </label>
+          <div style={{ marginLeft: '28px', marginTop: '8px', fontSize: '0.9em', color: '#888' }}>
+            Send TTS audio to a browser source that can be added to OBS
+          </div>
+        </div>
+
+        {settings.browserSourceEnabled && (
+          <>
+            <div style={{ marginBottom: '15px' }}>
+              <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.browserSourceMuteApp ?? false}
+                  onChange={(e) => onSettingChange('browserSourceMuteApp', e.target.checked)}
+                />
+                <span className="checkbox-text">Mute TTS in App (Prevent Echo)</span>
+              </label>
+              <div style={{ marginLeft: '28px', marginTop: '8px', fontSize: '0.9em', color: '#888' }}>
+                Only play TTS in the browser source, not in the app
+              </div>
+            </div>
+
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: '#0d1f2d', 
+              border: '1px solid #0078d4', 
+              borderRadius: '4px',
+              marginBottom: '15px'
+            }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>🔗 Browser Source URL:</div>
+              <div style={{ 
+                fontFamily: 'monospace', 
+                padding: '8px', 
+                backgroundColor: '#1a1a1a', 
+                borderRadius: '4px',
+                wordBreak: 'break-all'
+              }}>
+                http://localhost:3737/browser-source/tts
+              </div>
+              <div style={{ fontSize: '0.85em', color: '#888', marginTop: '8px' }}>
+                Add this URL as a Browser Source in OBS (recommended size: 800x600)
+              </div>
+            </div>
+
+            {/* WebSpeech Warning */}
+            {settings.voiceId && !settings.voiceId.startsWith('azure_') && !settings.voiceId.startsWith('google_') && (
+              <div style={{
+                padding: '12px',
+                backgroundColor: '#3a2a1a',
+                border: '1px solid #ff8800',
+                borderRadius: '4px',
+                marginBottom: '15px'
+              }}>
+                <div style={{ fontWeight: 'bold', color: '#ffaa00', marginBottom: '6px' }}>⚠️ WebSpeech API Limitation:</div>
+                <div style={{ fontSize: '0.9em', color: '#ddd', lineHeight: '1.5' }}>
+                  You're using a WebSpeech voice. These voices are synthesized client-side in the browser and may not work 
+                  correctly across different platforms. For reliable browser source output, consider using Azure or Google voices.
+                </div>
+              </div>
+            )}
+
+            {/* How it Works */}
+            <div style={{
+              padding: '12px',
+              backgroundColor: '#1f3a1f',
+              border: '1px solid #28a745',
+              borderRadius: '4px',
+              fontSize: '0.9em',
+              lineHeight: '1.5'
+            }}>
+              <div style={{ fontWeight: 'bold', color: '#28a745', marginBottom: '6px' }}>ℹ️ How It Works:</div>
+              <ul style={{ margin: '6px 0 0 0', paddingLeft: '20px', color: '#ddd' }}>
+                <li><strong>Azure/Google:</strong> Audio files are sent to the browser source and played sequentially</li>
+                <li><strong>WebSpeech:</strong> Text and voice ID are sent for client-side synthesis</li>
+                <li><strong>Queue:</strong> TTS messages play one at a time with automatic queue management</li>
+                <li><strong>Limit:</strong> Queue is limited to 10 items; oldest items are purged when full</li>
+              </ul>
+            </div>
+          </>
+        )}
       </div>
         </div>
       </div>

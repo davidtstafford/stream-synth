@@ -16,6 +16,7 @@ import { getDatabase } from '../../database/connection';
 import { VoicesRepository } from '../../database/repositories/voices';
 import { TTSManager } from '../../services/tts/manager';
 import { VoiceSyncService } from '../../services/tts/voice-sync';
+import { getTTSBrowserSourceBridge } from '../../main';
 
 let mainWindow: BrowserWindow | null = null;
 let ttsManager: TTSManager | null = null;
@@ -48,6 +49,12 @@ async function initializeTTS() {
 
     if (mainWindow) {
       ttsManager.setMainWindow(mainWindow);
+    }
+    
+    // Connect browser source bridge
+    const bridge = getTTSBrowserSourceBridge();
+    if (bridge) {
+      ttsManager.setBrowserSourceBridge(bridge);
     }
   }
   if (!voiceSyncService) {

@@ -448,6 +448,9 @@ To prevent invalid configurations, the system enforces mutual exclusion:
    npm run dev
    ```
 
+4. **drop database**:
+```Remove-Item -Path "$env:APPDATA\stream-synth\stream-synth.db" -ErrorAction SilentlyContinue; Write-Host "Database deleted (if existed)"```
+
 ### Adding a New IPC Handler
 
 Example: Adding a new Discord handler to post an embed.
@@ -788,13 +791,6 @@ http://localhost:7474/alert?debug=true
 
 This displays connection status and real-time event logs. In production (OBS), use the clean URL without debug parameter.
 
-### Future Enhancements
-
-Planned features for Event Actions:
-
-- **TTS Browser Source** - Parallel audio stream for chat TTS (1-2 hours)
-- **In-App Alert Popup** - Desktop notifications without OBS (2-3 hours)
-- **Event Actions UI** - Configuration screen for managing actions (4-6 hours)
 
 ### Technical Documentation
 
@@ -811,6 +807,4 @@ See **[EVENT-ACTIONS-README.md](./EVENT-ACTIONS-README.md)**
 
 ## 📚 Further Reading
 
-- **IPC Framework Details**: See `src/backend/core/ipc/ipc-framework.ts`
-- **Handler Examples**: See `src/backend/core/ipc-handlers/*.ts`
 - **Event Actions Technical Guide**: See `EVENT-ACTIONS-README.md`

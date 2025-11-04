@@ -48,12 +48,14 @@ export class SettingsMapper {
       stripExcessiveEmotes: dbSettings.strip_excessive_emotes ?? true,
       // Character Repetition
       maxRepeatedChars: dbSettings.max_repeated_chars ?? 3,
-      maxRepeatedWords: dbSettings.max_repeated_words ?? 2,
-      // Content Filters
+      maxRepeatedWords: dbSettings.max_repeated_words ?? 2,      // Content Filters
       copypastaFilterEnabled: dbSettings.copypasta_filter_enabled ?? false,
       blockedWords: dbSettings.blocked_words 
         ? JSON.parse(dbSettings.blocked_words as string)
-        : []
+        : [],
+      // Browser Source Output
+      browserSourceEnabled: dbSettings.browser_source_enabled ?? false,
+      browserSourceMuteApp: dbSettings.browser_source_mute_app ?? false
     };
   }
 
@@ -99,10 +101,12 @@ export class SettingsMapper {
     if (settings.stripExcessiveEmotes !== undefined) dbSettings.strip_excessive_emotes = settings.stripExcessiveEmotes;
     // Character repetition
     if (settings.maxRepeatedChars !== undefined) dbSettings.max_repeated_chars = settings.maxRepeatedChars;
-    if (settings.maxRepeatedWords !== undefined) dbSettings.max_repeated_words = settings.maxRepeatedWords;
-    // Content filters
+    if (settings.maxRepeatedWords !== undefined) dbSettings.max_repeated_words = settings.maxRepeatedWords;    // Content filters
     if (settings.copypastaFilterEnabled !== undefined) dbSettings.copypasta_filter_enabled = settings.copypastaFilterEnabled;
     if (settings.blockedWords !== undefined) dbSettings.blocked_words = JSON.stringify(settings.blockedWords);
+    // Browser Source Output
+    if (settings.browserSourceEnabled !== undefined) dbSettings.browser_source_enabled = settings.browserSourceEnabled;
+    if (settings.browserSourceMuteApp !== undefined) dbSettings.browser_source_mute_app = settings.browserSourceMuteApp;
 
     return dbSettings;
   }

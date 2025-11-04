@@ -90,14 +90,15 @@ export function runMigrations(db: Database.Database): void {
       ('user_cooldown_seconds', '30'),
       ('global_cooldown_enabled', 'false'),
       ('global_cooldown_seconds', '5'),
-      ('max_queue_size', '20'),
-      ('max_emotes_per_message', '5'),
+      ('max_queue_size', '20'),      ('max_emotes_per_message', '5'),
       ('max_emojis_per_message', '3'),
       ('strip_excessive_emotes', 'true'),
       ('max_repeated_chars', '3'),
       ('max_repeated_words', '2'),
       ('copypasta_filter_enabled', 'false'),
-      ('blocked_words', '[]')
+      ('blocked_words', '[]'),
+      ('browser_source_enabled', 'false'),
+      ('browser_source_mute_app', 'false')
   `);
 
   // ===== VIEWERS & SUBSCRIPTIONS =====

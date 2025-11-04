@@ -59,10 +59,12 @@ export interface TTSSettings {
   stripExcessiveEmotes?: boolean;
   // Character Repetition
   maxRepeatedChars?: number;
-  maxRepeatedWords?: number;
-  // Content Filters
+  maxRepeatedWords?: number;  // Content Filters
   copypastaFilterEnabled?: boolean;
   blockedWords?: string[];
+  // Browser Source Output
+  browserSourceEnabled?: boolean;
+  browserSourceMuteApp?: boolean;
 }
 
 export interface TTSProvider {

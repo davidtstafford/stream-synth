@@ -6,6 +6,7 @@ import { VoicesRepository } from '../../database/repositories/voices';
 import { ViewerTTSRulesRepository } from '../../database/repositories/viewer-tts-rules';
 import { SettingsMapper } from './settings-mapper';
 import { TTSAccessControlService } from '../tts-access-control';
+import { TTSBrowserSourceQueue, TTSQueueItem as BrowserSourceQueueItem } from '../tts-browser-source-queue';
 import Database from 'better-sqlite3';
 
 interface TTSQueueItem {
@@ -38,6 +39,7 @@ export class TTSManager {
   private isProcessing: boolean = false;
   private mainWindow: Electron.BrowserWindow | null = null;
   private audioFinishedResolver: (() => void) | null = null;
+  private browserSourceBridge: any | null = null; // TTSBrowserSourceBridge
   
   // Spam prevention tracking
   private messageHistory: MessageHistory[] = [];
@@ -48,7 +50,7 @@ export class TTSManager {
   private copypastaList: Set<string> = new Set([
     'kappa123',
     'pogchamp',
-  ]);  constructor(db: Database.Database) {
+  ]);constructor(db: Database.Database) {
     this.repository = new TTSRepository();
     this.voicesRepo = new VoicesRepository();
     this.viewerTTSRulesRepo = new ViewerTTSRulesRepository();
@@ -68,12 +70,39 @@ export class TTSManager {
   setMainWindow(window: Electron.BrowserWindow): void {
     this.mainWindow = window;
   }
+  /**
+   * Set the browser source bridge for forwarding TTS to OBS
+   */
+  setBrowserSourceBridge(bridge: any): void {
+    this.browserSourceBridge = bridge;
+    console.log('[TTS Manager] Browser source bridge connected');
+    
+    // Update bridge with current settings
+    if (this.settings) {
+      this.updateBridgeSettings();
+    }
+  }
+
+  /**
+   * Update browser source bridge with current settings
+   */
+  private updateBridgeSettings(): void {
+    if (this.browserSourceBridge) {
+      this.browserSourceBridge.updateSettings({
+        browserSourceEnabled: this.settings?.browserSourceEnabled ?? false,
+        browserSourceMuteApp: this.settings?.browserSourceMuteApp ?? false
+      });
+    }
+  }
 
   /**
    * Initialize the TTS manager and load settings
    */
   async initialize(): Promise<void> {
     await this.loadSettings();
+    
+    // Update browser source bridge if connected
+    this.updateBridgeSettings();
     
     // Initialize all enabled providers (hybrid architecture)
     // We no longer rely on the global settings.provider - voices determine the provider
@@ -88,7 +117,7 @@ export class TTSManager {
     }
     
     console.log('[TTS] Manager initialized. Providers ready:', Array.from(this.providers.keys()).join(', '));
-  }  /**
+  }/**
    * Load settings from database
    */
   async loadSettings(): Promise<void> {
@@ -169,12 +198,17 @@ export class TTSManager {
     
     return voiceId;
   }
-
   /**
    * Send audio data to renderer for playback (for Azure/Google voices)
    * Helper method to eliminate code duplication
    */
   private sendAudioToRenderer(providerName: string, options: TTSOptions): void {
+    // Skip sending to app if browser source mute is enabled
+    if (this.settings?.browserSourceEnabled && this.settings?.browserSourceMuteApp) {
+      console.log(`[TTS] Skipping app audio (browser source mute enabled)`);
+      return;
+    }
+
     const provider = this.providers.get(providerName);
     if (!provider) {
       console.error(`[TTS] ${providerName} provider not found`);
@@ -308,13 +342,15 @@ export class TTSManager {
   /**
    * Save settings to database
    */
-  async saveSettings(settings: Partial<TTSSettings>): Promise<void> {
-    // Use centralized mapper to convert settings to database format
+  async saveSettings(settings: Partial<TTSSettings>): Promise<void> {    // Use centralized mapper to convert settings to database format
     const dbSettings = SettingsMapper.toDatabase(settings);
     this.repository.saveSettings(dbSettings);
     
     // Reload settings
     await this.loadSettings();
+    
+    // Update browser source bridge with new settings
+    this.updateBridgeSettings();
     
     // Re-initialize providers based on enabled flags and credentials
     // Azure provider
@@ -845,11 +881,32 @@ export class TTSManager {
 
         // Determine provider from voice_id prefix (hybrid routing)
         const voiceId = item.voiceId || this.settings?.voiceId || '';
-        const resolvedVoiceId = this.resolveVoiceId(voiceId);
-        
-        if (voiceId.startsWith('webspeech_')) {
-          // Send to renderer process for Web Speech API
-          if (this.mainWindow) {
+        const resolvedVoiceId = this.resolveVoiceId(voiceId);          if (voiceId.startsWith('webspeech_')) {
+          // Send to browser source if enabled
+          if (this.browserSourceBridge && this.settings?.browserSourceEnabled) {
+            // Get the actual voiceURI from the database for browser source to use
+            const voiceRecord = this.voicesRepo.getVoiceById(voiceId);
+            let actualVoiceURI = voiceId; // fallback
+            if (voiceRecord && voiceRecord.metadata) {
+              try {
+                const metadata = JSON.parse(voiceRecord.metadata);
+                actualVoiceURI = metadata.voiceURI || voiceId;
+              } catch (e) {
+                console.warn('[TTS] Failed to parse voice metadata for', voiceId);
+              }
+            }
+            
+            this.browserSourceBridge.addToQueue('webspeech', {
+              text: textToSpeak,
+              voiceId: actualVoiceURI, // Use the actual voiceURI, not the generated ID
+              rate: item.rate ?? this.settings?.rate,
+              pitch: item.pitch ?? this.settings?.pitch,
+              volume: this.settings?.volume
+            });
+          }
+
+          // Send to renderer process for Web Speech API (unless muted for browser source)
+          if (this.mainWindow && !(this.settings?.browserSourceEnabled && this.settings?.browserSourceMuteApp)) {
             this.mainWindow.webContents.send('tts:speak', {
               text: textToSpeak,
               voiceId: voiceId,
@@ -861,8 +918,11 @@ export class TTSManager {
             // Wait for frontend to confirm Web Speech playback is complete
             console.log('[TTS] Waiting for Web Speech utterance to finish...');
             await this.waitForAudioFinished();
-          }
-        } else if (voiceId.startsWith('azure_')) {
+          } else if (this.settings?.browserSourceEnabled && this.settings?.browserSourceMuteApp) {
+            // If muted for browser source, just wait a bit for the queue to process
+            console.log('[TTS] App TTS muted (browser source mode)');
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }        }else if (voiceId.startsWith('azure_')) {
           // Use Azure provider
           const azureProvider = this.providers.get('azure');
           if (azureProvider) {
@@ -872,16 +932,36 @@ export class TTSManager {
               pitch: item.pitch ?? this.settings?.pitch
             });
             
-            // Get audio data and send to renderer for playback (OBS-compatible)
-            this.sendAudioToRenderer('azure', {
-              volume: this.settings?.volume,
-              rate: item.rate ?? this.settings?.rate,
-              pitch: item.pitch ?? this.settings?.pitch
-            });
+            // Get audio data
+            const audioData = (azureProvider as any).getLastAudioData();
             
-            // Wait for frontend to confirm audio playback is complete
-            console.log('[TTS] Waiting for Azure audio playback to finish...');
-            await this.waitForAudioFinished();
+            // Send to browser source if enabled
+            if (this.browserSourceBridge && this.settings?.browserSourceEnabled && audioData) {
+              this.browserSourceBridge.addToQueue('azure', {
+                audioData: audioData,
+                volume: this.settings?.volume,
+                rate: item.rate ?? this.settings?.rate,
+                pitch: item.pitch ?? this.settings?.pitch
+              });
+            }
+            
+            // Get audio data and send to renderer for playback (unless muted)
+            const shouldPlayInApp = !(this.settings?.browserSourceEnabled && this.settings?.browserSourceMuteApp);
+            if (shouldPlayInApp) {
+              this.sendAudioToRenderer('azure', {
+                volume: this.settings?.volume,
+                rate: item.rate ?? this.settings?.rate,
+                pitch: item.pitch ?? this.settings?.pitch
+              });
+              
+              // Wait for frontend to confirm audio playback is complete
+              console.log('[TTS] Waiting for Azure audio playback to finish...');
+              await this.waitForAudioFinished();
+            } else {
+              // Browser source will handle playback, just wait a bit for queue processing
+              console.log('[TTS] App TTS muted (browser source mode)');
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
           } else {
             console.error('[TTS] Azure provider not available for voice:', voiceId);
           }        } else if (voiceId.startsWith('google_')) {
@@ -894,16 +974,36 @@ export class TTSManager {
               pitch: item.pitch ?? this.settings?.pitch
             });
             
-            // Get audio data and send to renderer for playback (OBS-compatible)
-            this.sendAudioToRenderer('google', {
-              volume: this.settings?.volume,
-              rate: item.rate ?? this.settings?.rate,
-              pitch: this.settings?.pitch
-            });
+            // Get audio data
+            const audioData = (googleProvider as any).getLastAudioData();
             
-            // Wait for frontend to confirm audio playback is complete
-            console.log('[TTS] Waiting for Google audio playback to finish...');
-            await this.waitForAudioFinished();
+            // Send to browser source if enabled
+            if (this.browserSourceBridge && this.settings?.browserSourceEnabled && audioData) {
+              this.browserSourceBridge.addToQueue('google', {
+                audioData: audioData,
+                volume: this.settings?.volume,
+                rate: item.rate ?? this.settings?.rate,
+                pitch: item.pitch ?? this.settings?.pitch
+              });
+            }
+            
+            // Get audio data and send to renderer for playback (unless muted)
+            const shouldPlayInApp = !(this.settings?.browserSourceEnabled && this.settings?.browserSourceMuteApp);
+            if (shouldPlayInApp) {
+              this.sendAudioToRenderer('google', {
+                volume: this.settings?.volume,
+                rate: item.rate ?? this.settings?.rate,
+                pitch: this.settings?.pitch
+              });
+              
+              // Wait for frontend to confirm audio playback is complete
+              console.log('[TTS] Waiting for Google audio playback to finish...');
+              await this.waitForAudioFinished();
+            } else {
+              // Browser source will handle playback, just wait a bit for queue processing
+              console.log('[TTS] App TTS muted (browser source mode)');
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
           } else {
             console.error('[TTS] Google provider not available for voice:', voiceId);
           }

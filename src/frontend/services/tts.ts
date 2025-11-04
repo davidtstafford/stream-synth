@@ -47,10 +47,12 @@ export interface TTSSettings {
   stripExcessiveEmotes?: boolean;
   // Character Repetition
   maxRepeatedChars?: number;
-  maxRepeatedWords?: number;
-  // Content Filters
+  maxRepeatedWords?: number;  // Content Filters
   copypastaFilterEnabled?: boolean;
   blockedWords?: string[];
+  // Browser Source Output
+  browserSourceEnabled?: boolean;
+  browserSourceMuteApp?: boolean;
 }
 
 export interface TTSOptions {
@@ -308,6 +310,19 @@ async function webSpeechSpeak(text: string, voiceId: string, options: TTSOptions
   }
   
   console.log('[TTS] webSpeechSpeak() CALLED - text:', text, 'voiceId:', voiceId);
+  
+  // Check if browser source mute is enabled
+  const settings = await getSettings();
+  if (settings.browserSourceEnabled && settings.browserSourceMuteApp) {
+    console.log('[TTS] Skipping WebSpeech in app (browser source mute enabled)');
+    // Still notify backend that audio is "finished" to keep queue moving
+    try {
+      await ipcRenderer.invoke('tts:audio-finished');
+    } catch (error) {
+      console.error('[TTS] Error notifying audio finished:', error);
+    }
+    return;
+  }
   
   // Stop any current speech
   webSpeechSynth.cancel();

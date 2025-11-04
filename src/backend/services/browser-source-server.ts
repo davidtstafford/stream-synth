@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Server as SocketIOServer } from 'socket.io';
 import { AlertPayload } from './event-action-processor';
+import type { TTSBrowserSourceBridge } from './tts-browser-source-bridge';
 
 /**
  * Browser Source Server
@@ -23,6 +24,7 @@ export class BrowserSourceServer {
   private publicDir: string;
   private connectedClients: Set<string> = new Set();
   private alertsSent: number = 0;
+  private ttsBridge: TTSBrowserSourceBridge | null = null;
     constructor(port: number = 3737) {
     this.port = port;
     // Public directory for static files (browser-source.html, etc.)
@@ -108,10 +110,13 @@ export class BrowserSourceServer {
     
     // Parse URL to remove query parameters
     const url = fullUrl.split('?')[0];
-    
-    // Route: /browser-source -> serve browser-source.html
+      // Route: /browser-source -> serve browser-source.html
     if (url === '/browser-source' || url === '/browser-source.html') {
       this.serveFile(res, 'browser-source.html', 'text/html');
+    }
+    // Route: /browser-source/tts -> serve browser-source-tts.html
+    else if (url === '/browser-source/tts' || url === '/browser-source-tts.html') {
+      this.serveFile(res, 'browser-source-tts.html', 'text/html');
     }
     // Route: /browser-source.js -> serve browser-source.js
     else if (url === '/browser-source.js') {
@@ -157,13 +162,18 @@ export class BrowserSourceServer {
             <p><strong>Port:</strong> ${this.port}</p>
             <p><strong>Connected Clients:</strong> ${this.connectedClients.size}</p>
             <p><strong>Alerts Sent:</strong> ${this.alertsSent}</p>
-          </div>
-          <h2>📺 OBS Browser Source URL</h2>
+          </div>          <h2>📺 OBS Browser Source URL</h2>
           <p>Add this URL to your OBS browser source:</p>
           <p><code>http://localhost:${this.port}/browser-source</code></p>
+          
+          <h2>🎙️ TTS Browser Source URL</h2>
+          <p>For Text-to-Speech overlay in OBS:</p>
+          <p><code>http://localhost:${this.port}/browser-source/tts</code></p>
+          
           <h2>🔗 Endpoints</h2>
           <ul>
             <li><code>/browser-source</code> - Browser source overlay page</li>
+            <li><code>/browser-source/tts</code> - TTS browser source page</li>
             <li><code>/health</code> - Health check endpoint</li>
           </ul>
         </body>
@@ -331,10 +341,24 @@ export class BrowserSourceServer {
         // Broadcast to ALL clients (including sender)
         this.io!.emit('alert', payload);
         this.alertsSent++;
+      });      // Handle TTS finished notification from browser source
+      socket.on('tts-finished', () => {
+        console.log(`[BrowserSourceServer] TTS finished notification from ${clientId}`);
+        if (this.ttsBridge) {
+          this.ttsBridge.notifyFinished();
+        }
       });
     });
   }
   
+  /**
+   * Set TTS bridge (for browser source TTS output)
+   */
+  public setTTSBridge(bridge: TTSBrowserSourceBridge): void {
+    this.ttsBridge = bridge;
+    console.log('[BrowserSourceServer] TTS bridge connected');
+  }
+
   /**
    * Send alert to all connected browser sources
    */
