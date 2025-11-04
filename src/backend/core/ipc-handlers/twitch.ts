@@ -212,7 +212,6 @@ export function setupTwitchHandlers(): void {
       }
     }
   );
-
   // ===== Moderation Status Handlers =====
   ipcRegistry.register<void, void>(
     'twitch:sync-moderation-status',
@@ -221,13 +220,13 @@ export function setupTwitchHandlers(): void {
         const sessionsRepo = require('../../database/repositories/sessions').SessionsRepository;
         const tokensRepo = require('../../database/repositories/tokens').TokensRepository;
         const session = new sessionsRepo().getCurrentSession();
-        const tokens = new tokensRepo().getTokens();
+        const tokens = new tokensRepo().get(session?.user_id || '');
 
         if (!session) {
           throw new Error('Not connected to Twitch. Please connect first.');
         }
 
-        if (!tokens?.access_token || !tokens?.client_id) {
+        if (!tokens?.accessToken || !tokens?.clientId) {
           throw new Error('No valid access token found. Please reconnect.');
         }
 
@@ -237,8 +236,8 @@ export function setupTwitchHandlers(): void {
         const result = await moderationService.syncModerationStatus(
           session.channel_id,
           session.user_id,
-          tokens.access_token,
-          tokens.client_id
+          tokens.accessToken,
+          tokens.clientId
         );
 
         if (!result.success) {

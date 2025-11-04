@@ -1,7 +1,13 @@
 import Database from 'better-sqlite3';
 
+/**
+ * Database Migrations
+ * 
+ * Clean schema initialization without patches or compatibility code
+ * Run this on fresh database or after deleting old database
+ */
 export function runMigrations(db: Database.Database): void {
-  console.log('[Migrations] Starting database schema initialization...');
+  console.log('[Migrations] Starting clean database schema initialization...');
 
   // ===== CORE AUTHENTICATION & SESSIONS =====
 
@@ -805,65 +811,5 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_event_actions_channel_event ON event_actions(channel_id, event_type)
   `);
 
-  // Run schema updates for existing databases
-  runSchemaUpdates(db);
-
-  // Initialize default browser source channel
-  initializeDefaultChannel(db);
-
   console.log('[Migrations] Database schema initialization complete');
-}
-
-/**
- * Run schema updates to add missing columns to existing databases
- * This handles backwards compatibility for databases created before certain features
- */
-function runSchemaUpdates(db: Database.Database): void {
-  console.log('[Migrations] Running schema updates for existing databases...');
-
-  // Add browser_source_channel column if it doesn't exist (Phase 8)
-  try {
-    const tableInfo = db.prepare(`PRAGMA table_info(event_actions)`).all() as Array<{ name: string }>;
-    const hasBrowserSourceChannel = tableInfo.some(col => col.name === 'browser_source_channel');
-    
-    if (!hasBrowserSourceChannel) {
-      console.log('[Migrations] Adding browser_source_channel column to event_actions...');
-      db.exec(`
-        ALTER TABLE event_actions 
-        ADD COLUMN browser_source_channel TEXT DEFAULT 'default'
-      `);
-      console.log('[Migrations] ✓ Added browser_source_channel column');
-    }
-  } catch (err) {
-    console.error('[Migrations] Error checking/adding browser_source_channel column:', err);
-  }
-
-  console.log('[Migrations] Schema updates complete');
-}
-
-/**
- * Initialize default browser source channel for all connected channels
- * This ensures backwards compatibility and provides a starting point for users
- */
-function initializeDefaultChannel(db: Database.Database): void {
-  console.log('[Migrations] Initializing default browser source channels...');
-
-  // Get all unique channel_ids from connection_sessions or event_actions
-  const channels = db.prepare(`
-    SELECT DISTINCT channel_id 
-    FROM connection_sessions 
-    WHERE channel_id IS NOT NULL
-  `).all() as Array<{ channel_id: string }>;
-
-  const insertChannel = db.prepare(`
-    INSERT OR IGNORE INTO browser_source_channels 
-    (channel_id, name, display_name, description, color, icon, is_default, is_enabled)
-    VALUES (?, 'default', 'Default Channel', 'All unassigned alerts', '#9147ff', '📺', 1, 1)
-  `);
-
-  for (const { channel_id } of channels) {
-    insertChannel.run(channel_id);
-  }
-
-  console.log(`[Migrations] Created default channels for ${channels.length} channel(s)`);
 }

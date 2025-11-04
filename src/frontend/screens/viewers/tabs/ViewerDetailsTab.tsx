@@ -81,54 +81,23 @@ export const ViewerDetailsTab: React.FC<ViewerDetailsTabProps> = ({ onViewerClic
 
       // Use IPC directly like the original viewers screen
       const { ipcRenderer } = window.require('electron');
-      
-      // Sync roles (subscribers, VIPs, moderators)
+        // Sync roles (subscribers, VIPs, moderators)
       const roleResult = await ipcRenderer.invoke('twitch:sync-subscriptions-from-twitch');
       
       // Sync followers
       const followerResult = await ipcRenderer.invoke('twitch:sync-followers-from-twitch');
-
-      if (roleResult.success && followerResult.success) {
-        setSyncMessage(`✓ Synced: ${roleResult.subCount || 0} subs, ${roleResult.vipCount || 0} VIPs, ${roleResult.modCount || 0} mods, ${followerResult.newFollowers || 0} new followers`);
+      
+      // Sync blocked/banned viewers
+      const blockedResult = await ipcRenderer.invoke('twitch:sync-moderation-status');      if (roleResult.success && followerResult.success && blockedResult.success) {
+        setSyncMessage(`✓ Synced: ${roleResult.subCount || 0} subs, ${roleResult.vipCount || 0} VIPs, ${roleResult.modCount || 0} mods, ${followerResult.newFollowers || 0} new followers, blocked viewers updated`);
         await loadViewers();
         setTimeout(() => setSyncMessage(null), 5000);
       } else {
-        setSyncMessage(`Error: ${roleResult.error || followerResult.error}`);
+        setSyncMessage(`Error: ${roleResult.error || followerResult.error || blockedResult.error}`);
       }
     } catch (err: any) {
-      setSyncMessage(`Error: ${err.message}`);
-    } finally {
+      setSyncMessage(`Error: ${err.message}`);    } finally {
       setSyncing(false);
-    }
-  };
-
-  const handleDeleteViewer = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this viewer?')) return;
-
-    try {
-      const result = await db.deleteViewer(id);
-      if (result.success) {
-        await loadViewers();
-      } else {
-        alert(`Failed to delete: ${result.error}`);
-      }
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
-    }
-  };
-
-  const handleDeleteAllViewers = async () => {
-    if (!confirm('Are you sure you want to delete ALL viewers? This cannot be undone!')) return;
-
-    try {
-      const result = await db.deleteAllViewers();
-      if (result.success) {
-        await loadViewers();
-      } else {
-        alert(`Failed to delete: ${result.error}`);
-      }
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
     }
   };
 
@@ -220,8 +189,7 @@ export const ViewerDetailsTab: React.FC<ViewerDetailsTabProps> = ({ onViewerClic
           title="Sync subscribers, VIPs, and moderators from Twitch"
         >
           {syncing ? '⟳ Syncing...' : '⟳ Sync from Twitch'}
-        </button>
-        <button
+        </button>        <button
           onClick={loadViewers}
           style={{
             padding: '10px 20px',
@@ -233,19 +201,6 @@ export const ViewerDetailsTab: React.FC<ViewerDetailsTabProps> = ({ onViewerClic
           }}
         >
           Refresh
-        </button>
-        <button
-          onClick={handleDeleteAllViewers}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#ff4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          Delete All
         </button>
       </div>
 
@@ -311,11 +266,9 @@ export const ViewerDetailsTab: React.FC<ViewerDetailsTabProps> = ({ onViewerClic
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Display Name</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Roles</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Follower</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Moderation</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Subscription Status</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Moderation</th>                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Subscription Status</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>First Seen</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Last Updated</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #555' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -419,25 +372,8 @@ export const ViewerDetailsTab: React.FC<ViewerDetailsTabProps> = ({ onViewerClic
                     </td>
                     <td style={{ padding: '10px', fontSize: '0.9em' }}>
                       {formatDate(viewer.created_at)}
-                    </td>
-                    <td style={{ padding: '10px', fontSize: '0.9em' }}>
+                    </td>                    <td style={{ padding: '10px', fontSize: '0.9em' }}>
                       {formatDate(viewer.updated_at)}
-                    </td>
-                    <td style={{ padding: '10px' }} onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => handleDeleteViewer(viewer.id)}
-                        style={{
-                          padding: '4px 8px',
-                          backgroundColor: '#ff4444',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '0.85em'
-                        }}
-                      >
-                        Delete
-                      </button>
                     </td>
                   </tr>
                 );
