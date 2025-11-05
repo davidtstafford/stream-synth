@@ -8,7 +8,6 @@ import { BrowserWindow } from 'electron';
 import { setupDatabaseHandlers, setupEventStorageHandler } from './database';
 import { setupTwitchHandlers, setMainWindowForTwitch } from './twitch';
 import { setupTTSHandlers, setMainWindowForTTS, initializeTTS } from './tts';
-import { setupDiscordHandlers } from './discord';
 import { setupIRCHandlers, setMainWindowForIRC } from './irc';
 import { setupTTSAccessHandlers } from './tts-access';
 import { setupChatCommandHandlers } from './chat-commands';
@@ -22,7 +21,6 @@ export function setupIpcHandlers(): void {
   setupDatabaseHandlers();
   setupTwitchHandlers();
   setupTTSHandlers();
-  setupDiscordHandlers();
   setupIRCHandlers();
   setupTTSAccessHandlers();
   setupChatCommandHandlers(); // Phase 5: Chat Commands

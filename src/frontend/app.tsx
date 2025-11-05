@@ -8,7 +8,6 @@ import { ChatScreen } from './screens/chat/chat';
 import { ChatCommandsScreen } from './screens/chat/chat-commands';
 import { ViewersScreen } from './screens/viewers/viewers';
 import { TTS } from './screens/tts/tts';
-import { Discord } from './screens/discord/discord';
 import { AdvancedScreen } from './screens/advanced/advanced';
 import * as db from './services/database';
 import * as ttsService from './services/tts';
@@ -106,7 +105,6 @@ const App: React.FC = () => {
     { id: 'chat-commands', label: 'Chat Commands' },
     { id: 'viewers', label: 'Viewers' },
     { id: 'tts', label: 'TTS' },
-    { id: 'discord', label: 'Discord' },
     { id: 'advanced', label: 'Advanced', isBottom: true }
   ];  const renderScreen = () => {
     switch (activeScreen) {
@@ -124,8 +122,6 @@ const App: React.FC = () => {
         return <ViewersScreen />;
       case 'tts':
         return <TTS />;
-      case 'discord':
-        return <Discord />;
       case 'advanced':
         return <AdvancedScreen 
           userId={connectionState.userId}
