@@ -4,7 +4,7 @@
   "description": "Stream Synth - A desktop app for Twitch integration",
   "main": "dist/backend/main.js",  "scripts": {
     "start": "electron .",
-    "build": "tsc && webpack --mode production && cp src/frontend/index.html dist/frontend/ && xcopy /E /I /Y src\\backend\\public dist\\backend\\public",
+    "build": "tsc && webpack --mode production && cp src/frontend/index.html dist/frontend/ && cp -r src/backend/public dist/backend/",
     "dev": "npm run build && electron .",
     "watch": "tsc --watch",
     "postinstall": "electron-rebuild -f -w better-sqlite3"

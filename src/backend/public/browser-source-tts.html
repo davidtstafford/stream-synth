@@ -233,14 +233,41 @@
         
         // Find the voice by voiceURI (we now send the actual voiceURI from backend)
         const voices = window.speechSynthesis.getVoices();
-        const voice = voices.find(v => v.voiceURI === data.voiceId);
+        let voice = voices.find(v => v.voiceURI === data.voiceId);
+        
+        // Fallback: Try matching by language if exact voiceURI not found
+        // This handles cases where voice identifiers change between platforms
+        if (!voice && data.voiceId && voices.length > 0) {
+          console.warn('[TTS Browser Source] Exact voice URI not found, trying fallback matching');
+          
+          // Try to extract language from voiceURI (common formats: lang, lang-country, etc.)
+          // For macOS: "com.apple.voice.compact.bg-BG.Daria" -> extract "bg-BG"
+          const languageMatch = data.voiceId.match(/([a-z]{2}(-[A-Z]{2})?)/);
+          if (languageMatch) {
+            const language = languageMatch[1];
+            console.log('[TTS Browser Source] Trying to match by language:', language);
+            voice = voices.find(v => v.lang && v.lang.startsWith(language));
+            if (voice) {
+              console.log('[TTS Browser Source] Fallback: Using voice with matching language:', voice.name, '(', voice.lang, ')');
+            }
+          }
+          
+          // Last resort: use first available voice
+          if (!voice && voices.length > 0) {
+            console.warn('[TTS Browser Source] No matching voice found, using first available');
+            voice = voices[0];
+          }
+        }
         
         if (voice) {
           utterance.voice = voice;
-          console.log('[TTS Browser Source] Using voice:', voice.name, '(URI:', voice.voiceURI, ')');
+          console.log('[TTS Browser Source] Using voice:', voice.name, '(URI:', voice.voiceURI, ', lang:', voice.lang, ')');
         } else {
           console.warn('[TTS Browser Source] Voice not found:', data.voiceId);
-          console.log('[TTS Browser Source] Available voices:', voices.map(v => `${v.name} (${v.voiceURI})`).slice(0, 10).join(', '), '...');
+          console.log('[TTS Browser Source] Available voices count:', voices.length);
+          if (voices.length > 0) {
+            console.log('[TTS Browser Source] Sample voices:', voices.slice(0, 5).map(v => `${v.name} (${v.voiceURI}, ${v.lang})`).join(', '));
+          }
         }
 
         // Apply settings
@@ -289,27 +316,86 @@
         });
         const url = URL.createObjectURL(blob);
 
-        audioPlayer.src = url;
-        audioPlayer.volume = (data.volume || 80) / 100;
-
-        audioPlayer.onended = () => {
-          console.log('[TTS Browser Source] Audio file finished');
-          URL.revokeObjectURL(url);
-          resolve();
-        };
-
-        audioPlayer.onerror = (event) => {
-          console.error('[TTS Browser Source] Audio playback error:', event);
-          URL.revokeObjectURL(url);
-          reject(new Error('Audio playback failed'));
-        };
-
-        audioPlayer.play().catch(err => {
-          console.error('[TTS Browser Source] Failed to play audio:', err);
-          URL.revokeObjectURL(url);
-          reject(err);
-        });
+        // Try Web Audio API first (more reliable for autoplay on macOS)
+        try {
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          fetch(url)
+            .then(response => response.arrayBuffer())
+            .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+            .then(audioBuffer => {
+              const source = audioContext.createBufferSource();
+              source.buffer = audioBuffer;
+              
+              // Apply volume
+              const gainNode = audioContext.createGain();
+              gainNode.gain.value = (data.volume || 80) / 100;
+              
+              // Connect: source -> gain -> destination
+              source.connect(gainNode);
+              gainNode.connect(audioContext.destination);
+              
+              // Resolve when audio finishes
+              source.onended = () => {
+                console.log('[TTS Browser Source] Audio file finished (Web Audio API)');
+                URL.revokeObjectURL(url);
+                resolve();
+              };
+              
+              // Start playback
+              source.start(0);
+              console.log('[TTS Browser Source] Playing audio via Web Audio API');
+            })
+            .catch(err => {
+              console.warn('[TTS Browser Source] Web Audio API failed, trying HTML5 audio:', err);
+              // Fallback to HTML5 audio element
+              playWithAudioElement(url, data, resolve, reject);
+            });
+        } catch (err) {
+          console.warn('[TTS Browser Source] Web Audio API not available, using HTML5 audio:', err);
+          // Fallback to HTML5 audio element
+          playWithAudioElement(url, data, resolve, reject);
+        }
       });
+    }
+
+    // Fallback: Play audio using HTML5 audio element
+    function playWithAudioElement(url, data, resolve, reject) {
+      audioPlayer.src = url;
+      audioPlayer.volume = (data.volume || 80) / 100;
+
+      audioPlayer.onended = () => {
+        console.log('[TTS Browser Source] Audio file finished (HTML5 Audio)');
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+
+      audioPlayer.onerror = (event) => {
+        console.error('[TTS Browser Source] Audio playback error:', event);
+        URL.revokeObjectURL(url);
+        reject(new Error('Audio playback failed'));
+      };
+
+      audioPlayer.play()
+        .catch(err => {
+          console.error('[TTS Browser Source] Failed to play audio:', err);
+          console.warn('[TTS Browser Source] Autoplay may be restricted. Attempting to play silently first...');
+          
+          // Try playing with muted first, then unmute
+          audioPlayer.muted = true;
+          audioPlayer.play()
+            .then(() => {
+              console.log('[TTS Browser Source] Playing muted audio first...');
+              setTimeout(() => {
+                audioPlayer.muted = false;
+                console.log('[TTS Browser Source] Audio unmuted');
+              }, 100);
+            })
+            .catch(muteErr => {
+              console.error('[TTS Browser Source] Even muted playback failed:', muteErr);
+              URL.revokeObjectURL(url);
+              reject(muteErr);
+            });
+        });
     }
 
     // Update queue info display
