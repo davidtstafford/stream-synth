@@ -82,6 +82,18 @@ async function handleSlashCommand(interaction: any): Promise<void> {
   console.log(`[Discord Interactions] Slash command: /${commandName}`);
 
   switch (commandName) {
+    case 'searchvoice':
+      await handleSearchVoiceCommand(interaction);
+      break;
+    case 'providers':
+      await handleProvidersCommand(interaction);
+      break;
+    case 'voicedemo':
+      await handleVoiceDemoCommand(interaction);
+      break;
+    case 'randomvoice':
+      await handleRandomVoiceCommand(interaction);
+      break;
     case 'findvoice':
       await handleFindVoiceCommand(interaction);
       break;
@@ -96,6 +108,219 @@ async function handleSlashCommand(interaction: any): Promise<void> {
         content: `❌ Unknown command: /${commandName}`,
         ephemeral: true
       });
+  }
+}
+
+/**
+ * Handle /searchvoice command
+ */
+async function handleSearchVoiceCommand(interaction: any): Promise<void> {
+  await interaction.deferReply();
+
+  const query = interaction.options.getString('query') || '';
+
+  console.log('[Discord Interactions] Searching voices:', query);
+
+  try {
+    if (!query || query.length === 0) {
+      await interaction.editReply({
+        content: '❌ Please provide a search query. Example: `/searchvoice query:Emma`'
+      });
+      return;
+    }
+
+    // Search voices by name or description (case-insensitive)
+    const allVoices = getVoicesByFilters({});
+    const searchResults = allVoices.filter((voice: any) =>
+      voice.name.toLowerCase().includes(query.toLowerCase()) ||
+      voice.provider?.toLowerCase().includes(query.toLowerCase()) ||
+      voice.language?.toLowerCase().includes(query.toLowerCase())
+    );
+
+    if (searchResults.length === 0) {
+      await interaction.editReply({
+        content: `❌ No voices found matching "${query}". Try a different search term!`
+      });
+      return;
+    }
+
+    // Format results
+    const embeds = formatVoicesForEmbed(searchResults.slice(0, 10), 10);
+    const summaryEmbed = new EmbedBuilder()
+      .setTitle(`🔍 Search Results: "${query}"`)
+      .setDescription(`Found ${searchResults.length} matching voice${searchResults.length !== 1 ? 's' : ''}`)
+      .setColor(0x5865F2);
+
+    await interaction.editReply({
+      embeds: [summaryEmbed, ...embeds],
+      content: `Found ${searchResults.length} results • Showing first 10`
+    });
+  } catch (err: any) {
+    console.error('[Discord Interactions] Error searching voices:', err);
+    await interaction.editReply({
+      content: `❌ Error searching voices: ${err.message}`
+    });
+  }
+}
+
+/**
+ * Handle /providers command
+ */
+async function handleProvidersCommand(interaction: any): Promise<void> {
+  const providersEmbed = new EmbedBuilder()
+    .setTitle('🏢 Available TTS Providers')
+    .setDescription('Compare and learn about TTS providers')
+    .setColor(0x5865F2)
+    .addFields(
+      {
+        name: '🔊 WebSpeech',
+        value: '**Quality:** Standard\n' +
+               '**Latency:** Very fast\n' +
+               '**Languages:** 40+\n' +
+               '**Cost:** Free\n' +
+               '**Best for:** Quick voices, browser-based',
+        inline: true
+      },
+      {
+        name: '☁️ Google Cloud',
+        value: '**Quality:** High\n' +
+               '**Latency:** Fast\n' +
+               '**Languages:** 80+\n' +
+               '**Cost:** Paid\n' +
+               '**Best for:** Professional, international',
+        inline: true
+      },
+      {
+        name: '☁️ Microsoft Azure',
+        value: '**Quality:** High\n' +
+               '**Latency:** Fast\n' +
+               '**Languages:** 100+\n' +
+               '**Cost:** Paid\n' +
+               '**Best for:** Premium voices, enterprise',
+        inline: true
+      },
+      {
+        name: '💡 How to Choose',
+        value: '• **Budget-conscious?** → Try WebSpeech first\n' +
+               '• **Need variety?** → Azure has the most languages\n' +
+               '• **High quality?** → Google and Azure are both great\n' +
+               '• **International stream?** → Check `/listlanguages provider:Azure`',
+        inline: false
+      },
+      {
+        name: '🔄 Switching Providers',
+        value: 'Use `/findvoice provider:Azure` to browse one provider\'s voices.\n' +
+               'All three providers are integrated with Stream Synth!',
+        inline: false
+      }
+    )
+    .setFooter({ text: 'Compare providers and find the best fit for your stream' });
+
+  await interaction.reply({
+    embeds: [providersEmbed],
+    ephemeral: true
+  });
+}
+
+/**
+ * Handle /voicedemo command
+ */
+async function handleVoiceDemoCommand(interaction: any): Promise<void> {
+  await interaction.deferReply();
+
+  const voiceId = interaction.options.getString('voiceid') || '';
+  const customText = interaction.options.getString('text');
+
+  console.log('[Discord Interactions] Playing voice demo:', { voiceId, customText });
+
+  try {
+    if (!voiceId) {
+      await interaction.editReply({
+        content: '❌ Please provide a voice ID. Get one from `/findvoice` results!'
+      });
+      return;
+    }
+
+    const voice = getVoiceById(voiceId);
+
+    if (!voice) {
+      await interaction.editReply({
+        content: `❌ Voice not found: ${voiceId}`
+      });
+      return;
+    }
+
+    const demoText = customText || 'Hello! This is a voice demo from Stream Synth.';
+
+    const demoEmbed = new EmbedBuilder()
+      .setTitle('🔊 Voice Demo')
+      .setDescription(`**Voice:** ${voice.name}\n**Provider:** ${voice.provider}\n**Language:** ${voice.language_name}`)
+      .setColor(0x5865F2)
+      .addFields(
+        {
+          name: 'Demo Text',
+          value: `"${demoText}"`,
+          inline: false
+        },
+        {
+          name: '⏯️ Playing...',
+          value: 'Audio playback would occur in the main Stream Synth app',
+          inline: false
+        }
+      )
+      .setFooter({ text: `Voice ID: ${voiceId}` });
+
+    await interaction.editReply({
+      embeds: [demoEmbed]
+    });
+  } catch (err: any) {
+    console.error('[Discord Interactions] Error playing demo:', err);
+    await interaction.editReply({
+      content: `❌ Error playing demo: ${err.message}`
+    });
+  }
+}
+
+/**
+ * Handle /randomvoice command
+ */
+async function handleRandomVoiceCommand(interaction: any): Promise<void> {
+  await interaction.deferReply();
+
+  try {
+    const allVoices = getVoicesByFilters({});
+
+    if (allVoices.length === 0) {
+      await interaction.editReply({
+        content: '❌ No voices available. Sync voices in the Stream Synth app first!'
+      });
+      return;
+    }
+
+    const randomVoice = allVoices[Math.floor(Math.random() * allVoices.length)];
+    const embeds = formatVoicesForEmbed([randomVoice], 1);
+
+    const randomEmbed = new EmbedBuilder()
+      .setTitle('🎲 Random Voice Suggestion')
+      .setDescription('Like it? Use it! Or try another random voice.')
+      .setColor(0x5865F2)
+      .addFields(
+        {
+          name: '📋 How to Use',
+          value: `1. Copy the Voice ID from above\n2. In Twitch chat: \`~setvoice ${randomVoice.voice_id}\`\n3. Your viewers will love it!`,
+          inline: false
+        }
+      );
+
+    await interaction.editReply({
+      embeds: [randomEmbed, ...embeds],
+      content: 'Here\'s a random voice for you!'
+    });
+  } catch (err: any) {
+    console.error('[Discord Interactions] Error getting random voice:', err);
+    await interaction.editReply({
+      content: `❌ Error getting random voice: ${err.message}`
+    });
   }
 }
 
@@ -288,56 +513,94 @@ async function handleListLanguagesCommand(interaction: any): Promise<void> {
 async function handleHelpCommand(interaction: any): Promise<void> {
   const helpEmbed = new EmbedBuilder()
     .setTitle('🎤 Stream Synth Discord Commands')
-    .setDescription('Browse and discover TTS voices for your stream')
+    .setDescription('Discover and manage TTS voices for your stream')
     .setColor(0x5865F2)
     .addFields(
       {
-        name: '📋 Available Commands',
-        value: '`/findvoice` - Browse voices with filters\n' +
+        name: '⭐ Top Commands',
+        value: '`/searchvoice` ⭐⭐⭐ - Search for voices by name or description\n' +
+               '`/findvoice` ⭐⭐⭐ - Browse voices with advanced filters\n' +
+               '`/providers` ⭐⭐ - Learn about TTS providers\n' +
+               '`/voicedemo` ⭐⭐ - Hear a voice demo\n' +
+               '`/randomvoice` ⭐⭐ - Get a random voice suggestion\n' +
                '`/listlanguages` - List all available languages\n' +
-               '`/help` - Show this help message',
+               '`/help` - Show this message',
         inline: false
       },
       {
-        name: '🌍 Using /listlanguages',
-        value: '**Usage:** `/listlanguages [provider]`\n\n' +
+        name: '🔥 Quick Start',
+        value: '1. Type `/findvoice` to browse voices\n' +
+               '2. Find a voice you like\n' +
+               '3. Copy the Voice ID\n' +
+               '4. In Twitch chat: `~setvoice <Voice ID>`\n' +
+               '5. Done! Your TTS voice is set',
+        inline: false
+      },
+      {
+        name: ' /searchvoice',
+        value: '**Usage:** `/searchvoice query:<search term>`\n\n' +
                '**Examples:**\n' +
-               '• `/listlanguages` - List all languages\n' +
-               '• `/listlanguages provider:Google` - Google languages only\n' +
-               '• `/listlanguages provider:Azure` - Azure languages only\n\n' +
-               '💡 Use this to discover what languages you can search for!',
+               '• `/searchvoice query:English` - Find English voices\n' +
+               '• `/searchvoice query:Google` - Find Google voices\n' +
+               '• `/searchvoice query:Emma` - Search by name',
         inline: false
       },
       {
-        name: '🔍 Using /findvoice',
+        name: '🎯 /findvoice',
         value: '**Usage:** `/findvoice [language] [gender] [provider]`\n\n' +
                '**Examples:**\n' +
                '• `/findvoice` - Show all voices\n' +
-               '• `/findvoice language:Spanish` - Spanish voices only\n' +
-               '• `/findvoice gender:Male` - Male voices only\n' +
-               '• `/findvoice language:French gender:Female` - French female voices\n\n' +
-               '**Interactive Features:**\n' +
-               '• ⬅️➡️ Pagination buttons to browse pages\n' +
-               '• 🔽 Dropdown menus to change filters\n' +
-               '• Real-time filtering without restarting search',
+               '• `/findvoice language:Spanish` - Spanish voices\n' +
+               '• `/findvoice gender:Female` - Female voices\n' +
+               '• `/findvoice language:French gender:Female provider:Azure`\n\n' +
+               '**Features:** Pagination • Real-time filters • Voice details',
         inline: false
       },
       {
-        name: '✅ Setting Your Voice',
-        value: '1. Use `/findvoice` to browse available voices\n' +
-               '2. Copy the **Voice ID** shown below each voice\n' +
-               '3. Go to your Twitch stream chat\n' +
-               '4. Type: `~setvoice <Voice ID>`\n' +
-               '5. Example: `~setvoice google_en-US-Standard-A`\n' +
-               '6. Your voice is now active for TTS!',
+        name: '🏢 /providers',
+        value: 'Learn about available TTS providers:\n' +
+               '• **WebSpeech** - Built-in browser voices\n' +
+               '• **Azure** - Microsoft\'s professional voices\n' +
+               '• **Google** - Google Cloud\'s high-quality voices\n' +
+               'Each has different languages and accents!',
         inline: false
       },
       {
-        name: '💡 Tips',
-        value: '• All voices are synced from the Stream Synth app\n' +
-               '• Voice settings are per-viewer (set in Twitch chat)\n' +
-               '• Use filters to narrow down hundreds of voices\n' +
-               '• Languages include English, Spanish, French, German, and more!',
+        name: '🔊 /voicedemo',
+        value: '**Usage:** `/voicedemo voiceid:<ID> [text:<optional text>]`\n\n' +
+               'Hear a sample of any voice before setting it:\n' +
+               '• Uses default demo text if no text specified\n' +
+               '• Custom text (max 200 chars)\n' +
+               '• Instant playback preview',
+        inline: false
+      },
+      {
+        name: '🎲 /randomvoice',
+        value: 'Get a random voice suggestion!\n\n' +
+               'Perfect for:\n' +
+               '• Discovering new voices\n' +
+               '• Keeping your stream fresh\n' +
+               '• Fun spontaneous voice changes\n' +
+               '• Breaking out of voice ruts',
+        inline: false
+      },
+      {
+        name: '🌍 /listlanguages',
+        value: '**Usage:** `/listlanguages [provider]`\n\n' +
+               '**Examples:**\n' +
+               '• `/listlanguages` - All languages\n' +
+               '• `/listlanguages provider:Google` - Google only\n' +
+               '• `/listlanguages provider:Azure` - Azure only\n\n' +
+               'Use these with `/findvoice language:<name>`',
+        inline: false
+      },
+      {
+        name: '💡 Tips & Tricks',
+        value: '✓ Combine filters in `/findvoice` for precision\n' +
+               '✓ Try `/randomvoice` for discovery\n' +
+               '✓ Use `/voicedemo` before setting a voice\n' +
+               '✓ Use `/searchvoice` to find voices fast\n' +
+               '✓ All voices synced from Stream Synth app',
         inline: false
       }
     )

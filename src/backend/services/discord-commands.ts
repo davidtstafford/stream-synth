@@ -14,10 +14,69 @@ import { SlashCommandBuilder, Awaitable } from 'discord.js';
  */
 export function registerSlashCommands(): Awaitable<any>[] {
   return [
+    createSearchVoiceCommand(),
+    createProvidersCommand(),
+    createVoiceDemoCommand(),
+    createRandomVoiceCommand(),
     createFindVoiceCommand(),
     createListLanguagesCommand(),
     createHelpCommand()
   ];
+}
+
+/**
+ * /searchvoice - Search voices by name or description
+ */
+function createSearchVoiceCommand(): any {
+  return new SlashCommandBuilder()
+    .setName('searchvoice')
+    .setDescription('Search for voices by name or description')
+    .addStringOption(option =>
+      option
+        .setName('query')
+        .setDescription('Search term (voice name, language, or provider)')
+        .setRequired(true)
+    );
+}
+
+/**
+ * /providers - List available TTS providers
+ */
+function createProvidersCommand(): any {
+  return new SlashCommandBuilder()
+    .setName('providers')
+    .setDescription('Show information about available TTS providers (WebSpeech, Azure, Google)');
+}
+
+/**
+ * /voicedemo - Demo a voice with sample text
+ */
+function createVoiceDemoCommand(): any {
+  return new SlashCommandBuilder()
+    .setName('voicedemo')
+    .setDescription('Hear a demo of a voice')
+    .addStringOption(option =>
+      option
+        .setName('voiceid')
+        .setDescription('The voice ID to demo')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option
+        .setName('text')
+        .setDescription('Custom text to speak (max 200 characters)')
+        .setRequired(false)
+        .setMaxLength(200)
+    );
+}
+
+/**
+ * /randomvoice - Get a random voice suggestion
+ */
+function createRandomVoiceCommand(): any {
+  return new SlashCommandBuilder()
+    .setName('randomvoice')
+    .setDescription('Get a random voice suggestion for your stream');
 }
 
 /**

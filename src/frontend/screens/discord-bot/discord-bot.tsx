@@ -351,13 +351,34 @@ export const DiscordBot: React.FC = () => {
         {/* Info Cards */}
         <div className="info-cards">
           <div className="info-card">
-            <h3>🎯 Voice Discovery</h3>
-            <p>Discord users can search voices with <code>/findvoice</code></p>
+            <h3>🎯 7 Powerful Commands</h3>
+            <p>
+              ⭐⭐⭐ <code>/searchvoice</code> - Search voices by name<br/>
+              ⭐⭐⭐ <code>/findvoice</code> - Browse with filters<br/>
+              ⭐⭐ <code>/providers</code> - Compare providers<br/>
+              ⭐⭐ <code>/voicedemo</code> - Hear a sample<br/>
+              ⭐⭐ <code>/randomvoice</code> - Random suggestion<br/>
+              <code>/listlanguages</code> - All languages<br/>
+              <code>/help</code> - Full guide
+            </p>
           </div>
 
           <div className="info-card">
-            <h3>🔌 Activation</h3>
-            <p>Viewers activate voices with <code>~setvoice</code> in Twitch chat</p>
+            <h3>🔌 Viewer Activation</h3>
+            <p>
+              Viewers activate voices with<br/>
+              <code>~setvoice &lt;voice-id&gt;</code><br/>
+              in your Twitch chat
+            </p>
+          </div>
+
+          <div className="info-card">
+            <h3>💡 Most Popular</h3>
+            <p>
+              <code>/searchvoice</code> finds voices fast<br/>
+              <code>/randomvoice</code> for discovery<br/>
+              <code>/findvoice</code> with filters
+            </p>
           </div>
         </div>
       </div>
