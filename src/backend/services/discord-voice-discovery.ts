@@ -77,13 +77,18 @@ export function searchVoices(query: string): VoiceWithNumericId[] {
 }
 
 /**
- * Get all available languages
+ * Get all available languages, optionally filtered by provider
  */
-export function getAvailableLanguages(): string[] {
+export function getAvailableLanguages(provider?: string): string[] {
   const allVoices = voicesRepo.getAvailableVoices();
   const languages = new Set<string>();
 
   for (const voice of allVoices) {
+    // Filter by provider if specified
+    if (provider && voice.provider !== provider) {
+      continue;
+    }
+    
     if (voice.language_name) {
       languages.add(voice.language_name);
     }

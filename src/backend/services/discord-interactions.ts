@@ -85,6 +85,9 @@ async function handleSlashCommand(interaction: any): Promise<void> {
     case 'findvoice':
       await handleFindVoiceCommand(interaction);
       break;
+    case 'listlanguages':
+      await handleListLanguagesCommand(interaction);
+      break;
     case 'help':
       await handleHelpCommand(interaction);
       break;
@@ -212,6 +215,74 @@ function buildVoiceActionRows(userId: string, interactionId: string, paginationI
 }
 
 /**
+ * Handle /listlanguages command
+ */
+async function handleListLanguagesCommand(interaction: any): Promise<void> {
+  await interaction.deferReply();
+
+  const provider = interaction.options.getString('provider') || undefined;
+
+  console.log('[Discord Interactions] Listing languages, provider filter:', provider);
+
+  try {
+    // Get all available languages, optionally filtered by provider
+    const languages = getAvailableLanguages(provider);
+    console.log('[Discord Interactions] Found', languages.length, 'languages');
+
+    if (languages.length === 0) {
+      await interaction.editReply({
+        content: '❌ No languages found. Make sure voices are synced in the Stream Synth app!'
+      });
+      return;
+    }
+
+    // Sort languages alphabetically
+    languages.sort();
+
+    // Build the embed
+    const languageEmbed = new EmbedBuilder()
+      .setTitle('🌍 Available Languages')
+      .setDescription(provider ? `Showing languages for **${provider.toUpperCase()}** provider` : 'Showing all available languages')
+      .setColor(0x5865F2)
+      .setFooter({ text: `Total: ${languages.length} language${languages.length !== 1 ? 's' : ''}` });
+
+    // Split languages into chunks for multiple fields (max 25 fields per embed, ~1024 chars per field)
+    const chunkSize = 50; // Languages per field
+    const chunks: string[][] = [];
+    for (let i = 0; i < languages.length; i += chunkSize) {
+      chunks.push(languages.slice(i, i + chunkSize));
+    }
+
+    // Add fields (Discord limit: 25 fields per embed)
+    chunks.slice(0, 25).forEach((chunk, index) => {
+      const fieldTitle = chunks.length > 1 ? `Languages (${index * chunkSize + 1}-${Math.min((index + 1) * chunkSize, languages.length)})` : 'Languages';
+      languageEmbed.addFields({
+        name: fieldTitle,
+        value: chunk.map(lang => `• ${lang}`).join('\n'),
+        inline: false
+      });
+    });
+
+    // Add usage tip
+    languageEmbed.addFields({
+      name: '💡 Usage',
+      value: 'Use these languages with `/findvoice language:<language>`\n' +
+             'Example: `/findvoice language:English` or `/findvoice language:Spanish`',
+      inline: false
+    });
+
+    await interaction.editReply({
+      embeds: [languageEmbed]
+    });
+  } catch (err: any) {
+    console.error('[Discord Interactions] Error listing languages:', err);
+    await interaction.editReply({
+      content: `❌ Error listing languages: ${err.message}`
+    });
+  }
+}
+
+/**
  * Handle /help command
  */
 async function handleHelpCommand(interaction: any): Promise<void> {
@@ -223,7 +294,18 @@ async function handleHelpCommand(interaction: any): Promise<void> {
       {
         name: '📋 Available Commands',
         value: '`/findvoice` - Browse voices with filters\n' +
+               '`/listlanguages` - List all available languages\n' +
                '`/help` - Show this help message',
+        inline: false
+      },
+      {
+        name: '🌍 Using /listlanguages',
+        value: '**Usage:** `/listlanguages [provider]`\n\n' +
+               '**Examples:**\n' +
+               '• `/listlanguages` - List all languages\n' +
+               '• `/listlanguages provider:Google` - Google languages only\n' +
+               '• `/listlanguages provider:Azure` - Azure languages only\n\n' +
+               '💡 Use this to discover what languages you can search for!',
         inline: false
       },
       {

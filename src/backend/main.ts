@@ -8,7 +8,7 @@ import { DiscordSettingsRepository } from './database/repositories/discord-setti
 import { BrowserSourceServer } from './services/browser-source-server';
 import { EventActionProcessor } from './services/event-action-processor';
 import { TTSBrowserSourceBridge } from './services/tts-browser-source-bridge';
-import { initializeDiscordBot } from './services/discord-bot-client';
+import { initializeDiscordBot, registerGlobalCommands } from './services/discord-bot-client';
 import { decryptToken } from './services/crypto-utils';
 
 let mainWindow: BrowserWindow | null = null;
@@ -83,6 +83,10 @@ async function checkDiscordAutoStart(): Promise<void> {
       try {
         const decryptedToken = decryptToken(settings.bot_token);
         await initializeDiscordBot(decryptedToken);
+        
+        // Register global commands on auto-start
+        await registerGlobalCommands(decryptedToken);
+        
         console.log('[Main] ✓ Discord bot auto-started successfully');
       } catch (err: any) {
         console.error('[Main] ✗ Failed to auto-start Discord bot:', err.message);

@@ -3,8 +3,8 @@
  * 
  * Defines all slash commands for the bot:
  * - /findvoice - Find voices by criteria (language, gender, provider)
+ * - /listlanguages - List all available languages, optionally filtered by provider
  * - /help - Show help information
- * - /voice-test - Test a voice with a message
  */
 
 import { SlashCommandBuilder, Awaitable } from 'discord.js';
@@ -15,8 +15,8 @@ import { SlashCommandBuilder, Awaitable } from 'discord.js';
 export function registerSlashCommands(): Awaitable<any>[] {
   return [
     createFindVoiceCommand(),
+    createListLanguagesCommand(),
     createHelpCommand()
-    // Note: /voice-test removed - voice testing happens in Twitch, not Discord
   ];
 }
 
@@ -48,6 +48,26 @@ function createFindVoiceCommand(): any {
       option
         .setName('provider')
         .setDescription('Filter by provider (WebSpeech, Azure, Google)')
+        .setRequired(false)
+        .addChoices(
+          { name: 'WebSpeech', value: 'webspeech' },
+          { name: 'Azure', value: 'azure' },
+          { name: 'Google', value: 'google' }
+        )
+    );
+}
+
+/**
+ * /listlanguages - List all available languages
+ */
+function createListLanguagesCommand(): any {
+  return new SlashCommandBuilder()
+    .setName('listlanguages')
+    .setDescription('List all available languages for TTS voices')
+    .addStringOption(option =>
+      option
+        .setName('provider')
+        .setDescription('Filter by provider (optional)')
         .setRequired(false)
         .addChoices(
           { name: 'WebSpeech', value: 'webspeech' },
