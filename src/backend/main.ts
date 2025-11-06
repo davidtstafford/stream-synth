@@ -4,9 +4,12 @@ import { setupAllIpcHandlers, runStartupTasks } from './core/ipc-handlers';
 import { PlatformTTSFactory } from './core/platform-tts';
 import { initializeDatabase, closeDatabase } from './database/connection';
 import { ViewerTTSRulesRepository } from './database/repositories/viewer-tts-rules';
+import { DiscordSettingsRepository } from './database/repositories/discord-settings';
 import { BrowserSourceServer } from './services/browser-source-server';
 import { EventActionProcessor } from './services/event-action-processor';
 import { TTSBrowserSourceBridge } from './services/tts-browser-source-bridge';
+import { initializeDiscordBot } from './services/discord-bot-client';
+import { decryptToken } from './services/crypto-utils';
 
 let mainWindow: BrowserWindow | null = null;
 let cleanupInterval: NodeJS.Timeout | null = null;
@@ -60,7 +63,36 @@ async function initialize(): Promise<void> {
   // Run startup tasks after window is ready
   mainWindow.webContents.on('did-finish-load', () => {
     runStartupTasks(mainWindow);
+    
+    // Check for Discord bot auto-start after a short delay
+    setTimeout(() => checkDiscordAutoStart(), 3000);
   });
+}
+
+/**
+ * Check if Discord bot should auto-start and start it if enabled
+ */
+async function checkDiscordAutoStart(): Promise<void> {
+  try {
+    const discordSettingsRepo = new DiscordSettingsRepository();
+    const settings = discordSettingsRepo.getSettings();
+    
+    if (settings.auto_start_enabled === 1 && settings.bot_token) {
+      console.log('[Main] Discord bot auto-start is enabled, starting bot...');
+      
+      try {
+        const decryptedToken = decryptToken(settings.bot_token);
+        await initializeDiscordBot(decryptedToken);
+        console.log('[Main] ✓ Discord bot auto-started successfully');
+      } catch (err: any) {
+        console.error('[Main] ✗ Failed to auto-start Discord bot:', err.message);
+      }
+    } else {
+      console.log('[Main] Discord bot auto-start not enabled');
+    }
+  } catch (err: any) {
+    console.error('[Main] Error checking Discord auto-start:', err.message);
+  }
 }
 
 app.on('ready', initialize);
@@ -118,6 +150,15 @@ app.on('before-quit', async () => {
       console.error('[Main] Error stopping Browser Source Server:', error);
     }
     browserSourceServer = null;
+  }
+  
+  // Stop Discord bot if running
+  try {
+    const { disconnectDiscordBot } = require('./services/discord-bot-client');
+    await disconnectDiscordBot();
+    console.log('[Main] Discord bot stopped');
+  } catch (error) {
+    console.error('[Main] Error stopping Discord bot:', error);
   }
   
   // Cleanup platform TTS handler

@@ -2,7 +2,8 @@
   "name": "stream-synth",
   "version": "1.0.0",
   "description": "Stream Synth - A desktop app for Twitch integration",
-  "main": "dist/backend/main.js",  "scripts": {
+  "main": "dist/backend/main.js",
+  "scripts": {
     "start": "electron .",
     "build": "tsc && webpack --mode production && cp src/frontend/index.html dist/frontend/ && cp -r src/backend/public dist/backend/",
     "dev": "npm run build && electron .",
@@ -35,6 +36,7 @@
     "@types/socket.io": "^3.0.1",
     "@types/tmi.js": "^1.8.6",
     "better-sqlite3": "^12.4.1",
+    "discord.js": "^14.24.2",
     "electron-store": "^11.0.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.46.0",
     "node-fetch": "^3.3.2",

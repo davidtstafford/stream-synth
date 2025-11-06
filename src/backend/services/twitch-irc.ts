@@ -165,10 +165,9 @@ export class TwitchIRCService extends EventEmitter {
       this.emit('chat.message', event);
       console.log(`[IRC] Message from ${event.username}: ${message}`);
 
-      // Phase 5: Handle chat commands
-      if (event.userId && message.startsWith('~')) {
-        await this.handleChatCommand(message, event.userId, event.username, userstate);
-      }
+      // Phase 5: Chat commands are now handled by EventSub (not IRC)
+      // EventSub processes commands and sends responses via IRC
+      // This avoids duplicate command execution
     });
 
     // Connection events

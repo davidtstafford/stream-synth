@@ -812,5 +812,25 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_event_actions_channel_event ON event_actions(channel_id, event_type)
   `);
 
+  // ===== DISCORD BOT CONFIGURATION (Phase 2) =====
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS discord_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      bot_token TEXT,
+      bot_id TEXT,
+      bot_status TEXT DEFAULT 'disconnected',
+      last_connected_at DATETIME,
+      last_disconnected_at DATETIME,
+      auto_start_enabled BOOLEAN DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    INSERT OR IGNORE INTO discord_settings (id, bot_status) VALUES (1, 'disconnected')
+  `);
+
   console.log('[Migrations] Database schema initialization complete');
 }

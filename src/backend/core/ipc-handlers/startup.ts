@@ -1,8 +1,11 @@
 import { BrowserWindow } from 'electron';
 import { SettingsRepository } from '../../database/repositories/settings';
+import { DiscordSettingsRepository } from '../../database/repositories/discord-settings';
 import { VoicesRepository } from '../../database/repositories/voices';
 import { SessionsRepository } from '../../database/repositories/sessions';
 import { ChannelPointGrantsRepository } from '../../database/repositories/channel-point-grants';
+import { decryptToken } from '../../services/crypto-utils';
+import { initializeDiscordBot } from '../../services/discord-bot-client';
 import { initializeTTS } from './tts';
 import { VoiceSyncService } from '../../services/tts/voice-sync';
 import { TwitchRoleSyncService } from '../../services/twitch-role-sync';
@@ -10,6 +13,7 @@ import { DynamicPollingManager } from '../../services/dynamic-polling-manager';
 import { initializeEventSubIntegration } from '../../services/eventsub-integration';
 
 const settingsRepo = new SettingsRepository();
+const discordSettingsRepo = new DiscordSettingsRepository();
 const voicesRepo = new VoicesRepository();
 const sessionsRepo = new SessionsRepository();
 const channelPointGrantsRepo = new ChannelPointGrantsRepository();
@@ -26,6 +30,29 @@ export async function runStartupTasks(mainWindow?: BrowserWindow | null): Promis
     if (mainWindow) {
       console.log('[Startup] Initializing EventSub integration...');
       initializeEventSubIntegration(mainWindow);
+    }
+
+    // ===== DISCORD BOT AUTO-STARTUP =====
+    console.log('[Startup] Checking Discord bot auto-start configuration...');
+    try {
+      const discordSettings = discordSettingsRepo.getSettings();
+      if (discordSettings.auto_start_enabled && discordSettings.bot_token) {
+        try {
+          const decryptedToken = decryptToken(discordSettings.bot_token);
+          console.log('[Startup] Starting Discord bot with auto-start...');
+          await initializeDiscordBot(decryptedToken);
+          discordSettingsRepo.updateBotStatus('connected');
+          discordSettingsRepo.updateLastConnectedAt();
+          console.log('[Startup] ✓ Discord bot auto-started successfully');
+        } catch (err: any) {
+          console.error('[Startup] Failed to auto-start Discord bot:', err.message);
+          discordSettingsRepo.updateBotStatus('failed');
+        }
+      } else {
+        console.log('[Startup] Discord bot auto-start not enabled or no token configured');
+      }
+    } catch (err: any) {
+      console.error('[Startup] Error checking Discord bot configuration:', err);
     }
 
     // Cleanup expired channel point grants (keep expired records for 7 days)

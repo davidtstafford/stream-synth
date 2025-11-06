@@ -8,6 +8,8 @@ import { EventsRepository } from '../database/repositories/events';
 import { SessionsRepository } from '../database/repositories/sessions';
 import { ModerationHistoryRepository } from '../database/repositories/moderation-history';
 import { EventActionProcessor } from './event-action-processor';
+import { ChatCommandHandler, ChatCommandContext } from './chat-command-handler';
+import { twitchIRCService } from './twitch-irc';
 
 /**
  * EventSub Event Router
@@ -27,6 +29,7 @@ export class EventSubEventRouter extends EventEmitter {
   private mainWindow: BrowserWindow | null = null;
   private ttsInitializer: (() => Promise<any>) | null = null;
   private eventActionProcessor: EventActionProcessor | null = null;
+  private chatCommandHandler: ChatCommandHandler = new ChatCommandHandler();
 
   constructor(mainWindow?: BrowserWindow | null, ttsInitializer?: () => Promise<any>) {
     super();
@@ -711,6 +714,8 @@ export class EventSubEventRouter extends EventEmitter {
     const userLogin = event.chatter_user_login;
     const userDisplayName = event.chatter_user_name;
     const messageText = event.message?.text || '';
+    const badges = event.badges || [];
+    const broadcasterId = event.broadcaster_user_id;
 
     const currentSession = this.sessionsRepo.getCurrentSession();
     if (!currentSession) {
@@ -723,7 +728,15 @@ export class EventSubEventRouter extends EventEmitter {
     if (!viewer) {
       console.error(`[EventRouter] Failed to get/create viewer ${userLogin}`);
       return;
-    }    // Store chat message event and emit to frontend
+    }
+
+    // Determine user permissions from badges
+    const isBroadcaster = userId === broadcasterId;
+    const isModerator = badges.some((badge: any) => badge.set_id === 'moderator') || isBroadcaster;
+    const isSubscriber = badges.some((badge: any) => badge.set_id === 'subscriber' || badge.set_id === 'founder');
+    const isVip = badges.some((badge: any) => badge.set_id === 'vip');
+
+    // Store chat message event and emit to frontend
     const eventId = this.storeAndEmitEvent(
       'channel.chat.message',
       event,
@@ -734,6 +747,34 @@ export class EventSubEventRouter extends EventEmitter {
     );
 
     console.log(`[EventRouter] ✓ Chat message stored from: ${userLogin} (ID: ${eventId})`);
+
+    // Check for chat commands
+    if (messageText && (messageText.startsWith('!') || messageText.startsWith('~'))) {
+      try {
+        const commandContext: ChatCommandContext = {
+          username: userLogin,
+          userId: userId,
+          isModerator,
+          isBroadcaster,
+          isSubscriber,
+          isVip
+        };
+
+        const response = await this.chatCommandHandler.handleMessage(messageText, commandContext);
+        
+        if (response) {
+          console.log(`[EventRouter→Commands] Command executed, sending response: ${response}`);
+          // Send response via IRC
+          try {
+            await twitchIRCService.sendMessage(response);
+          } catch (err) {
+            console.error('[EventRouter→Commands] Failed to send command response:', err);
+          }
+        }
+      } catch (err) {
+        console.error('[EventRouter→Commands] Error processing command:', err);
+      }
+    }
 
     // Forward to TTS manager (EventSub chat messages only, not IRC)
     if (this.ttsInitializer && messageText) {
