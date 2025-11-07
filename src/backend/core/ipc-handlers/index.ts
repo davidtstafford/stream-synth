@@ -15,6 +15,7 @@ import { setupChatCommandHandlers } from './chat-commands';
 import { setupEventActionHandlers } from './event-actions';
 import { registerBrowserSourceChannelHandlers } from './browser-source-channels';
 import { setupFilePickerHandlers, setMainWindowForFilePicker } from './file-picker';
+import { setupViewerEntranceSoundHandlers } from './viewer-entrance-sounds';
 import { ViewerTTSRulesRepository } from '../../database/repositories/viewer-tts-rules';
 import './twitch-polling'; // Auto-registers handlers
 
@@ -29,6 +30,7 @@ export function setupIpcHandlers(): void {
   setupEventActionHandlers(); // Phase 5: Event Actions
   registerBrowserSourceChannelHandlers(); // Phase 8: Browser Source Channels
   setupFilePickerHandlers(); // File picker for media selection
+  setupViewerEntranceSoundHandlers(); // Viewer entrance sounds feature
   // setupEventSubHandlers(); // Phase 7: EventSub WebSocket - temporarily disabled
   // twitch-polling handlers auto-registered on import
 }

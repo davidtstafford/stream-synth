@@ -3,8 +3,9 @@ import * as db from '../../services/database';
 import { ViewerDetailsTab } from './tabs/ViewerDetailsTab';
 import { ViewerHistoryTab } from './tabs/ViewerHistoryTab';
 import { ModerationActionsTab } from './tabs/ModerationActionsTab';
+import { EntranceSoundsTab } from './tabs/EntranceSoundsTab';
 
-type TabType = 'details' | 'history' | 'moderation';
+type TabType = 'details' | 'history' | 'moderation' | 'entrance-sounds';
 
 export const ViewersScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('details');
@@ -88,6 +89,22 @@ export const ViewersScreen: React.FC = () => {
       >
         Moderation Actions
       </button>
+      <button
+        onClick={() => setActiveTab('entrance-sounds')}
+        style={{
+          padding: '12px 24px',
+          backgroundColor: activeTab === 'entrance-sounds' ? '#9147ff' : 'transparent',
+          color: activeTab === 'entrance-sounds' ? 'white' : '#888',
+          border: 'none',
+          borderBottom: activeTab === 'entrance-sounds' ? '3px solid #9147ff' : '3px solid transparent',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          transition: 'all 0.2s'
+        }}
+      >
+        Entrance Sounds
+      </button>
     </div>
   );
 
@@ -110,6 +127,10 @@ export const ViewersScreen: React.FC = () => {
           accessToken={accessToken}
           clientId={clientId}
         />
+      )}
+
+      {activeTab === 'entrance-sounds' && (
+        <EntranceSoundsTab />
       )}
     </div>
   );
