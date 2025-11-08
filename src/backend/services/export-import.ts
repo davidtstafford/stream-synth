@@ -22,6 +22,7 @@ export interface ExportData {
     tts_enabled: boolean;
   }>;
   viewer_voice_preferences?: Array<any>; // Individual viewer voice preferences
+  viewer_rules?: Array<any>; // Viewer restrictions/rules
   event_profiles: Array<{
     user_id: string;
     user_login?: string;
@@ -32,6 +33,12 @@ export interface ExportData {
       is_enabled: boolean;
     }>;
   }>;
+  event_actions?: Array<any>; // Event actions (browser source alerts, etc.)
+  chat_commands_config?: Array<any>; // Chat command configurations
+  entrance_sounds?: Array<any>; // Viewer entrance sounds
+  vip_list?: Array<any>; // VIP users
+  subscriber_list?: Array<any>; // Subscriber users
+  moderator_list?: Array<any>; // Moderator users
   connection_history: Array<{
     user_login: string;
     channel_login: string;
@@ -108,6 +115,44 @@ export async function exportSettings(): Promise<string> {
     FROM viewer_voice_preferences
   `).all() as Array<any>;
 
+  // Get viewer rules/restrictions
+  const viewerRules = db.prepare(`
+    SELECT * FROM viewer_rules
+  `).all() as Array<any>;
+
+  // Get event actions (browser source alerts, etc.)
+  const eventActions = db.prepare(`
+    SELECT * FROM event_actions
+  `).all() as Array<any>;
+
+  // Get chat commands configuration
+  const chatCommandsConfig = db.prepare(`
+    SELECT * FROM chat_commands_config
+  `).all() as Array<any>;
+
+  // Get entrance sounds
+  const entranceSounds = db.prepare(`
+    SELECT * FROM viewer_entrance_sounds
+  `).all() as Array<any>;
+
+  // Get VIP list
+  const vipList = db.prepare(`
+    SELECT viewer_id, vip_username, channel_id, added_at
+    FROM vips
+  `).all() as Array<any>;
+
+  // Get subscriber list
+  const subscriberList = db.prepare(`
+    SELECT viewer_id, subscriber_username, channel_id, tier, added_at
+    FROM subscribers
+  `).all() as Array<any>;
+
+  // Get moderator list
+  const moderatorList = db.prepare(`
+    SELECT viewer_id, moderator_username, channel_id, added_at
+    FROM moderators
+  `).all() as Array<any>;
+
   const exportData: ExportData = {
     version: '1.0.0',
     exported_at: new Date().toISOString(),
@@ -127,7 +172,14 @@ export async function exportSettings(): Promise<string> {
       tts_enabled: v.tts_enabled === 1
     })),
     viewer_voice_preferences: voicePreferences,
+    viewer_rules: viewerRules,
     event_profiles: Array.from(eventProfiles.values()),
+    event_actions: eventActions,
+    chat_commands_config: chatCommandsConfig,
+    entrance_sounds: entranceSounds,
+    vip_list: vipList,
+    subscriber_list: subscriberList,
+    moderator_list: moderatorList,
     connection_history: sessions.map(s => ({
       user_login: s.user_login,
       channel_login: s.channel_login,
@@ -358,6 +410,130 @@ export async function importSettings(): Promise<{ success: boolean; message: str
       });
     });
 
+    // Import viewer rules
+    if (importData.viewer_rules && importData.viewer_rules.length > 0) {
+      const viewerRulesStmt = db.prepare(`
+        INSERT INTO viewer_rules (viewer_id, rule_type, enabled, created_at, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(viewer_id, rule_type) DO UPDATE SET
+          enabled = excluded.enabled,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+
+      importData.viewer_rules.forEach((rule: any) => {
+        viewerRulesStmt.run(rule.viewer_id, rule.rule_type, rule.enabled ? 1 : 0);
+        importedCount++;
+      });
+    }
+
+    // Import event actions
+    if (importData.event_actions && importData.event_actions.length > 0) {
+      const eventActionStmt = db.prepare(`
+        INSERT INTO event_actions (channel_id, event_type, is_enabled, action_type, alert_sound_enabled, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(channel_id, event_type) DO UPDATE SET
+          is_enabled = excluded.is_enabled,
+          action_type = excluded.action_type,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+
+      importData.event_actions.forEach((action: any) => {
+        eventActionStmt.run(
+          action.channel_id,
+          action.event_type,
+          action.is_enabled ? 1 : 0,
+          action.action_type,
+          action.alert_sound_enabled ? 1 : 0
+        );
+        importedCount++;
+      });
+    }
+
+    // Import chat commands config
+    if (importData.chat_commands_config && importData.chat_commands_config.length > 0) {
+      const chatCmdStmt = db.prepare(`
+        INSERT INTO chat_commands_config (command_name, command_prefix, enabled, permission_level, rate_limit_seconds)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(command_name) DO UPDATE SET
+          enabled = excluded.enabled,
+          permission_level = excluded.permission_level,
+          rate_limit_seconds = excluded.rate_limit_seconds
+      `);
+
+      importData.chat_commands_config.forEach((cmd: any) => {
+        chatCmdStmt.run(
+          cmd.command_name,
+          cmd.command_prefix,
+          cmd.enabled ? 1 : 0,
+          cmd.permission_level,
+          cmd.rate_limit_seconds
+        );
+        importedCount++;
+      });
+    }
+
+    // Import entrance sounds
+    if (importData.entrance_sounds && importData.entrance_sounds.length > 0) {
+      const soundStmt = db.prepare(`
+        INSERT INTO viewer_entrance_sounds (viewer_id, sound_file_path, volume)
+        VALUES (?, ?, ?)
+        ON CONFLICT(viewer_id) DO UPDATE SET
+          sound_file_path = excluded.sound_file_path,
+          volume = excluded.volume
+      `);
+
+      importData.entrance_sounds.forEach((sound: any) => {
+        soundStmt.run(sound.viewer_id, sound.sound_file_path, sound.volume);
+        importedCount++;
+      });
+    }
+
+    // Import VIP list
+    if (importData.vip_list && importData.vip_list.length > 0) {
+      const vipStmt = db.prepare(`
+        INSERT INTO vips (viewer_id, vip_username, channel_id, added_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(viewer_id, channel_id) DO UPDATE SET
+          added_at = excluded.added_at
+      `);
+
+      importData.vip_list.forEach((vip: any) => {
+        vipStmt.run(vip.viewer_id, vip.vip_username, vip.channel_id, vip.added_at);
+        importedCount++;
+      });
+    }
+
+    // Import subscriber list
+    if (importData.subscriber_list && importData.subscriber_list.length > 0) {
+      const subStmt = db.prepare(`
+        INSERT INTO subscribers (viewer_id, subscriber_username, channel_id, tier, added_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(viewer_id, channel_id) DO UPDATE SET
+          tier = excluded.tier,
+          added_at = excluded.added_at
+      `);
+
+      importData.subscriber_list.forEach((sub: any) => {
+        subStmt.run(sub.viewer_id, sub.subscriber_username, sub.channel_id, sub.tier, sub.added_at);
+        importedCount++;
+      });
+    }
+
+    // Import moderator list
+    if (importData.moderator_list && importData.moderator_list.length > 0) {
+      const modStmt = db.prepare(`
+        INSERT INTO moderators (viewer_id, moderator_username, channel_id, added_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(viewer_id, channel_id) DO UPDATE SET
+          added_at = excluded.added_at
+      `);
+
+      importData.moderator_list.forEach((mod: any) => {
+        modStmt.run(mod.viewer_id, mod.moderator_username, mod.channel_id, mod.added_at);
+        importedCount++;
+      });
+    }
+
     db.exec('COMMIT');    return {
       success: true,
       message: `Successfully imported ${importedCount} items`,
@@ -368,7 +544,14 @@ export async function importSettings(): Promise<{ success: boolean; message: str
         polling_configs: importData.polling_configs?.length || 0,
         viewers: importData.viewers?.length || 0,
         viewer_voice_preferences: importData.viewer_voice_preferences?.length || 0,
+        viewer_rules: importData.viewer_rules?.length || 0,
         event_profiles: importData.event_profiles.length,
+        event_actions: importData.event_actions?.length || 0,
+        chat_commands_config: importData.chat_commands_config?.length || 0,
+        entrance_sounds: importData.entrance_sounds?.length || 0,
+        vip_list: importData.vip_list?.length || 0,
+        subscriber_list: importData.subscriber_list?.length || 0,
+        moderator_list: importData.moderator_list?.length || 0,
         events: importData.event_profiles.reduce((sum, p) => sum + p.events.length, 0)
       }
     };
