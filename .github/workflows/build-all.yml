@@ -55,6 +55,7 @@ jobs:
         run: npm run dist:mac
         env:
           CI: true
+          SKIP_GH_PUBLISH: true
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
@@ -92,6 +93,7 @@ jobs:
         run: npm run dist:win
         env:
           CI: true
+          SKIP_GH_PUBLISH: true
 
       - name: Upload NSIS installer artifact
         uses: actions/upload-artifact@v4

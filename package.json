@@ -55,6 +55,7 @@
     "appId": "com.stream-synth.app",
     "productName": "Stream Synth",
     "icon": "assets/icon",
+    "publish": null,
     "directories": {
       "output": "release",
       "buildResources": "assets"
