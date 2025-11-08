@@ -8,7 +8,11 @@
     "build": "tsc && webpack --mode production && cp src/frontend/index.html dist/frontend/ && cp -r src/backend/public dist/backend/",
     "dev": "npm run build && electron .",
     "watch": "tsc --watch",
-    "postinstall": "electron-rebuild -f -w better-sqlite3"
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:all": "npm run build && electron-builder -mw"
   },
   "keywords": [
     "twitch",
@@ -24,6 +28,7 @@
     "@types/ws": "^8.5.10",
     "css-loader": "^7.1.2",
     "electron": "^35.7.5",
+    "electron-builder": "^25.1.6",
     "electron-rebuild": "^3.2.9",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.5.1",
@@ -45,5 +50,60 @@
     "socket.io": "^4.8.1",
     "tmi.js": "^1.8.5",
     "ws": "^8.16.0"
+  },
+  "build": {
+    "appId": "com.stream-synth.app",
+    "productName": "Stream Synth",
+    "icon": "assets/icon",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "assets/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "notarize": false
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "certificateFile": null,
+      "certificatePassword": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Stream Synth"
+    }
   }
 }

@@ -1,0 +1,249 @@
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    STREAM SYNTH RELEASE WORKFLOW                            │
+│                   (GitHub Actions Automated Builds)                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+SCENARIO 1: Daily Development Build
+════════════════════════════════════
+
+  $ git push origin main
+              ↓
+      GitHub Actions triggers
+              ↓
+    ┌────────────────────────┐
+    │   Build Mac (.dmg)     │ ← Parallel
+    │   Build Mac (.zip)     │   10-15 min
+    │   Build Win (.exe)     │   each
+    │   Build Win (.exe)     │ ← Parallel
+    └────────────────────────┘
+              ↓
+    Artifacts saved for 30 days
+    (No GitHub Release created)
+              ↓
+    Check: GitHub → Actions tab
+
+
+SCENARIO 2: Official Release (Recommended)
+═══════════════════════════════════════════
+
+  $ npm version patch        # Updates version → creates tag
+              ↓
+  $ git push --follow-tags   # Pushes code + tag
+              ↓
+      GitHub Actions triggers
+              ↓
+    ┌────────────────────────┐
+    │   Build Mac (.dmg)     │ ← Parallel
+    │   Build Mac (.zip)     │   10-15 min
+    │   Build Win (.exe)     │   each
+    │   Build Win (.exe)     │ ← Parallel
+    └────────────────────────┘
+              ↓
+    ┌────────────────────────┐
+    │  Create GitHub Release │
+    │  Attach all files      │
+    │  Add release notes     │
+    │  Mark as prerelease?   │
+    │  (if beta/alpha tag)   │
+    └────────────────────────┘
+              ↓
+    Check: GitHub → Releases tab
+
+
+SCENARIO 3: Manual Local Build (Testing)
+═════════════════════════════════════════
+
+  $ npm run dist:mac         # Only macOS
+              or
+  $ npm run dist:win         # Only Windows
+              or
+  $ npm run dist:all         # Both
+              ↓
+    Local TypeScript compilation
+              ↓
+    Webpack bundling
+              ↓
+    Electron-builder processes
+              ↓
+    ┌────────────────────────┐
+    │  Installers created    │
+    │  in ./release/         │
+    └────────────────────────┘
+              ↓
+    Test locally before pushing
+
+
+VERSION NUMBERING
+════════════════════════════════════════════════════════════════════════════════
+
+  Semantic Versioning: vMAJOR.MINOR.PATCH
+
+  ✓ v1.0.0              Normal release
+  ✓ v1.0.1              Bug fix
+  ✓ v1.1.0              New features
+  ✓ v2.0.0              Breaking changes
+  ✓ v1.0.0-beta.1       Beta (marked as prerelease)
+  ✓ v1.0.0-alpha.1      Alpha (marked as prerelease)
+
+
+EXAMPLE: Complete Release Workflow
+════════════════════════════════════════════════════════════════════════════════
+
+  # 1. Verify all code is committed and pushed
+  $ git status                     # Should be clean
+  
+  # 2. Update version (creates tag automatically)
+  $ npm version minor              # 1.0.0 → 1.1.0
+  
+  # 3. Push to GitHub (--follow-tags pushes the tag)
+  $ git push --follow-tags
+  
+  # 4. GitHub Actions automatically:
+  #    - Builds macOS DMG + ZIP
+  #    - Builds Windows EXE + NSIS
+  #    - Creates GitHub Release
+  #    - Attaches all installers
+  
+  # 5. Monitor progress
+  GitHub → Actions tab → Find your build
+  
+  # 6. Download when complete
+  GitHub → Releases tab → v1.1.0 release
+
+
+FILE ORGANIZATION AFTER BUILD
+════════════════════════════════════════════════════════════════════════════════
+
+  release/
+  ├── Stream Synth-1.0.0.dmg          (macOS installer)
+  ├── Stream Synth-1.0.0.zip          (macOS portable)
+  ├── Stream Synth Setup 1.0.0.exe     (Windows installer)
+  └── Stream Synth 1.0.0-portable.exe  (Windows standalone)
+
+
+TROUBLESHOOTING DECISION TREE
+════════════════════════════════════════════════════════════════════════════════
+
+  Build failed?
+  ├─ Yes → Check GitHub Actions logs
+  │        └─ TypeScript error?    → Fix in code, commit, retry
+  │        └─ Install error?       → Dependencies issue, try locally
+  │        └─ builder error?       → Check workflow YAML
+  │
+  └─ No → Check releases tab
+           ├─ Release not created?   → Tag must start with "v"
+           └─ Wrong files?          → Check glob patterns in workflow
+
+
+PERFORMANCE TIMELINE
+════════════════════════════════════════════════════════════════════════════════
+
+  Typical build times:
+
+  npm run build               ~3-5 seconds  (TypeScript + Webpack)
+  electron-builder --mac     ~5-7 minutes  (Mac build)
+  electron-builder --win     ~5-7 minutes  (Windows build)
+  ├─ DMG creation           ~2 min
+  ├─ ZIP creation           ~1 min
+  ├─ NSIS creation          ~2 min
+  └─ Portable EXE           ~1 min
+  
+  GitHub Actions total:
+  ├─ Setup environment      ~2 min
+  ├─ npm install            ~3 min (first time) / ~30 sec (cached)
+  ├─ Build & compile        ~3-5 min
+  ├─ Create installers      ~5-7 min each
+  └─ Upload artifacts       ~1 min
+  ─────────────────────────────────────
+  Total per platform:       ~15 min (first) / ~12 min (cached)
+  Both parallel:            ~15 min total
+
+
+QUICK REFERENCE COMMANDS
+════════════════════════════════════════════════════════════════════════════════
+
+  npm version major                # 1.0.0 → 2.0.0
+  npm version minor                # 1.0.0 → 1.1.0
+  npm version patch                # 1.0.0 → 1.0.1
+  npm version prerelease           # 1.0.0 → 1.0.0-0
+  npm version 1.0.0-beta.1         # Explicit version
+
+  git push --follow-tags           # Push + tags
+  git tag -l                       # List tags
+  git tag -d v1.0.0                # Delete local tag
+  git push origin --delete v1.0.0  # Delete remote tag
+
+
+MONITORING BUILD PROGRESS
+════════════════════════════════════════════════════════════════════════════════
+
+  Real-time (refresh every 30 seconds):
+  
+  1. Go to: https://github.com/YOUR_USER/stream-synth
+  2. Click: Actions tab
+  3. Find: Your workflow (e.g., "Build All Platforms")
+  4. See: Status indicator (orange=running, green=done, red=failed)
+  5. Click: Workflow to expand
+  6. View: Mac and Windows jobs running in parallel
+  7. Check: Logs for errors or progress
+
+
+AFTER BUILD COMPLETE
+════════════════════════════════════════════════════════════════════════════════
+
+  ✓ GitHub Actions succeeds
+        ↓
+  Artifacts stored → Actions tab
+  Release created → Releases tab
+        ↓
+  Download from Releases tab:
+  ├─ Stream Synth-1.0.0.dmg
+  ├─ Stream Synth-1.0.0.zip
+  ├─ Stream Synth Setup 1.0.0.exe
+  └─ Stream Synth 1.0.0-portable.exe
+        ↓
+  Test installers on both platforms
+        ↓
+  Publish release (GitHub automatically makes it public)
+        ↓
+  Announce to users!
+
+
+TIPS & TRICKS
+════════════════════════════════════════════════════════════════════════════════
+
+  💡 Test builds locally before pushing:
+     $ npm run dist:all
+
+  💡 Check version before tagging:
+     $ npm pkg get version
+
+  💡 Run workflow manually:
+     GitHub → Actions → Select workflow → "Run workflow" button
+
+  💡 Skip build for certain commits:
+     Use [skip ci] in commit message:
+     $ git commit -m "Update README [skip ci]"
+
+  💡 Beta testing releases:
+     $ npm version prerelease
+     $ git push --follow-tags
+     (Creates v1.0.0-beta.1, marked as prerelease)
+
+  💡 Emergency hotfix:
+     $ git checkout hotfix-branch
+     $ npm version patch
+     $ git push --follow-tags
+     (GitHub Actions builds from hotfix)
+
+
+════════════════════════════════════════════════════════════════════════════════
+Ready to release? Go to your repository root and run:
+
+    npm version patch && git push --follow-tags
+
+Then watch the magic happen! ✨
+════════════════════════════════════════════════════════════════════════════════
+```
