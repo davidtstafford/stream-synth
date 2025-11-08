@@ -33,7 +33,9 @@ export function setupViewerEntranceSoundHandlers(): void {
     {
       execute: async () => {
         console.log('[IPC] Getting all entrance sounds');
-        return getRepo().getAll();
+        const sounds = getRepo().getAll();
+        console.log('[IPC] Returning sounds:', sounds, 'Type:', typeof sounds, 'IsArray:', Array.isArray(sounds));
+        return sounds;
       }
     }
   );

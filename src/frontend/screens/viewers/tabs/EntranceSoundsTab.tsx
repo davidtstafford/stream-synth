@@ -1,347 +1,362 @@
 import React, { useState, useEffect } from 'react';
-import * as db from '../../../services/database';
 import * as entranceSounds from '../../../services/viewer-entrance-sounds';
 import { BrowserSourceURLDisplay } from '../../../components/BrowserSourceURLDisplay';
 
+const { ipcRenderer } = window.require('electron');
+
+interface Viewer {
+  id: string;
+  username: string;
+  display_name: string | null;
+  hasSound: boolean;
+}
+
+interface Message {
+  type: 'success' | 'error' | 'info' | 'warning';
+  text: string;
+}
+
 export const EntranceSoundsTab: React.FC = () => {
-  const [viewers, setViewers] = useState<db.ViewerWithSubscription[]>([]);
   const [sounds, setSounds] = useState<entranceSounds.ViewerEntranceSound[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [editingViewerId, setEditingViewerId] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<string>('');
-  const [selectedVolume, setSelectedVolume] = useState<number>(50);
-  const [selectedEnabled, setSelectedEnabled] = useState<boolean>(true);
-  const [saving, setSaving] = useState<boolean>(false);
-  const [stats, setStats] = useState<{ total: number; enabled: number }>({ total: 0, enabled: 0 });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<Viewer[]>([]);
+  const [selectedViewer, setSelectedViewer] = useState<Viewer | null>(null);
+  const [editingSound, setEditingSound] = useState<Partial<entranceSounds.ViewerEntranceSound> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<Message | null>(null);
 
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    loadSounds();
+  }, []);
 
+  useEffect(() => {
+    if (searchTerm.length >= 2) {
+      searchViewers();
+    } else {
+      setSearchResults([]);
+    }
+  }, [searchTerm]);
+
+  const loadSounds = async () => {
     try {
-      // Load viewers
-      let viewerResult;
-      if (searchQuery.trim()) {
-        viewerResult = await db.searchViewersWithStatus(searchQuery, 100);
-      } else {
-        viewerResult = await db.getAllViewersWithStatus(100, 0);
-      }
-
-      if (viewerResult.success && viewerResult.viewers) {
-        setViewers(viewerResult.viewers);
-      } else {
-        setError(viewerResult.error || 'Failed to load viewers');
-      }
-
-      // Load entrance sounds
+      setLoading(true);
       const soundsList = await entranceSounds.getAllEntranceSounds();
+      console.log('[EntranceSoundsTab] Loaded sounds:', soundsList);
       setSounds(Array.isArray(soundsList) ? soundsList : []);
-
-      // Load stats
-      const statsData = await entranceSounds.getEntranceSoundCount();
-      setStats(statsData || { total: 0, enabled: 0 });
-    } catch (err: any) {
-      setError(err.message || 'Failed to load data');
+    } catch (error: any) {
+      console.error('[EntranceSoundsTab] Error loading sounds:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to load entrance sounds' });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, [searchQuery]);
+  const searchViewers = async () => {
+    try {
+      const response = await ipcRenderer.invoke('viewer-rules:search-viewers', { query: searchTerm });
+      
+      if (response.success && response.data) {
+        const viewersWithSoundInfo = response.data.map((viewer: any) => ({
+          ...viewer,
+          hasSound: sounds.some(s => s.viewer_id === viewer.id)
+        }));
+        setSearchResults(viewersWithSoundInfo);
+      }
+    } catch (error: any) {
+      console.error('Error searching viewers:', error);
+    }
+  };
 
-  const handleAddSound = (viewer: db.ViewerWithSubscription) => {
-    // Check if viewer already has a sound
-    const existingSound = sounds.find(s => s.viewer_id === viewer.id);
+  const selectViewer = async (viewer: Viewer) => {
+    setSelectedViewer(viewer);
+    setSearchTerm(viewer.display_name || viewer.username);
+    setSearchResults([]);
     
-    setEditingViewerId(viewer.id);
+    const existingSound = sounds.find(s => s.viewer_id === viewer.id);
     if (existingSound) {
-      setSelectedFile(existingSound.sound_file_path);
-      setSelectedVolume(existingSound.volume);
-      setSelectedEnabled(existingSound.enabled);
-    } else {
-      setSelectedFile('');
-      setSelectedVolume(50);
-      setSelectedEnabled(true);
+      setEditingSound(existingSound);
+    }
+  };
+
+  const handleCreateSound = () => {
+    if (!selectedViewer) return;
+    
+    setEditingSound({
+      viewer_id: selectedViewer.id,
+      viewer_username: selectedViewer.username,
+      sound_file_path: '',
+      volume: 50,
+      enabled: true
+    });
+  };
+
+  const handleEditSound = () => {
+    if (!selectedViewer) return;
+    
+    const existingSound = sounds.find(s => s.viewer_id === selectedViewer.id);
+    if (existingSound) {
+      setEditingSound(existingSound);
     }
   };
 
   const handleBrowseFile = async () => {
     try {
       const filePath = await entranceSounds.pickAudioFile();
-      if (filePath) {
-        setSelectedFile(filePath);
+      if (filePath && editingSound) {
+        setEditingSound({
+          ...editingSound,
+          sound_file_path: filePath
+        });
       }
     } catch (err: any) {
-      alert(`Error picking file: ${err.message}`);
+      setMessage({ type: 'error', text: `Error picking file: ${err.message}` });
     }
   };
 
-  const handleSave = async () => {
-    if (!editingViewerId || !selectedFile) {
-      alert('Please select a sound file');
+  const updateSound = (field: keyof entranceSounds.ViewerEntranceSound, value: any) => {
+    if (!editingSound) return;
+    
+    setEditingSound({
+      ...editingSound,
+      [field]: value
+    });
+  };
+
+  const handleSaveSound = async () => {
+    if (!editingSound || !editingSound.viewer_id || !editingSound.sound_file_path) {
+      setMessage({ type: 'error', text: 'Please select an audio file' });
       return;
     }
 
-    const viewer = viewers.find(v => v.id === editingViewerId);
-    if (!viewer) {
-      alert('Viewer not found');
-      return;
-    }
-
-    setSaving(true);
     try {
+      setSaving(true);
+      setMessage(null);
+
       await entranceSounds.upsertEntranceSound({
-        viewer_id: viewer.id,
-        viewer_username: viewer.display_name || viewer.id,
-        sound_file_path: selectedFile,
-        volume: selectedVolume,
-        enabled: selectedEnabled
+        viewer_id: editingSound.viewer_id,
+        viewer_username: editingSound.viewer_username || '',
+        sound_file_path: editingSound.sound_file_path,
+        volume: editingSound.volume || 50,
+        enabled: editingSound.enabled !== false
       });
 
-      alert(`Entrance sound saved for ${viewer.display_name || viewer.id}!`);
-      setEditingViewerId(null);
-      setSelectedFile('');
-      await loadData();
-    } catch (err: any) {
-      alert(`Error saving: ${err.message}`);
+      // Clear edit state first
+      setEditingSound(null);
+      setSelectedViewer(null);
+      setSearchTerm('');
+      setSearchResults([]);
+
+      // Then reload sounds to refresh the table
+      const soundsList = await entranceSounds.getAllEntranceSounds();
+      setSounds(Array.isArray(soundsList) ? soundsList : []);
+
+      setMessage({ type: 'success', text: 'Entrance sound saved successfully!' });
+      setTimeout(() => setMessage(null), 2000);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to save entrance sound' });
     } finally {
       setSaving(false);
     }
   };
 
-  const handleCancel = () => {
-    setEditingViewerId(null);
-    setSelectedFile('');
-    setSelectedVolume(50);
-    setSelectedEnabled(true);
-  };
-
-  const handleDelete = async (viewerId: string, username: string) => {
-    if (!confirm(`Delete entrance sound for ${username}?`)) {
+  const handleDeleteSound = async (viewerId: string, viewerName: string) => {
+    if (!confirm(`Delete entrance sound for ${viewerName}?`)) {
       return;
     }
 
     try {
       await entranceSounds.deleteEntranceSound(viewerId);
-      alert(`Entrance sound deleted for ${username}`);
-      await loadData();
-    } catch (err: any) {
-      alert(`Error deleting: ${err.message}`);
+      
+      // Refresh sounds table
+      const soundsList = await entranceSounds.getAllEntranceSounds();
+      setSounds(Array.isArray(soundsList) ? soundsList : []);
+      
+      setMessage({ type: 'success', text: 'Entrance sound deleted successfully' });
+      setTimeout(() => setMessage(null), 2000);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to delete entrance sound' });
     }
   };
 
-  const handleToggleEnabled = async (viewerId: string, enabled: boolean) => {
+  const handleToggleEnabled = async (viewerId: string, currentEnabled: boolean) => {
     try {
-      await entranceSounds.setEntranceSoundEnabled(viewerId, enabled);
-      await loadData();
-    } catch (err: any) {
-      alert(`Error updating: ${err.message}`);
+      await entranceSounds.setEntranceSoundEnabled(viewerId, !currentEnabled);
+      
+      // Refresh sounds table
+      const soundsList = await entranceSounds.getAllEntranceSounds();
+      setSounds(Array.isArray(soundsList) ? soundsList : []);
+      
+      setMessage({ 
+        type: 'success', 
+        text: `Entrance sound ${!currentEnabled ? 'enabled' : 'disabled'}` 
+      });
+      setTimeout(() => setMessage(null), 2000);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to toggle entrance sound' });
     }
   };
 
-  const getFileName = (filePath: string): string => {
-    return filePath.split('/').pop() || filePath.split('\\').pop() || filePath;
+  const handleCancelEdit = () => {
+    setEditingSound(null);
+    setSelectedViewer(null);
+    setSearchTerm('');
   };
+
+  const getFileName = (path: string) => {
+    return path.split(/[\\/]/).pop() || path;
+  };
+
+  const stats = sounds.reduce(
+    (acc, sound) => ({
+      total: acc.total + 1,
+      enabled: acc.enabled + (sound.enabled ? 1 : 0)
+    }),
+    { total: 0, enabled: 0 }
+  );
 
   if (loading) {
-    return (
-      <div style={{ padding: '20px', textAlign: 'center' }}>
-        <p>Loading entrance sounds...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div style={{ padding: '20px' }}>
-        <div style={{ 
-          backgroundColor: '#f44336', 
-          color: 'white', 
-          padding: '15px', 
-          borderRadius: '4px',
-          marginBottom: '20px'
-        }}>
-          {error}
-        </div>
-        <button onClick={loadData} style={{ padding: '10px 20px' }}>
-          Retry
-        </button>
-      </div>
-    );
+    return <div className="loading">Loading entrance sounds...</div>;
   }
 
   return (
-    <div style={{ padding: '20px' }}>
-      {/* Header with stats */}
-      <div style={{ 
-        marginBottom: '20px', 
-        padding: '15px', 
-        backgroundColor: '#2a2a2a',
-        borderRadius: '8px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <div>
-          <h3 style={{ margin: '0 0 10px 0', color: '#9147ff' }}>Viewer Entrance Sounds</h3>
-          <p style={{ margin: 0, color: '#aaa', fontSize: '14px' }}>
-            Assign custom sounds that play when viewers send their first message of the session
-          </p>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#9147ff' }}>
-            {stats.enabled}/{stats.total}
-          </div>
-          <div style={{ fontSize: '12px', color: '#aaa' }}>
-            Enabled Sounds
-          </div>
-        </div>
+    <div className="viewer-voice-settings-tab entrance-sounds-tab">
+      <div className="tab-header">
+        <h2>Viewer Entrance Sounds</h2>
+        <p className="tab-description">
+          Assign custom sounds that play when viewers send their first message of the stream.
+        </p>
       </div>
 
-      {/* Browser Source URLs */}
-      <BrowserSourceURLDisplay 
-        path="/browser-source/entrance-sounds"
-        title="🎉 Dedicated Browser Source for Entrance Sounds:"
-        description="Add this as a separate Browser Source in OBS specifically for entrance sounds. Recommended size: 1920x1080 (full screen overlay)"
-      />
-
-      {/* Search bar */}
-      <div style={{ marginBottom: '20px' }}>
-        <input
-          type="text"
-          placeholder="Search viewers by username..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '12px',
-            fontSize: '14px',
-            backgroundColor: '#2a2a2a',
-            color: 'white',
-            border: '1px solid #444',
-            borderRadius: '4px'
-          }}
+      <div className="browser-source-section">
+        <BrowserSourceURLDisplay 
+          path="/browser-source/entrance-sounds"
+          port={3737}
+          title="Entrance Sounds Browser Source"
+          description="Add this URL to OBS as a Browser Source. Make sure 'Control audio via OBS' is UNCHECKED."
         />
       </div>
 
-      {/* Editing form */}
-      {editingViewerId && (
-        <div style={{
-          marginBottom: '20px',
-          padding: '20px',
-          backgroundColor: '#2a2a2a',
-          borderRadius: '8px',
-          border: '2px solid #9147ff'
-        }}>
-          <h4 style={{ marginTop: 0, color: '#9147ff' }}>
-            Configure Entrance Sound for {viewers.find(v => v.id === editingViewerId)?.display_name || 'Viewer'}
-          </h4>
+      {message && (
+        <div className={`message message-${message.type}`}>
+          {message.text}
+        </div>
+      )}
 
-          {/* File selection */}
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', color: '#aaa' }}>
-              Sound File:
-            </label>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <input
-                type="text"
-                value={selectedFile}
-                readOnly
+      {!editingSound && (
+        <div className="viewer-search-section">
+          <h3>Search for Viewer</h3>
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder="Type viewer username or display name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+            />
+            {searchResults.length > 0 && (
+              <ul className="autocomplete-results">
+                {searchResults.map(viewer => (
+                  <li 
+                    key={viewer.id}
+                    onClick={() => selectViewer(viewer)}
+                    className="autocomplete-item"
+                  >
+                    <span className="viewer-name">
+                      {viewer.display_name || viewer.username}
+                    </span>
+                    {viewer.hasSound && (
+                      <span className="has-rule-badge">Has Sound</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          
+          {selectedViewer && !editingSound && (
+            <div className="selected-viewer">
+              <p>Selected: <strong>{selectedViewer.display_name || selectedViewer.username}</strong></p>
+              <button onClick={handleCreateSound} className="button button-primary">
+                Create Entrance Sound
+              </button>
+              {selectedViewer.hasSound && (
+                <button onClick={handleEditSound} className="button button-secondary">
+                  Edit Existing Sound
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {editingSound && (
+        <div className="voice-selection-panel sound-config-panel">
+          <h3>Configure Entrance Sound for {selectedViewer?.display_name || selectedViewer?.username}</h3>
+          
+          <div className="file-selector">
+            <label>Audio File:</label>
+            <div className="file-input-group">
+              <input 
+                type="text" 
+                value={editingSound.sound_file_path || ''}
                 placeholder="No file selected"
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  backgroundColor: '#1a1a1a',
-                  color: 'white',
-                  border: '1px solid #444',
-                  borderRadius: '4px',
-                  fontSize: '13px'
-                }}
+                readOnly
+                className="file-path-input"
               />
-              <button
+              <button 
                 onClick={handleBrowseFile}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#444',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
+                className="button button-secondary"
               >
                 Browse...
               </button>
             </div>
-            {selectedFile && (
-              <div style={{ marginTop: '5px', fontSize: '12px', color: '#888' }}>
-                📁 {getFileName(selectedFile)}
+            {editingSound.sound_file_path && (
+              <div className="file-name">
+                📁 {getFileName(editingSound.sound_file_path)}
               </div>
             )}
+            <p className="helper-text">
+              Supported formats: MP3, WAV, OGG, M4A, AAC, FLAC
+            </p>
           </div>
 
-          {/* Volume slider */}
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', color: '#aaa' }}>
-              Volume: {selectedVolume}%
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={selectedVolume}
-              onChange={(e) => setSelectedVolume(Number(e.target.value))}
-              style={{ width: '100%' }}
+          <div className="slider-control">
+            <label>Volume: {editingSound.volume || 50}%</label>
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              step="5"
+              value={editingSound.volume || 50}
+              onChange={(e) => updateSound('volume', parseInt(e.target.value))}
+              className="slider"
             />
           </div>
-
-          {/* Enabled toggle */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-              <input
+          
+          <div className="toggle-control">
+            <label>
+              <input 
                 type="checkbox"
-                checked={selectedEnabled}
-                onChange={(e) => setSelectedEnabled(e.target.checked)}
-                style={{ marginRight: '10px', width: '18px', height: '18px', cursor: 'pointer' }}
+                checked={editingSound.enabled !== false}
+                onChange={(e) => updateSound('enabled', e.target.checked)}
               />
-              <span style={{ fontSize: '14px' }}>Enabled (sound will play on first message)</span>
+              <span>Enabled</span>
             </label>
           </div>
-
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              onClick={handleSave}
-              disabled={saving || !selectedFile}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: selectedFile ? '#9147ff' : '#555',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: selectedFile ? 'pointer' : 'not-allowed',
-                fontSize: '14px',
-                fontWeight: 'bold'
-              }}
+            
+          <div className="button-group">
+            <button 
+              onClick={handleSaveSound} 
+              disabled={saving || !editingSound.sound_file_path}
+              className="button button-primary"
             >
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? 'Saving...' : 'Save Entrance Sound'}
             </button>
-            <button
-              onClick={handleCancel}
+            <button 
+              onClick={handleCancelEdit}
               disabled={saving}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: '#444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
+              className="button button-secondary"
             >
               Cancel
             </button>
@@ -349,144 +364,68 @@ export const EntranceSoundsTab: React.FC = () => {
         </div>
       )}
 
-      {/* Viewers list */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
-        gap: '15px'
-      }}>
-        {viewers.map((viewer) => {
-          const sound = sounds.find(s => s.viewer_id === viewer.id);
-          
-          return (
-            <div
-              key={viewer.id}
-              style={{
-                padding: '15px',
-                backgroundColor: sound ? '#1a3a1a' : '#2a2a2a',
-                borderRadius: '8px',
-                border: sound ? '1px solid #4caf50' : '1px solid #444'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ 
-                    fontSize: '16px', 
-                    fontWeight: 'bold', 
-                    marginBottom: '8px',
-                    color: sound ? '#4caf50' : 'white'
-                  }}>
-                    {viewer.display_name || viewer.id}
-                    {sound && (
-                      <span style={{ 
-                        marginLeft: '10px', 
-                        fontSize: '12px', 
-                        color: sound.enabled ? '#4caf50' : '#888',
-                        backgroundColor: sound.enabled ? '#1a3a1a' : '#333',
-                        padding: '2px 8px',
-                        borderRadius: '4px'
-                      }}>
-                        {sound.enabled ? '✓ Enabled' : '✗ Disabled'}
-                      </span>
-                    )}
-                  </div>
-
-                  {sound ? (
-                    <>
-                      <div style={{ fontSize: '13px', color: '#aaa', marginBottom: '5px' }}>
-                        🔊 {getFileName(sound.sound_file_path)}
-                      </div>
-                      <div style={{ fontSize: '13px', color: '#aaa', marginBottom: '10px' }}>
-                        📊 Volume: {sound.volume}%
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => handleAddSound(viewer)}
-                          style={{
-                            padding: '6px 12px',
-                            backgroundColor: '#444',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleToggleEnabled(viewer.id, !sound.enabled)}
-                          style={{
-                            padding: '6px 12px',
-                            backgroundColor: sound.enabled ? '#666' : '#4caf50',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
-                        >
-                          {sound.enabled ? 'Disable' : 'Enable'}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(viewer.id, viewer.display_name || viewer.id)}
-                          style={{
-                            padding: '6px 12px',
-                            backgroundColor: '#f44336',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ fontSize: '13px', color: '#888', marginBottom: '10px' }}>
-                        No entrance sound configured
-                      </div>
-                      <button
-                        onClick={() => handleAddSound(viewer)}
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: '#9147ff',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        + Add Sound
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      <div className="existing-rules">
+        <h3>Existing Entrance Sounds ({stats.enabled} enabled / {stats.total} total)</h3>
+        {sounds.length === 0 ? (
+          <p className="no-rules">No entrance sounds configured yet.</p>
+        ) : (
+          <table className="rules-table">
+            <thead>
+              <tr>
+                <th>Viewer</th>
+                <th>Audio File</th>
+                <th>Volume</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sounds.map(sound => (
+                <tr key={sound.viewer_id} className={!sound.enabled ? 'disabled-row' : ''}>
+                  <td>{sound.viewer_username}</td>
+                  <td className="file-cell" title={sound.sound_file_path}>
+                    {getFileName(sound.sound_file_path)}
+                  </td>
+                  <td>{sound.volume}%</td>
+                  <td>
+                    <span className={`status-badge ${sound.enabled ? 'status-enabled' : 'status-disabled'}`}>
+                      {sound.enabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </td>
+                  <td>
+                    <button 
+                      onClick={() => {
+                        setSelectedViewer({
+                          id: sound.viewer_id,
+                          username: sound.viewer_username,
+                          display_name: null,
+                          hasSound: true
+                        });
+                        setEditingSound(sound);
+                      }}
+                      className="button-small button-edit"
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      onClick={() => handleToggleEnabled(sound.viewer_id, sound.enabled)}
+                      className={`button-small ${sound.enabled ? 'button-warning' : 'button-success'}`}
+                    >
+                      {sound.enabled ? 'Disable' : 'Enable'}
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteSound(sound.viewer_id, sound.viewer_username)}
+                      className="button-small button-delete"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
-
-      {viewers.length === 0 && (
-        <div style={{ 
-          padding: '40px', 
-          textAlign: 'center', 
-          color: '#888',
-          backgroundColor: '#2a2a2a',
-          borderRadius: '8px'
-        }}>
-          <p style={{ fontSize: '16px', marginBottom: '10px' }}>No viewers found</p>
-          <p style={{ fontSize: '14px' }}>
-            {searchQuery ? 'Try a different search query' : 'Viewers will appear here once they start chatting'}
-          </p>
-        </div>
-      )}
     </div>
   );
 };

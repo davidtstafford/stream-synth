@@ -222,6 +222,31 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_viewer_voice_prefs ON viewer_voice_preferences(viewer_id)
   `);
 
+  // ===== VIEWER ENTRANCE SOUNDS =====
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_entrance_sounds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      viewer_id TEXT NOT NULL UNIQUE,
+      viewer_username TEXT NOT NULL,
+      sound_file_path TEXT NOT NULL,
+      volume INTEGER DEFAULT 100,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_entrance_sounds_viewer_id 
+      ON viewer_entrance_sounds(viewer_id)
+  `);
+  
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_entrance_sounds_enabled 
+      ON viewer_entrance_sounds(enabled)
+  `);
+
   // ===== TTS VOICES (PROVIDERS) =====
 
   db.exec(`
@@ -636,24 +661,12 @@ export function runMigrations(db: Database.Database): void {
     )
   `);
   db.exec(`
-    INSERT INTO twitch_polling_config (
+    INSERT OR IGNORE INTO twitch_polling_config (
       api_type, interval_value, min_interval, max_interval, interval_units, step, description
     ) VALUES 
       ('role_sync', 120, 5, 240, 'minutes', 5, 'Combined sync for Subscribers, VIPs, and Moderators'),
       ('followers', 120, 5, 240, 'minutes', 5, 'Detect new followers and trigger alerts'),
       ('moderation', 120, 5, 240, 'minutes', 5, 'Track ban/timeout/unban moderation actions')
-    ON CONFLICT(api_type) DO UPDATE SET 
-      interval_value = CASE 
-        WHEN excluded.interval_value < excluded.min_interval THEN excluded.min_interval
-        WHEN excluded.interval_value > excluded.max_interval THEN excluded.max_interval
-        ELSE excluded.interval_value
-      END,
-      min_interval = excluded.min_interval,
-      max_interval = excluded.max_interval,
-      interval_units = excluded.interval_units,
-      step = excluded.step,
-      description = excluded.description,
-      updated_at = CURRENT_TIMESTAMP
   `);
 
   // ===== CHAT COMMANDS SYSTEM =====

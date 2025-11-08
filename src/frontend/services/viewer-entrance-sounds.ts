@@ -22,10 +22,20 @@ export interface ViewerEntranceSound {
  */
 export async function getAllEntranceSounds(): Promise<ViewerEntranceSound[]> {
   try {
-    const result = await ipcRenderer.invoke('viewer-entrance-sounds:get-all');
+    const response = await ipcRenderer.invoke('viewer-entrance-sounds:get-all');
+    console.log('[EntranceSounds] Raw IPC response:', response);
+    
+    // Handle wrapped IPC response { success: boolean, data?: T, error?: string }
+    if (!response || !response.success) {
+      console.warn('[EntranceSounds] IPC response not successful:', response);
+      return [];
+    }
+    
+    const result = response.data;
+    
     // Ensure we always return an array
-    if (!result || !Array.isArray(result)) {
-      console.warn('[EntranceSounds] Invalid response from IPC, returning empty array:', result);
+    if (!Array.isArray(result)) {
+      console.warn('[EntranceSounds] Invalid data type from IPC, returning empty array:', result);
       return [];
     }
     return result;
@@ -41,7 +51,15 @@ export async function getAllEntranceSounds(): Promise<ViewerEntranceSound[]> {
  */
 export async function getEntranceSound(viewerId: string): Promise<ViewerEntranceSound | null> {
   try {
-    return await ipcRenderer.invoke('viewer-entrance-sounds:get', viewerId);
+    const response = await ipcRenderer.invoke('viewer-entrance-sounds:get', viewerId);
+    
+    // Handle wrapped IPC response
+    if (!response || !response.success) {
+      console.warn('[EntranceSounds] Get sound response not successful:', response);
+      return null;
+    }
+    
+    return response.data || null;
   } catch (error: any) {
     console.error('[EntranceSounds] Error getting sound:', error);
     throw new Error(error.message || 'Failed to load entrance sound');
@@ -103,10 +121,20 @@ export async function deleteEntranceSound(viewerId: string): Promise<void> {
  */
 export async function getEntranceSoundCount(): Promise<{ total: number; enabled: number }> {
   try {
-    const result = await ipcRenderer.invoke('viewer-entrance-sounds:get-count');
+    const response = await ipcRenderer.invoke('viewer-entrance-sounds:get-count');
+    console.log('[EntranceSounds] Raw count response:', response);
+    
+    // Handle wrapped IPC response
+    if (!response || !response.success) {
+      console.warn('[EntranceSounds] Count response not successful:', response);
+      return { total: 0, enabled: 0 };
+    }
+    
+    const result = response.data;
+    
     // Ensure we have valid counts
     if (!result || typeof result.total !== 'number') {
-      console.warn('[EntranceSounds] Invalid count response, returning zeros:', result);
+      console.warn('[EntranceSounds] Invalid count data, returning zeros:', result);
       return { total: 0, enabled: 0 };
     }
     return result;

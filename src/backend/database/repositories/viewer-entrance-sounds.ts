@@ -70,10 +70,13 @@ export class ViewerEntranceSoundsRepository extends BaseRepository<ViewerEntranc
   getAll(): ViewerEntranceSound[] {
     const db = this.getDatabase();
     
-    return db.prepare(`
+    const result = db.prepare(`
       SELECT * FROM viewer_entrance_sounds 
       ORDER BY viewer_username ASC
-    `).all() as ViewerEntranceSound[];
+    `).all();
+    
+    console.log('[ViewerEntranceSoundsRepo] getAll() result:', result, 'Type:', typeof result);
+    return Array.isArray(result) ? result as ViewerEntranceSound[] : [];
   }
 
   /**
