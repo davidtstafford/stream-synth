@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as tts from '../../../services/tts';
 import { BrowserSourceURLDisplay } from '../../../components/BrowserSourceURLDisplay';
-import { AzureSetupGuide, WebSpeechSetupGuide, GoogleSetupGuide } from './VoiceSettingGuides';
+import { AzureSetupGuide, WebSpeechSetupGuide, GoogleSetupGuide, StreamDeckSetupGuide } from './VoiceSettingGuides';
 
 // Import namespace alias for type compatibility
 import * as ttsService from '../../../services/tts';
@@ -89,6 +89,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   const [showAzureGuide, setShowAzureGuide] = useState(false);
   const [showWebSpeechGuide, setShowWebSpeechGuide] = useState(false);
   const [showGoogleGuide, setShowGoogleGuide] = useState(false);
+  const [showStreamDeckGuide, setShowStreamDeckGuide] = useState(false);
   
   const filteredGroups = getFilteredGroups();
   const visibleCount = getVisibleVoiceCount();
@@ -165,6 +166,25 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           />
           <span className="checkbox-text">Enable TTS</span>
         </label>
+        <div style={{ marginLeft: '28px', marginTop: '8px' }}>
+          <button
+            onClick={() => setShowStreamDeckGuide(true)}
+            style={{
+              padding: '6px 12px',
+              fontSize: '0.85em',
+              backgroundColor: '#555',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              color: '#fff',
+              fontWeight: 'bold',
+              whiteSpace: 'nowrap'
+            }}
+            title="Learn how to control TTS from Stream Deck"
+          >
+            🎮 Stream Deck Setup
+          </button>
+        </div>
       </div>      {/* Provider Enable Toggles */}
       <div className="setting-group">
         <label className="setting-label">
@@ -752,6 +772,13 @@ export const VoiceSettingsTab: React.FC<Props> = ({
         <GoogleSetupGuide
           onClose={() => setShowGoogleGuide(false)}
           onComplete={handleGoogleGuideComplete}
+        />
+      )}
+
+      {/* Stream Deck Setup Guide Modal */}
+      {showStreamDeckGuide && (
+        <StreamDeckSetupGuide
+          onClose={() => setShowStreamDeckGuide(false)}
         />
       )}
     </div>

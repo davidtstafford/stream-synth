@@ -17,6 +17,7 @@ import { registerBrowserSourceChannelHandlers } from './browser-source-channels'
 import { setupFilePickerHandlers, setMainWindowForFilePicker } from './file-picker';
 import { setupViewerEntranceSoundHandlers } from './viewer-entrance-sounds';
 import { ViewerTTSRulesRepository } from '../../database/repositories/viewer-tts-rules';
+import { TTSRepository } from '../../database/repositories/tts';
 import './twitch-polling'; // Auto-registers handlers
 
 export function setupIpcHandlers(): void {
@@ -41,6 +42,7 @@ export function setMainWindow(mainWindow: BrowserWindow): void {
   setMainWindowForIRC(mainWindow);
   setMainWindowForFilePicker(mainWindow);
   ViewerTTSRulesRepository.setMainWindow(mainWindow);
+  TTSRepository.setMainWindow(mainWindow);
   
   // Setup the event storage handler which needs mainWindow reference
   setupEventStorageHandler(initializeTTS, mainWindow);

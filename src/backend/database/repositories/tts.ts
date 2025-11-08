@@ -1,4 +1,5 @@
 import { BaseRepository } from '../base-repository';
+import { BrowserWindow } from 'electron';
 
 export interface TTSSettingRow {
   key: string;
@@ -9,6 +10,13 @@ export interface TTSSettingRow {
  * TTSRepository - Manages TTS configuration and viewer TTS preferences
  */
 export class TTSRepository extends BaseRepository<TTSSettingRow> {
+  private static mainWindow: BrowserWindow | null = null;
+
+  static setMainWindow(mainWindow: BrowserWindow | null): void {
+    console.log(`[TTSRepository] setMainWindow called: ${mainWindow ? 'window set' : 'window cleared'}`);
+    TTSRepository.mainWindow = mainWindow;
+  }
+
   get tableName(): string {
     return 'tts_settings';
   }
@@ -60,6 +68,15 @@ export class TTSRepository extends BaseRepository<TTSSettingRow> {
       VALUES (?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `).run(key, stringValue);
+
+    // Notify frontend if TTS enabled state changed
+    if ((key === 'tts_enabled') && TTSRepository.mainWindow && !TTSRepository.mainWindow.isDestroyed()) {
+      console.log(`[TTSRepository] TTS tts_enabled changed: ${value}, sending IPC notification to frontend`);
+      TTSRepository.mainWindow.webContents.send('tts:settings-changed', {
+        enabled: value === true || value === 'true',
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 
   /**
@@ -80,6 +97,15 @@ export class TTSRepository extends BaseRepository<TTSSettingRow> {
     });
 
     transaction(settings);
+
+    // Notify frontend if TTS enabled state changed (check the actual database field name: tts_enabled)
+    if (settings.tts_enabled !== undefined && TTSRepository.mainWindow && !TTSRepository.mainWindow.isDestroyed()) {
+      console.log(`[TTSRepository] TTS tts_enabled changed via saveSettings: ${settings.tts_enabled}, sending IPC notification`);
+      TTSRepository.mainWindow.webContents.send('tts:settings-changed', {
+        enabled: settings.tts_enabled === true || settings.tts_enabled === 'true',
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 
   /**

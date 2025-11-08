@@ -2,6 +2,8 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Server as SocketIOServer } from 'socket.io';
+import { TTSRepository } from '../database/repositories/tts';
+import { reloadTTSSettings } from '../core/ipc-handlers/tts';
 import { AlertPayload } from './event-action-processor';
 import type { TTSBrowserSourceBridge } from './tts-browser-source-bridge';
 
@@ -148,6 +150,22 @@ export class BrowserSourceServer {
         uptime: process.uptime()
       }));
     }
+    // Route: /api/tts/toggle -> toggle TTS enabled state (Stream Deck compatible)
+    else if (url === '/api/tts/toggle') {
+      this.handleTTSToggle(req, res);
+    }
+    // Route: /api/tts/status -> get current TTS status
+    else if (url === '/api/tts/status') {
+      this.handleTTSStatus(req, res);
+    }
+    // Route: /api/tts/enable -> enable TTS
+    else if (url === '/api/tts/enable') {
+      this.handleTTSEnable(req, res, true);
+    }
+    // Route: /api/tts/disable -> disable TTS
+    else if (url === '/api/tts/disable') {
+      this.handleTTSEnable(req, res, false);
+    }
     // Route: / -> serve info page
     else if (url === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -157,10 +175,15 @@ export class BrowserSourceServer {
         <head>
           <title>Stream Synth Browser Source Server</title>
           <style>
-            body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+            body { font-family: Arial, sans-serif; max-width: 900px; margin: 50px auto; padding: 20px; }
             h1 { color: #9147ff; }
+            h2 { color: #555; margin-top: 30px; }
             code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
             .info { background: #e8f4f8; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            .api-section { background: #f9f9f9; padding: 15px; border-left: 4px solid #9147ff; border-radius: 4px; margin: 15px 0; }
+            .endpoint { background: #fff; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; }
+            .method { color: #007bff; font-weight: bold; }
+            .streamdeck { background: #fffacd; padding: 10px; border-left: 4px solid #ffa500; border-radius: 4px; margin: 10px 0; }
           </style>
         </head>
         <body>
@@ -170,25 +193,35 @@ export class BrowserSourceServer {
             <p><strong>Port:</strong> ${this.port}</p>
             <p><strong>Connected Clients:</strong> ${this.connectedClients.size}</p>
             <p><strong>Alerts Sent:</strong> ${this.alertsSent}</p>
-          </div>          <h2>📺 OBS Browser Source URL</h2>
-          <p>Add this URL to your OBS browser source:</p>
-          <p><code>http://localhost:${this.port}/browser-source</code></p>
-          
-          <h2>🎙️ TTS Browser Source URL</h2>
-          <p>For Text-to-Speech overlay in OBS:</p>
-          <p><code>http://localhost:${this.port}/browser-source/tts</code></p>
-          
-          <h2>🎉 Entrance Sounds Browser Source URL</h2>
-          <p>For viewer entrance sounds in OBS:</p>
-          <p><code>http://localhost:${this.port}/browser-source/entrance-sounds</code></p>
-          
-          <h2>🔗 Endpoints</h2>
-          <ul>
-            <li><code>/browser-source</code> - Browser source overlay page (alerts, event actions)</li>
-            <li><code>/browser-source/tts</code> - TTS browser source page</li>
-            <li><code>/browser-source/entrance-sounds</code> - Entrance sounds browser source page</li>
-            <li><code>/health</code> - Health check endpoint</li>
-          </ul>
+          </div>          
+          <h2>📺 OBS Browser Source URLs</h2>
+          <div class="api-section">
+            <p><strong>Overlay/Alerts:</strong> <code>http://localhost:${this.port}/browser-source</code></p>
+            <p><strong>TTS:</strong> <code>http://localhost:${this.port}/browser-source/tts</code></p>
+            <p><strong>Entrance Sounds:</strong> <code>http://localhost:${this.port}/browser-source/entrance-sounds</code></p>
+          </div>
+
+          <h2>� Stream Deck API Endpoints</h2>
+          <div class="streamdeck">
+            <strong>⚠️ Note:</strong> All Stream Deck endpoints are HTTP GET requests to <code>http://localhost:${this.port}</code>
+          </div>
+          <div class="api-section">
+            <div class="endpoint"><span class="method">GET</span> /api/tts/toggle - Toggle TTS on/off</div>
+            <div class="endpoint"><span class="method">GET</span> /api/tts/status - Get current TTS status</div>
+            <div class="endpoint"><span class="method">GET</span> /api/tts/enable - Enable TTS</div>
+            <div class="endpoint"><span class="method">GET</span> /api/tts/disable - Disable TTS</div>
+          </div>
+
+          <h2>� All Endpoints</h2>
+          <div class="api-section">
+            <ul>
+              <li><code>/browser-source</code> - Browser source overlay page (alerts, event actions)</li>
+              <li><code>/browser-source/tts</code> - TTS browser source page</li>
+              <li><code>/browser-source/entrance-sounds</code> - Entrance sounds browser source page</li>
+              <li><code>/health</code> - Health check endpoint</li>
+              <li><code>/api/tts/*</code> - Stream Deck TTS control API</li>
+            </ul>
+          </div>
         </body>
         </html>
       `);
@@ -504,6 +537,122 @@ export class BrowserSourceServer {
     
     socket.emit('alert', testPayload);
     console.log('[BrowserSourceServer] Test alert sent');
+  }
+
+  /**
+   * Handle TTS toggle request (Stream Deck compatible)
+   */
+  private handleTTSToggle(req: http.IncomingMessage, res: http.ServerResponse): void {
+    // Read request body for POST requests
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    
+    req.on('end', async () => {
+      try {
+        console.log('[BrowserSourceServer] TTS toggle request received');
+        
+        // Get current TTS settings from database
+        const ttsRepo = new TTSRepository();
+        const currentSettings = ttsRepo.getSettings();
+        // Note: The actual enabled field in database is 'tts_enabled', not 'enabled'
+        const currentEnabled = currentSettings.tts_enabled ?? true;
+        const newEnabledState = !currentEnabled;
+        
+        console.log(`[BrowserSourceServer] Current tts_enabled: ${currentEnabled}, toggling to: ${newEnabledState}`);
+        
+        // Save new state using the correct database field name (this will also send IPC to frontend via TTSRepository)
+        console.log('[BrowserSourceServer] Calling ttsRepo.saveSetting()...');
+        ttsRepo.saveSetting('tts_enabled', newEnabledState);
+        console.log('[BrowserSourceServer] saveSetting() completed');
+        
+        // Reload TTS manager with new settings
+        console.log('[BrowserSourceServer] Reloading TTS settings...');
+        await reloadTTSSettings();
+        console.log('[BrowserSourceServer] TTS manager reloaded');
+        
+        console.log(`[BrowserSourceServer] TTS toggled to: ${newEnabledState}`);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          enabled: newEnabledState,
+          message: `TTS ${newEnabledState ? 'enabled' : 'disabled'}`
+        }));
+      } catch (error: any) {
+        console.error('[BrowserSourceServer] Error toggling TTS:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: false,
+          error: error.message || 'Failed to toggle TTS'
+        }));
+      }
+    });
+  }
+
+  /**
+   * Handle TTS status request
+   */
+  private handleTTSStatus(req: http.IncomingMessage, res: http.ServerResponse): void {
+    (async () => {
+      try {
+        const ttsRepo = new TTSRepository();
+        const settings = ttsRepo.getSettings();
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          enabled: settings.enabled || false,
+          voiceId: settings.voiceId || '',
+          volume: settings.volume || 100,
+          rate: settings.rate || 1.0,
+          pitch: settings.pitch || 1.0
+        }));
+      } catch (error: any) {
+        console.error('[BrowserSourceServer] Error getting TTS status:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: false,
+          error: error.message || 'Failed to get TTS status'
+        }));
+      }
+    })();
+  }
+
+  /**
+   * Handle TTS enable/disable request
+   */
+  private handleTTSEnable(req: http.IncomingMessage, res: http.ServerResponse, enabled: boolean): void {
+    (async () => {
+      try {
+        console.log(`[BrowserSourceServer] TTS ${enabled ? 'enable' : 'disable'} request`);
+        
+        // Update TTS setting in database using the correct field name (this will also send IPC to frontend)
+        const ttsRepo = new TTSRepository();
+        ttsRepo.saveSetting('tts_enabled', enabled);
+        
+        // Reload TTS manager with new settings
+        console.log('[BrowserSourceServer] Reloading TTS settings...');
+        await reloadTTSSettings();
+        
+        console.log(`[BrowserSourceServer] TTS set to: ${enabled}`);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          enabled: enabled,
+          message: `TTS ${enabled ? 'enabled' : 'disabled'}`
+        }));
+      } catch (error: any) {
+        console.error('[BrowserSourceServer] Error setting TTS:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: false,
+          error: error.message || `Failed to ${enabled ? 'enable' : 'disable'} TTS`
+        }));
+      }
+    })();
   }
   
   /**

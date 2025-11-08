@@ -41,6 +41,19 @@ export const TTS: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    // Listen for TTS settings changes from backend (e.g., Stream Deck API)
+    const { ipcRenderer } = window.require('electron');
+    const handleTTSSettingsChanged = async () => {
+      console.log('[TTS Screen] TTS settings changed notification received, reloading...');
+      await loadData();
+    };
+
+    ipcRenderer.on('tts:settings-changed', handleTTSSettingsChanged);
+
+    return () => {
+      ipcRenderer.off('tts:settings-changed', handleTTSSettingsChanged);
+    };
   }, []);
 
   const loadData = async () => {
