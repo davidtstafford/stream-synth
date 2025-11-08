@@ -161,11 +161,14 @@ export class EventActionsRepository extends BaseRepository<EventAction> {
     const db = this.getDatabase();
     
     const updates: string[] = [];
-    const params: any = { id };
-
-    if (payload.is_enabled !== undefined) {
+    const params: any = { id };    if (payload.is_enabled !== undefined) {
       updates.push('is_enabled = @is_enabled');
       params.is_enabled = payload.is_enabled ? 1 : 0;
+    }
+    
+    if (payload.browser_source_channel !== undefined) {
+      updates.push('browser_source_channel = @browser_source_channel');
+      params.browser_source_channel = payload.browser_source_channel;
     }
     
     if (payload.text_enabled !== undefined) {

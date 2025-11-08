@@ -324,14 +324,17 @@ export class EventSubManager extends EventEmitter {
 
     console.log('[EventSub] Subscribing to', eventTypes.length, 'event types');
 
-    for (const eventType of eventTypes) {
-      try {
-        await this.subscribeToEvent(eventType);
-        this.subscriptions.add(eventType);
-      } catch (error) {
-        console.error(`[EventSub] Failed to subscribe to ${eventType}:`, error);
-      }
-    }
+    // Subscribe to all events in parallel to minimize startup window
+    // Use Promise.allSettled to continue even if some fail
+    const subscriptionPromises = eventTypes.map((eventType) =>
+      this.subscribeToEvent(eventType)
+        .then(() => this.subscriptions.add(eventType))
+        .catch((error) => {
+          console.error(`[EventSub] Failed to subscribe to ${eventType}:`, error);
+        })
+    );
+
+    await Promise.allSettled(subscriptionPromises);
 
     console.log('[EventSub] Subscription complete');
   }  /**
@@ -350,8 +353,14 @@ export class EventSubManager extends EventEmitter {
                eventType === 'channel.chat.clear_user_messages' ||
                eventType === 'channel.chat.message_delete' ||
                eventType === 'channel.chat_settings.update') {
-      // Chat events require user_id
-      condition.user_id = this.channelId;
+      // Chat events require user_id to be the authenticated user's ID
+      condition.user_id = this.userId;
+    } else if (eventType === 'channel.shoutout.create' ||
+               eventType === 'channel.shoutout.receive' ||
+               eventType === 'channel.shield_mode.begin' ||
+               eventType === 'channel.shield_mode.end') {
+      // These events require moderator_user_id - use broadcaster as moderator
+      condition.moderator_user_id = this.channelId;
     }
 
     // Determine the correct version for each event type

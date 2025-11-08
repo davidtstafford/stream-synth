@@ -195,10 +195,6 @@ export const ValidationSchemas = {
     { type: 'required' as const },
     { type: 'url', message: 'Must be a valid webhook URL' }
   ],
-  discordWebhook: [
-    { type: 'required' as const },
-    { type: 'pattern', regex: /^https:\/\/discord\.com\/api\/webhooks\/\d+\// }
-  ],
 
   // Credentials
   apiKey: [{ type: 'required' as const }, { type: 'minLength', min: 10 }],

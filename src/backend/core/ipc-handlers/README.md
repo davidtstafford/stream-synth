@@ -88,26 +88,7 @@ Handles Twitch OAuth and real-time WebSocket connections.
 
 ---
 
-### 4. **discord.ts** - Discord Webhook Operations
-Manages Discord webhook communication for notifications.
-
-**Responsibilities:**
-- Webhook validation and storage
-- Sending TTS notification messages to Discord
-- Event forwarding to Discord channels
-- Webhook health checking
-
-**IPC Events:**
-- `discord:validate-webhook` - Test Discord webhook URL
-- `discord:send-notification` - Post message to Discord
-- `discord:get-webhooks` - Retrieve configured webhooks
-- `discord:save-webhook` - Store new webhook configuration
-
-**Dependencies:** Discord API client, Database for webhook storage
-
----
-
-### 5. **irc.ts** - Twitch IRC Chat Operations
+### 4. **irc.ts** - Twitch IRC Chat Operations
 Handles Twitch IRC chat message handling and commands.
 
 **Responsibilities:**
@@ -133,7 +114,7 @@ Handles Twitch IRC chat message handling and commands.
 
 ---
 
-### 6. **viewer-rules.ts** - Viewer-Specific TTS Rules
+### 5. **viewer-rules.ts** - Viewer-Specific TTS Rules
 Manages custom rules for individual viewers' TTS behavior.
 
 **Responsibilities:**
@@ -153,7 +134,7 @@ Manages custom rules for individual viewers' TTS behavior.
 
 ---
 
-### 7. **startup.ts** - Application Initialization
+### 6. **startup.ts** - Application Initialization
 Handles one-time startup tasks and initialization routines.
 
 **Responsibilities:**
@@ -186,7 +167,6 @@ setupIpcHandlers()
   ├─ setupTwitchHandlers()
   ├─ setupTTSHandlers()
   ├─ setupViewerRulesHandlers()
-  ├─ setupDiscordHandlers()
   └─ setupIRCHandlers()
   ↓
 setMainWindow(mainWindow)
@@ -293,7 +273,7 @@ Renderer ← IPC Event ← Main Process
 
 ### Real-Time Events (Chat, WebSocket)
 ```
-External Service (Twitch, Discord) → IPC Handler
+External Service (Twitch) → IPC Handler
   ↓ (event listener)
 Renderer ← IPC Event ← Main Process
 ```

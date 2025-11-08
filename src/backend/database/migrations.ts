@@ -1,7 +1,13 @@
 import Database from 'better-sqlite3';
 
+/**
+ * Database Migrations
+ * 
+ * Clean schema initialization without patches or compatibility code
+ * Run this on fresh database or after deleting old database
+ */
 export function runMigrations(db: Database.Database): void {
-  console.log('[Migrations] Starting database schema initialization...');
+  console.log('[Migrations] Starting clean database schema initialization...');
 
   // ===== CORE AUTHENTICATION & SESSIONS =====
 
@@ -84,14 +90,15 @@ export function runMigrations(db: Database.Database): void {
       ('user_cooldown_seconds', '30'),
       ('global_cooldown_enabled', 'false'),
       ('global_cooldown_seconds', '5'),
-      ('max_queue_size', '20'),
-      ('max_emotes_per_message', '5'),
+      ('max_queue_size', '20'),      ('max_emotes_per_message', '5'),
       ('max_emojis_per_message', '3'),
       ('strip_excessive_emotes', 'true'),
       ('max_repeated_chars', '3'),
       ('max_repeated_words', '2'),
       ('copypasta_filter_enabled', 'false'),
-      ('blocked_words', '[]')
+      ('blocked_words', '[]'),
+      ('browser_source_enabled', 'false'),
+      ('browser_source_mute_app', 'false')
   `);
 
   // ===== VIEWERS & SUBSCRIPTIONS =====
@@ -213,6 +220,31 @@ export function runMigrations(db: Database.Database): void {
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_viewer_voice_prefs ON viewer_voice_preferences(viewer_id)
+  `);
+
+  // ===== VIEWER ENTRANCE SOUNDS =====
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS viewer_entrance_sounds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      viewer_id TEXT NOT NULL UNIQUE,
+      viewer_username TEXT NOT NULL,
+      sound_file_path TEXT NOT NULL,
+      volume INTEGER DEFAULT 100,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_entrance_sounds_viewer_id 
+      ON viewer_entrance_sounds(viewer_id)
+  `);
+  
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_viewer_entrance_sounds_enabled 
+      ON viewer_entrance_sounds(enabled)
   `);
 
   // ===== TTS VOICES (PROVIDERS) =====
@@ -629,24 +661,12 @@ export function runMigrations(db: Database.Database): void {
     )
   `);
   db.exec(`
-    INSERT INTO twitch_polling_config (
+    INSERT OR IGNORE INTO twitch_polling_config (
       api_type, interval_value, min_interval, max_interval, interval_units, step, description
     ) VALUES 
       ('role_sync', 120, 5, 240, 'minutes', 5, 'Combined sync for Subscribers, VIPs, and Moderators'),
       ('followers', 120, 5, 240, 'minutes', 5, 'Detect new followers and trigger alerts'),
       ('moderation', 120, 5, 240, 'minutes', 5, 'Track ban/timeout/unban moderation actions')
-    ON CONFLICT(api_type) DO UPDATE SET 
-      interval_value = CASE 
-        WHEN excluded.interval_value < excluded.min_interval THEN excluded.min_interval
-        WHEN excluded.interval_value > excluded.max_interval THEN excluded.max_interval
-        ELSE excluded.interval_value
-      END,
-      min_interval = excluded.min_interval,
-      max_interval = excluded.max_interval,
-      interval_units = excluded.interval_units,
-      step = excluded.step,
-      description = excluded.description,
-      updated_at = CURRENT_TIMESTAMP
   `);
 
   // ===== CHAT COMMANDS SYSTEM =====
@@ -703,6 +723,8 @@ export function runMigrations(db: Database.Database): void {
       ('hello', '~', 1, 'viewer', 30),
       ('voices', '~', 1, 'viewer', 60),
       ('setvoice', '~', 1, 'viewer', 10),
+      ('setvoicepitch', '~', 1, 'viewer', 10),
+      ('setvoicespeed', '~', 1, 'viewer', 10),
       ('mutevoice', '~', 1, 'moderator', 5),
       ('unmutevoice', '~', 1, 'moderator', 5),
       ('cooldownvoice', '~', 1, 'moderator', 5),
@@ -801,40 +823,36 @@ export function runMigrations(db: Database.Database): void {
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_event_actions_enabled ON event_actions(is_enabled)
-  `);
-  db.exec(`
+  `);  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_event_actions_channel_event ON event_actions(channel_id, event_type)
   `);
 
-  // Initialize default browser source channel
-  initializeDefaultChannel(db);
+  // ===== DISCORD BOT CONFIGURATION (Phase 2) =====
 
-  console.log('[Migrations] Database schema initialization complete');
-}
-
-/**
- * Initialize default browser source channel for all connected channels
- * This ensures backwards compatibility and provides a starting point for users
- */
-function initializeDefaultChannel(db: Database.Database): void {
-  console.log('[Migrations] Initializing default browser source channels...');
-
-  // Get all unique channel_ids from connection_sessions or event_actions
-  const channels = db.prepare(`
-    SELECT DISTINCT channel_id 
-    FROM connection_sessions 
-    WHERE channel_id IS NOT NULL
-  `).all() as Array<{ channel_id: string }>;
-
-  const insertChannel = db.prepare(`
-    INSERT OR IGNORE INTO browser_source_channels 
-    (channel_id, name, display_name, description, color, icon, is_default, is_enabled)
-    VALUES (?, 'default', 'Default Channel', 'All unassigned alerts', '#9147ff', '📺', 1, 1)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS discord_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      bot_token TEXT,
+      bot_id TEXT,
+      bot_status TEXT DEFAULT 'disconnected',
+      last_connected_at DATETIME,
+      last_disconnected_at DATETIME,
+      auto_start_enabled BOOLEAN DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
   `);
 
-  for (const { channel_id } of channels) {
-    insertChannel.run(channel_id);
-  }
+  db.exec(`
+    INSERT OR IGNORE INTO discord_settings (id, bot_status) VALUES (1, 'disconnected')
+  `);
 
-  console.log(`[Migrations] Created default channels for ${channels.length} channel(s)`);
+  // ===== CLEANUP: REMOVE UNSUPPORTED EVENTS =====
+  // Remove channel.raid - Twitch requires either from_broadcaster_user_id or to_broadcaster_user_id
+  // but we don't know which one to use, so this event cannot be subscribed to
+  db.exec(`
+    DELETE FROM event_subscriptions WHERE event_type = 'channel.raid'
+  `);
+
+  console.log('[Migrations] Database schema initialization complete');
 }

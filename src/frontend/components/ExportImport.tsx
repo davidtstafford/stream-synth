@@ -233,6 +233,34 @@ export const ExportImport: React.FC<ExportImportProps> = ({ userId, onImportComp
                   <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.viewers?.length || 0}</p>
                 </div>
                 <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Chat Commands</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.chat_commands_config?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Entrance Sounds</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.entrance_sounds?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Event Actions</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.event_actions?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Viewer Rules</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.viewer_rules?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>VIPs</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.vip_list?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Subscribers</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.subscriber_list?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
+                  <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Moderators</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.moderator_list?.length || 0}</p>
+                </div>
+                <div style={{ padding: '10px', backgroundColor: '#2d3d2d', borderRadius: '4px', border: '1px solid #4d7a45' }}>
                   <p style={{ fontSize: '11px', color: '#888', margin: '0 0 4px 0' }}>Total Events</p>
                   <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#6dff8e', margin: 0 }}>{preview.event_profiles?.reduce((sum: number, p: any) => sum + p.events.length, 0) || 0}</p>
                 </div>
@@ -424,6 +452,194 @@ export const ExportImport: React.FC<ExportImportProps> = ({ userId, onImportComp
                       +{preview.viewers.length - 12} more viewers
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {preview.chat_commands_config && preview.chat_commands_config.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#9147ff', marginBottom: '8px' }}>💬 Chat Commands ({preview.chat_commands_config.length})</p>
+                <div style={{ 
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                  gap: '8px'
+                }}>
+                  {preview.chat_commands_config.map((cmd: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '8px',
+                      backgroundColor: '#252525',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      border: '1px solid #333'
+                    }}>
+                      <p style={{ margin: '0 0 4px 0', color: '#6dff8e', fontWeight: 'bold' }}>{cmd.command_name}</p>
+                      <p style={{ margin: '0 0 2px 0', color: '#aaa', fontSize: '10px' }}>Rate: {cmd.rate_limit_seconds}s</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {preview.entrance_sounds && preview.entrance_sounds.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#9147ff', marginBottom: '8px' }}>🎵 Entrance Sounds ({preview.entrance_sounds.length})</p>
+                <div style={{ 
+                  maxHeight: '250px',
+                  overflowY: 'auto',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                  gap: '8px'
+                }}>
+                  {preview.entrance_sounds.map((sound: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '8px',
+                      backgroundColor: '#252525',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      border: '1px solid #333'
+                    }}>
+                      <p style={{ margin: '0 0 4px 0', color: '#6dff8e', fontWeight: 'bold' }}>Viewer {sound.viewer_id}</p>
+                      <p style={{ margin: 0, color: '#aaa', fontSize: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        🎵 Sound file stored
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {preview.event_actions && preview.event_actions.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#9147ff', marginBottom: '8px' }}>⚡ Event Actions ({preview.event_actions.length})</p>
+                <div style={{ 
+                  maxHeight: '250px',
+                  overflowY: 'auto',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                  gap: '8px'
+                }}>
+                  {preview.event_actions.map((action: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '8px',
+                      backgroundColor: '#252525',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      border: '1px solid #333'
+                    }}>
+                      <p style={{ margin: '0 0 2px 0', color: '#6dff8e', fontWeight: 'bold' }}>{action.event_type}</p>
+                      <p style={{ margin: '0 0 2px 0', color: '#aaa', fontSize: '10px' }}>Type: {action.action_type || 'Custom'}</p>
+                      <p style={{ margin: 0, color: '#aaa', fontSize: '10px' }}>Channel: {action.channel_id}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {preview.viewer_rules && preview.viewer_rules.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#9147ff', marginBottom: '8px' }}>📋 Viewer Rules ({preview.viewer_rules.length})</p>
+                <div style={{ 
+                  maxHeight: '250px',
+                  overflowY: 'auto',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                  gap: '8px'
+                }}>
+                  {preview.viewer_rules.map((rule: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '8px',
+                      backgroundColor: '#252525',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      border: '1px solid #333'
+                    }}>
+                      <p style={{ margin: '0 0 4px 0', color: '#6dff8e', fontWeight: 'bold' }}>Rule: {rule.rule_type}</p>
+                      <p style={{ margin: 0, color: '#aaa', fontSize: '10px' }}>Viewer {rule.viewer_id}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {preview.vip_list && preview.vip_list.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#ffd700', marginBottom: '8px' }}>👑 VIPs ({preview.vip_list.length})</p>
+                <div style={{ 
+                  maxHeight: '250px',
+                  overflowY: 'auto',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                  gap: '8px'
+                }}>
+                  {preview.vip_list.map((vip: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '8px',
+                      backgroundColor: 'rgba(255, 215, 0, 0.1)',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      border: '1px solid #ffd700'
+                    }}>
+                      <p style={{ margin: 0, color: '#ffd700', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {vip.viewer_name || `Viewer ${vip.viewer_id}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {preview.subscriber_list && preview.subscriber_list.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#ff00ff', marginBottom: '8px' }}>💜 Subscribers ({preview.subscriber_list.length})</p>
+                <div style={{ 
+                  maxHeight: '250px',
+                  overflowY: 'auto',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                  gap: '8px'
+                }}>
+                  {preview.subscriber_list.map((sub: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '8px',
+                      backgroundColor: 'rgba(255, 0, 255, 0.1)',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      border: '1px solid #ff00ff'
+                    }}>
+                      <p style={{ margin: 0, color: '#ff00ff', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {sub.viewer_name || `Viewer ${sub.viewer_id}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {preview.moderator_list && preview.moderator_list.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#00ff00', marginBottom: '8px' }}>🛡️ Moderators ({preview.moderator_list.length})</p>
+                <div style={{ 
+                  maxHeight: '250px',
+                  overflowY: 'auto',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                  gap: '8px'
+                }}>
+                  {preview.moderator_list.map((mod: any, idx: number) => (
+                    <div key={idx} style={{ 
+                      padding: '8px',
+                      backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      border: '1px solid #00ff00'
+                    }}>
+                      <p style={{ margin: 0, color: '#00ff00', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {mod.viewer_name || `Viewer ${mod.viewer_id}`}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

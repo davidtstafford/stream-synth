@@ -123,7 +123,7 @@ export const ChatCommandsScreen: React.FC = () => {
           All commands use the <code>~</code> prefix by default (e.g., <code>~hello</code>)
         </p>
         <p style={{ margin: '5px 0', color: '#aaa' }}>
-          <strong>Viewer Commands:</strong> ~hello, ~voices, ~setvoice
+          <strong>Viewer Commands:</strong> ~hello, ~voices, ~setvoice, ~setvoicepitch, ~setvoicespeed
         </p>
         <p style={{ margin: '5px 0', color: '#aaa' }}>
           <strong>Moderator Commands:</strong> ~mutevoice, ~unmutevoice, ~cooldownvoice, ~mutetts, ~unmutetts

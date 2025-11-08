@@ -191,6 +191,47 @@
   align-items: center;
 }
 
+.filter-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  user-select: none;
+}
+
+.filter-label span {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.channel-filter-select {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 150px;
+}
+
+.channel-filter-select:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.channel-filter-select:focus {
+  outline: none;
+  border-color: #9147ff;
+  box-shadow: 0 0 0 2px rgba(145, 71, 255, 0.2);
+}
+
+.channel-filter-select option {
+  background: #2d2d30;
+  color: white;
+}
+
 .filter-checkbox {
   display: flex;
   align-items: center;
@@ -346,8 +387,8 @@
 }
 
 .list-header {
-  display: grid;
-  grid-template-columns: 2fr 1.5fr 2fr 1fr 2fr;
+  display: flex;
+  align-items: center;
   gap: 12px;
   padding: 12px 16px;
   background: #1a1a1a;
@@ -359,14 +400,61 @@
   color: #aaa;
 }
 
+.list-header .header-cell {
+  display: flex;
+  align-items: center;
+}
+
+.list-header .header-cell.event-type {
+  flex: 0 0 200px;
+}
+
+.list-header .header-cell.media-types {
+  flex: 1 1 auto;
+  min-width: 150px;
+}
+
+.list-header .header-cell.status {
+  flex: 0 0 80px;
+  text-align: right;
+}
+
+.list-header .header-cell.actions-header {
+  flex: 0 0 160px;
+  text-align: right;
+}
+
 .action-item {
-  display: grid;
-  grid-template-columns: 2fr 1.5fr 2fr 1fr 2fr;
+  display: flex;
+  align-items: center;
   gap: 12px;
   padding: 16px;
   border-bottom: 1px solid #333;
   transition: background 0.2s ease;
+}
+
+.action-item .cell {
+  display: flex;
   align-items: center;
+}
+
+.action-item .cell.event-type {
+  flex: 0 0 200px;
+}
+
+.action-item .cell.media-types {
+  flex: 1 1 auto;
+  min-width: 150px;
+}
+
+.action-item .cell.status {
+  flex: 0 0 80px;
+  justify-content: flex-end;
+}
+
+.action-item .cell.actions-cell {
+  flex: 0 0 160px;
+  justify-content: flex-end;
 }
 
 .action-item:hover {
@@ -417,6 +505,21 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.channel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(145, 71, 255, 0.2);
+  border: 1px solid rgba(145, 71, 255, 0.4);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b794f4;
+  margin-top: 4px;
+  white-space: nowrap;
 }
 
 /* Media Types Column */

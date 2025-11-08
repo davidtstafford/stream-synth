@@ -9,13 +9,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { EventAction, EventActionPayload } from '../../services/event-actions';
+import { browserSourceChannelsService, BrowserSourceChannel } from '../../services/browser-source-channels';
 import { EVENT_DISPLAY_INFO, EventSubscriptions } from '../../config/event-types';
 import { TemplateBuilder, AlertPreview } from './components';
 import './edit-action.css';
 
+const { ipcRenderer } = (window as any).require('electron');
+
 interface EditActionProps {
   action?: EventAction;           // undefined = create mode
   channelId: string;
+  defaultChannel?: string;        // Default channel for new actions
   onSave: (payload: EventActionPayload) => Promise<void>;
   onCancel: () => void;
 }
@@ -51,6 +55,7 @@ const POSITION_LABELS: Record<string, string> = {
 export const EditActionScreen: React.FC<EditActionProps> = ({
   action,
   channelId,
+  defaultChannel,
   onSave,
   onCancel
 }) => {
@@ -63,6 +68,7 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
     channel_id: channelId,
     event_type: action?.event_type || '',
     is_enabled: action ? !!action.is_enabled : true,
+    browser_source_channel: action?.browser_source_channel || defaultChannel || 'default',
     
     // Text
     text_enabled: action ? !!action.text_enabled : false,
@@ -90,21 +96,37 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
     video_volume: action?.video_volume ?? 0.5,
     video_position: action?.video_position || 'middle-center',
     video_width: action?.video_width || null,
-    video_height: action?.video_height || null
-  });
+    video_height: action?.video_height || null  });
+  
+  // Browser Source Channels
+  const [channels, setChannels] = useState<BrowserSourceChannel[]>([]);
   
   // UI state
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showStyleExamples, setShowStyleExamples] = useState(false);
+  
+  // Load browser source channels
+  useEffect(() => {
+    const loadChannels = async () => {
+      try {
+        const data = await browserSourceChannelsService.getAll(channelId);
+        setChannels(data);
+      } catch (err) {
+        console.error('[EditActionScreen] Failed to load channels:', err);
+      }
+    };
+    loadChannels();
+  }, [channelId]);
   
   // Track form changes
   useEffect(() => {
-    if (isEditMode) {
-      setHasUnsavedChanges(JSON.stringify(formData) !== JSON.stringify({
+    if (isEditMode) {      setHasUnsavedChanges(JSON.stringify(formData) !== JSON.stringify({
         channel_id: action.channel_id,
         event_type: action.event_type,
         is_enabled: action.is_enabled,
+        browser_source_channel: action.browser_source_channel,
         text_enabled: action.text_enabled,
         text_template: action.text_template,
         text_duration: action.text_duration,
@@ -219,22 +241,33 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
       });
     }
   };
-  
   // File picker
   const handleFilePicker = async (
     field: 'sound_file_path' | 'image_file_path' | 'video_file_path',
     accept: string
   ) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = accept;
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        updateField(field, file.path);
+    const filters: any[] = [];
+    
+    // Build filters based on accept type
+    if (accept === 'audio/*') {
+      filters.push({ name: 'Audio Files', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'flac'] });
+    } else if (accept === 'image/*') {
+      filters.push({ name: 'Image Files', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] });
+    } else if (accept === 'video/*') {
+      filters.push({ name: 'Video Files', extensions: ['mp4', 'webm', 'mkv', 'avi', 'mov', 'flv'] });
+    }
+    
+    filters.push({ name: 'All Files', extensions: ['*'] });
+
+    try {
+      const filePath = await ipcRenderer.invoke('file:open-dialog', { filters });
+      if (filePath) {
+        updateField(field, filePath);
       }
-    };
-    input.click();
+    } catch (error) {
+      console.error('[EditActionScreen] File picker error:', error);
+      alert('Failed to open file picker');
+    }
   };
   
   return (
@@ -319,6 +352,34 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
                 </select>
                 {errors.event_type && (
                   <span className="error-message">{errors.event_type}</span>
+                )}
+              </div>
+              
+              <div className="form-group">
+                <label htmlFor="browser_source_channel">
+                  Browser Source Channel
+                </label>
+                <select
+                  id="browser_source_channel"
+                  value={formData.browser_source_channel || 'default'}
+                  onChange={(e) => updateField('browser_source_channel', e.target.value)}
+                >
+                  {channels.map(channel => (
+                    <option key={channel.id} value={channel.name}>
+                      {channel.icon} {channel.display_name}
+                    </option>
+                  ))}
+                </select>
+                <p className="help-text">
+                  Choose which browser source channel will display this alert. Use different channels to position alerts in different locations on your stream.
+                </p>
+                {formData.browser_source_channel && formData.browser_source_channel !== 'default' && (
+                  <div className="browser-source-url-preview">
+                    <label>Browser Source URL for this channel:</label>
+                    <code className="url-code">
+                      {browserSourceChannelsService.getBrowserSourceUrl(formData.browser_source_channel)}
+                    </code>
+                  </div>
                 )}
               </div>
               
@@ -437,9 +498,57 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
                       ))}
                     </div>
                   </div>
-                  
-                  <div className="form-group">
-                    <label htmlFor="text_style">Custom Style (JSON)</label>
+                    <div className="form-group">
+                    <div className="label-with-link">
+                      <label htmlFor="text_style">Custom Style (JSON)</label>
+                      <button
+                        type="button"
+                        className="examples-link"
+                        onClick={() => setShowStyleExamples(!showStyleExamples)}
+                        title="Show style examples"
+                      >
+                        📋 Examples
+                      </button>
+                    </div>
+                    {showStyleExamples && (
+                      <div className="examples-panel">
+                        <div className="example-item">
+                          <div className="example-title">Large Bold Text:</div>
+                          <code className="example-code">{`{"fontSize": "48px", "fontWeight": "bold", "color": "#fff"}`}</code>
+                          <div className="example-preview" style={{fontSize: "48px", fontWeight: "bold", color: "#fff"}}>Example Text</div>
+                        </div>
+                        
+                        <div className="example-item">
+                          <div className="example-title">Gradient Text:</div>
+                          <code className="example-code">{`{"fontSize": "36px", "background": "linear-gradient(45deg, #ff00ff, #00ffff)", "backgroundClip": "text", "color": "transparent", "fontWeight": "bold"}`}</code>
+                          <div className="example-preview" style={{fontSize: "36px", background: "linear-gradient(45deg, #ff00ff, #00ffff)", backgroundClip: "text", WebkitBackgroundClip: "text", color: "transparent", fontWeight: "bold"}}>Gradient Text</div>
+                        </div>
+                        
+                        <div className="example-item">
+                          <div className="example-title">Shadowed Text:</div>
+                          <code className="example-code">{`{"fontSize": "40px", "fontWeight": "bold", "color": "#fff", "textShadow": "0 0 10px #ff00ff, 0 0 20px #00ffff"}`}</code>
+                          <div className="example-preview" style={{fontSize: "40px", fontWeight: "bold", color: "#fff", textShadow: "0 0 10px #ff00ff, 0 0 20px #00ffff"}}>Shadow Text</div>
+                        </div>
+                        
+                        <div className="example-item">
+                          <div className="example-title">Outlined Text:</div>
+                          <code className="example-code">{`{"fontSize": "36px", "fontWeight": "bold", "color": "#fff", "WebkitTextStroke": "2px #00ff00", "textStroke": "2px #00ff00"}`}</code>
+                          <div className="example-preview" style={{fontSize: "36px", fontWeight: "bold", color: "#fff", WebkitTextStroke: "2px #00ff00"}}>Outlined</div>
+                        </div>
+                        
+                        <div className="example-item">
+                          <div className="example-title">Italic Rotated:</div>
+                          <code className="example-code">{`{"fontSize": "32px", "fontStyle": "italic", "color": "#ffaa00", "transform": "rotate(-15deg)", "transformOrigin": "center"}`}</code>
+                          <div className="example-preview" style={{fontSize: "32px", fontStyle: "italic", color: "#ffaa00", transform: "rotate(-15deg)"}}>Rotated</div>
+                        </div>
+                        
+                        <div className="example-item">
+                          <div className="example-title">Uppercase Animated:</div>
+                          <code className="example-code">{`{"fontSize": "44px", "fontWeight": "900", "color": "#ff4444", "textTransform": "uppercase", "letterSpacing": "4px"}`}</code>
+                          <div className="example-preview" style={{fontSize: "44px", fontWeight: "900", color: "#ff4444", textTransform: "uppercase", letterSpacing: "4px"}}>Animated</div>
+                        </div>
+                      </div>
+                    )}
                     <textarea
                       id="text_style"
                       value={formData.text_style || ''}

@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import * as tts from '../../../services/tts';
+import { BrowserSourceURLDisplay } from '../../../components/BrowserSourceURLDisplay';
+import { AzureSetupGuide, WebSpeechSetupGuide, GoogleSetupGuide, StreamDeckSetupGuide } from './VoiceSettingGuides';
+
+// Import namespace alias for type compatibility
 import * as ttsService from '../../../services/tts';
-import { AzureSetupGuide, WebSpeechSetupGuide, GoogleSetupGuide } from './VoiceSettingGuides';
 
 // VoiceGroup interface is defined in parent component, but we need to mirror it here
 // This is defined in tts.tsx as well - kept in sync for type safety
@@ -85,6 +89,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   const [showAzureGuide, setShowAzureGuide] = useState(false);
   const [showWebSpeechGuide, setShowWebSpeechGuide] = useState(false);
   const [showGoogleGuide, setShowGoogleGuide] = useState(false);
+  const [showStreamDeckGuide, setShowStreamDeckGuide] = useState(false);
   
   const filteredGroups = getFilteredGroups();
   const visibleCount = getVisibleVoiceCount();
@@ -161,6 +166,25 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           />
           <span className="checkbox-text">Enable TTS</span>
         </label>
+        <div style={{ marginLeft: '28px', marginTop: '8px' }}>
+          <button
+            onClick={() => setShowStreamDeckGuide(true)}
+            style={{
+              padding: '6px 12px',
+              fontSize: '0.85em',
+              backgroundColor: '#555',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              color: '#fff',
+              fontWeight: 'bold',
+              whiteSpace: 'nowrap'
+            }}
+            title="Learn how to control TTS from Stream Deck"
+          >
+            🎮 Stream Deck Setup
+          </button>
+        </div>
       </div>      {/* Provider Enable Toggles */}
       <div className="setting-group">
         <label className="setting-label">
@@ -631,9 +655,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
           onChange={(e) => onTestMessageChange(e.target.value)}
           rows={3}
           className="test-textarea"        />
-      </div>
-
-      {/* Test Buttons */}
+      </div>      {/* Test Buttons */}
       <div className="button-group" style={{ marginTop: '15px' }}>
         <button
           onClick={onTestVoice}
@@ -649,6 +671,85 @@ export const VoiceSettingsTab: React.FC<Props> = ({
         >
           ⏹️ Stop
         </button>
+      </div>
+
+      {/* Browser Source Output Section */}
+      <div style={{ marginTop: '30px', padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
+        <h3 style={{ margin: '0 0 15px 0', fontSize: '1.1em' }}>📺 Browser Source Output (OBS)</h3>
+        
+        <div style={{ marginBottom: '15px' }}>
+          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={settings.browserSourceEnabled ?? false}
+              onChange={(e) => onSettingChange('browserSourceEnabled', e.target.checked)}
+            />
+            <span className="checkbox-text">Enable TTS Browser Source for OBS</span>
+          </label>
+          <div style={{ marginLeft: '28px', marginTop: '8px', fontSize: '0.9em', color: '#888' }}>
+            Send TTS audio to a browser source that can be added to OBS
+          </div>
+        </div>
+
+        {settings.browserSourceEnabled && (
+          <>
+            <div style={{ marginBottom: '15px' }}>
+              <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.browserSourceMuteApp ?? false}
+                  onChange={(e) => onSettingChange('browserSourceMuteApp', e.target.checked)}
+                />
+                <span className="checkbox-text">Mute TTS in App (Prevent Echo)</span>
+              </label>
+              <div style={{ marginLeft: '28px', marginTop: '8px', fontSize: '0.9em', color: '#888' }}>
+                Only play TTS in the browser source, not in the app
+              </div>
+            </div>
+
+            {/* Browser Source URLs */}
+            <BrowserSourceURLDisplay 
+              path="/browser-source/tts"
+              title="🔗 Browser Source URLs:"
+              description="Add either URL as a Browser Source in OBS (recommended size: 800x600)"
+            />
+
+            {/* WebSpeech Warning */}
+            {settings.voiceId && !settings.voiceId.startsWith('azure_') && !settings.voiceId.startsWith('google_') && (
+              <div style={{
+                padding: '12px',
+                backgroundColor: '#3a2a1a',
+                border: '1px solid #ff8800',
+                borderRadius: '4px',
+                marginBottom: '15px'
+              }}>
+                <div style={{ fontWeight: 'bold', color: '#ffaa00', marginBottom: '6px' }}>⚠️ WebSpeech API Limitation:</div>
+                <div style={{ fontSize: '0.9em', color: '#ddd', lineHeight: '1.5' }}>
+                  You're using a WebSpeech voice. These voices are synthesized client-side in the browser and may not work 
+                  correctly across different platforms. For reliable browser source output, consider using Azure or Google voices.
+                </div>
+              </div>
+            )}
+
+            {/* How it Works */}
+            <div style={{
+              padding: '12px',
+              backgroundColor: '#1f3a1f',
+              border: '1px solid #28a745',
+              borderRadius: '4px',
+              fontSize: '0.9em',
+              lineHeight: '1.5'
+            }}>
+              <div style={{ fontWeight: 'bold', color: '#28a745', marginBottom: '6px' }}>ℹ️ How It Works:</div>
+              <ul style={{ margin: '6px 0 0 0', paddingLeft: '20px', color: '#ddd' }}>
+                <li><strong>Azure/Google:</strong> Audio files are sent to the browser source and played sequentially</li>
+                <li><strong>WebSpeech:</strong> Text and voice ID are sent for client-side synthesis</li>
+                <li><strong>Queue:</strong> TTS messages play one at a time with automatic queue management</li>
+                <li><strong>Limit:</strong> Queue is limited to 10 items; oldest items are purged when full</li>
+              </ul>
+            </div>
+          </>
+        )}
       </div>
         </div>
       </div>
@@ -671,6 +772,13 @@ export const VoiceSettingsTab: React.FC<Props> = ({
         <GoogleSetupGuide
           onClose={() => setShowGoogleGuide(false)}
           onComplete={handleGoogleGuideComplete}
+        />
+      )}
+
+      {/* Stream Deck Setup Guide Modal */}
+      {showStreamDeckGuide && (
+        <StreamDeckSetupGuide
+          onClose={() => setShowStreamDeckGuide(false)}
         />
       )}
     </div>

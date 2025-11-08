@@ -18,6 +18,7 @@ export interface EventAction {
   channel_id: string;
   event_type: string;
   is_enabled: boolean;
+  browser_source_channel: string;  // Channel name (e.g., 'default', 'main-alerts', 'tts')
   
   // Text Configuration
   text_enabled: boolean;
@@ -59,6 +60,7 @@ export interface EventActionPayload {
   channel_id: string;
   event_type: string;
   is_enabled?: boolean;
+  browser_source_channel?: string;  // Channel name (e.g., 'default', 'main-alerts', 'tts')
   
   // Text Configuration
   text_enabled?: boolean;

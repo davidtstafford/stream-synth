@@ -14,6 +14,9 @@
 import tmi from 'tmi.js';
 import { EventEmitter } from 'events';
 import { ChatCommandHandler, ChatCommandContext } from './chat-command-handler';
+import { viewerEntranceTracker } from './viewer-entrance-tracker';
+import { ViewerEntranceSoundsRepository } from '../database/repositories/viewer-entrance-sounds';
+import { getBrowserSourceServer } from '../main';
 
 interface IRCChatEvent {
   type: 'irc.chat.join' | 'irc.chat.part' | 'irc.chat.message';
@@ -37,6 +40,7 @@ export class TwitchIRCService extends EventEmitter {
   private username: string | null = null;
   private currentChannel: string | null = null;
   private commandHandler: ChatCommandHandler;
+  private entranceSoundsRepo: ViewerEntranceSoundsRepository | null = null;
   private connectionStatus: IRCConnectionStatus = {
     connected: false,
     channel: null,
@@ -47,6 +51,17 @@ export class TwitchIRCService extends EventEmitter {
   constructor() {
     super();
     this.commandHandler = new ChatCommandHandler();
+    // Don't initialize entrance sounds repo here - database may not be ready
+  }
+
+  /**
+   * Initialize entrance sounds repository (call after database is ready)
+   */
+  private ensureEntranceSoundsRepo(): void {
+    if (!this.entranceSoundsRepo) {
+      this.entranceSoundsRepo = new ViewerEntranceSoundsRepository();
+      this.entranceSoundsRepo.ensureTable();
+    }
   }
 
   /**
@@ -152,11 +167,20 @@ export class TwitchIRCService extends EventEmitter {
       // Don't emit for our own messages
       if (self) return;
 
+      const userId = userstate['user-id'];
+      const username = userstate.username || userstate['display-name'] || 'unknown';
+
+      // Check for entrance sound (first message this session)
+      if (userId && !viewerEntranceTracker.hasChatted(userId)) {
+        this.handleEntranceSound(userId, username);
+        viewerEntranceTracker.markChatted(userId);
+      }
+
       const event: IRCChatEvent = {
         type: 'irc.chat.message',
         channel: channel.replace('#', ''), // Remove # prefix
-        username: userstate.username || userstate['display-name'] || 'unknown',
-        userId: userstate['user-id'],
+        username,
+        userId,
         message,
         timestamp: new Date().toISOString(),
         userstate,
@@ -165,10 +189,9 @@ export class TwitchIRCService extends EventEmitter {
       this.emit('chat.message', event);
       console.log(`[IRC] Message from ${event.username}: ${message}`);
 
-      // Phase 5: Handle chat commands
-      if (event.userId && message.startsWith('~')) {
-        await this.handleChatCommand(message, event.userId, event.username, userstate);
-      }
+      // Phase 5: Chat commands are now handled by EventSub (not IRC)
+      // EventSub processes commands and sends responses via IRC
+      // This avoids duplicate command execution
     });
 
     // Connection events
@@ -256,6 +279,42 @@ export class TwitchIRCService extends EventEmitter {
       throw error;
     }
   }
+  
+  /**
+   * Handle entrance sound for a viewer's first message
+   */
+  private handleEntranceSound(userId: string, username: string): void {
+    try {
+      // Ensure repository is initialized
+      this.ensureEntranceSoundsRepo();
+      
+      // Get entrance sound for this viewer
+      const entranceSound = this.entranceSoundsRepo!.getByViewerId(userId);
+      
+      if (!entranceSound) {
+        return; // No entrance sound configured for this viewer
+      }
+
+      // Get browser source server
+      const browserSourceServer = getBrowserSourceServer();
+      if (!browserSourceServer?.io) {
+        console.warn('[IRC] Cannot play entrance sound: Browser source server not available');
+        return;
+      }
+
+      // Send entrance sound to browser source
+      browserSourceServer.io.emit('entrance-sound', {
+        viewer_username: username,
+        sound_file_path: entranceSound.sound_file_path,
+        volume: entranceSound.volume,
+      });
+
+      console.log(`[IRC] Playing entrance sound for ${username}: ${entranceSound.sound_file_path}`);
+    } catch (error) {
+      console.error('[IRC] Error handling entrance sound:', error);
+    }
+  }
+
   /**
    * Handle chat commands (Phase 5)
    */

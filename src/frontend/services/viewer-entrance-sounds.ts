@@ -1,0 +1,167 @@
+/**
+ * Viewer Entrance Sounds IPC Service
+ * 
+ * Frontend service for managing viewer entrance sounds via IPC
+ */
+
+const { ipcRenderer } = window.require('electron');
+
+export interface ViewerEntranceSound {
+  id: number;
+  viewer_id: string;
+  viewer_username: string;
+  sound_file_path: string;
+  volume: number; // 0-100
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Get all entrance sounds
+ */
+export async function getAllEntranceSounds(): Promise<ViewerEntranceSound[]> {
+  try {
+    const response = await ipcRenderer.invoke('viewer-entrance-sounds:get-all');
+    console.log('[EntranceSounds] Raw IPC response:', response);
+    
+    // Handle wrapped IPC response { success: boolean, data?: T, error?: string }
+    if (!response || !response.success) {
+      console.warn('[EntranceSounds] IPC response not successful:', response);
+      return [];
+    }
+    
+    const result = response.data;
+    
+    // Ensure we always return an array
+    if (!Array.isArray(result)) {
+      console.warn('[EntranceSounds] Invalid data type from IPC, returning empty array:', result);
+      return [];
+    }
+    return result;
+  } catch (error: any) {
+    console.error('[EntranceSounds] Error getting all sounds:', error);
+    // Return empty array on error instead of throwing
+    return [];
+  }
+}
+
+/**
+ * Get entrance sound for a specific viewer
+ */
+export async function getEntranceSound(viewerId: string): Promise<ViewerEntranceSound | null> {
+  try {
+    const response = await ipcRenderer.invoke('viewer-entrance-sounds:get', viewerId);
+    
+    // Handle wrapped IPC response
+    if (!response || !response.success) {
+      console.warn('[EntranceSounds] Get sound response not successful:', response);
+      return null;
+    }
+    
+    return response.data || null;
+  } catch (error: any) {
+    console.error('[EntranceSounds] Error getting sound:', error);
+    throw new Error(error.message || 'Failed to load entrance sound');
+  }
+}
+
+/**
+ * Create or update entrance sound for a viewer
+ */
+export async function upsertEntranceSound(
+  sound: Omit<ViewerEntranceSound, 'id' | 'created_at' | 'updated_at'>
+): Promise<void> {
+  try {
+    await ipcRenderer.invoke('viewer-entrance-sounds:upsert', sound);
+  } catch (error: any) {
+    console.error('[EntranceSounds] Error upserting sound:', error);
+    throw new Error(error.message || 'Failed to save entrance sound');
+  }
+}
+
+/**
+ * Set enabled status for a viewer's entrance sound
+ */
+export async function setEntranceSoundEnabled(viewerId: string, enabled: boolean): Promise<void> {
+  try {
+    await ipcRenderer.invoke('viewer-entrance-sounds:set-enabled', { viewerId, enabled });
+  } catch (error: any) {
+    console.error('[EntranceSounds] Error setting enabled status:', error);
+    throw new Error(error.message || 'Failed to update entrance sound');
+  }
+}
+
+/**
+ * Set volume for a viewer's entrance sound
+ */
+export async function setEntranceSoundVolume(viewerId: string, volume: number): Promise<void> {
+  try {
+    await ipcRenderer.invoke('viewer-entrance-sounds:set-volume', { viewerId, volume });
+  } catch (error: any) {
+    console.error('[EntranceSounds] Error setting volume:', error);
+    throw new Error(error.message || 'Failed to update volume');
+  }
+}
+
+/**
+ * Delete entrance sound for a viewer
+ */
+export async function deleteEntranceSound(viewerId: string): Promise<void> {
+  try {
+    await ipcRenderer.invoke('viewer-entrance-sounds:delete', viewerId);
+  } catch (error: any) {
+    console.error('[EntranceSounds] Error deleting sound:', error);
+    throw new Error(error.message || 'Failed to delete entrance sound');
+  }
+}
+
+/**
+ * Get count of entrance sounds
+ */
+export async function getEntranceSoundCount(): Promise<{ total: number; enabled: number }> {
+  try {
+    const response = await ipcRenderer.invoke('viewer-entrance-sounds:get-count');
+    console.log('[EntranceSounds] Raw count response:', response);
+    
+    // Handle wrapped IPC response
+    if (!response || !response.success) {
+      console.warn('[EntranceSounds] Count response not successful:', response);
+      return { total: 0, enabled: 0 };
+    }
+    
+    const result = response.data;
+    
+    // Ensure we have valid counts
+    if (!result || typeof result.total !== 'number') {
+      console.warn('[EntranceSounds] Invalid count data, returning zeros:', result);
+      return { total: 0, enabled: 0 };
+    }
+    return result;
+  } catch (error: any) {
+    console.error('[EntranceSounds] Error getting count:', error);
+    // Return zeros on error instead of throwing
+    return { total: 0, enabled: 0 };
+  }
+}
+
+/**
+ * Open file picker dialog for audio files
+ */
+export async function pickAudioFile(): Promise<string | null> {
+  try {
+    const filePath = await ipcRenderer.invoke('file:open-dialog', {
+      filters: [
+        { 
+          name: 'Audio Files', 
+          extensions: ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'] 
+        }
+      ]
+    });
+
+    return filePath || null;
+  } catch (error: any) {
+    console.error('[EntranceSounds] Error picking file:', error);
+    return null; // Return null on error instead of throwing
+  }
+}

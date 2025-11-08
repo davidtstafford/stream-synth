@@ -11,6 +11,10 @@ class BrowserSourceClient {  constructor() {
     this.alertCount = 0;
     this.clientId = null;
     
+    // Persistent audio element for better Mac/OBS compatibility
+    this.audioPlayer = null;
+    this.audioUnlocked = false;
+    
     // Browser Source Channel (Phase 10.5)
     const urlParams = new URLSearchParams(window.location.search);
     this.channel = urlParams.get('channel') || 'default';  // Filter alerts by channel
@@ -41,6 +45,14 @@ class BrowserSourceClient {  constructor() {
     this.queueLengthEl = document.getElementById('queue-length');
     this.clientIdEl = document.getElementById('client-id');
     
+    // Create persistent audio element for Mac/OBS compatibility
+    this.audioPlayer = document.createElement('audio');
+    this.audioPlayer.style.display = 'none';
+    document.body.appendChild(this.audioPlayer);
+    
+    // Try to unlock audio immediately (works in OBS)
+    this.unlockAudio();
+    
     // Enable debug mode if URL parameter is set (?debug=true)
     if (this.debugMode) {
       document.body.classList.add('debug-mode');
@@ -51,6 +63,35 @@ class BrowserSourceClient {  constructor() {
     
     // Connect to Socket.IO server
     this.connect();
+  }
+  
+  /**
+   * Unlock audio playback (required for Mac/Safari/OBS)
+   */
+  unlockAudio() {
+    if (this.audioUnlocked || !this.audioPlayer) return;
+    
+    console.log('[BrowserSource] Unlocking audio...');
+    
+    // Play silent audio to unlock
+    this.audioPlayer.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+    this.audioPlayer.volume = 0;
+    
+    const playPromise = this.audioPlayer.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          console.log('[BrowserSource] ✓ Audio unlocked successfully');
+          this.audioUnlocked = true;
+          this.audioPlayer.pause();
+          this.audioPlayer.currentTime = 0;
+          this.audioPlayer.src = '';
+          this.audioPlayer.volume = 1;
+        })
+        .catch((error) => {
+          console.log('[BrowserSource] Audio unlock failed (will retry on first alert):', error.message);
+        });
+    }
   }
   
   /**
@@ -223,9 +264,8 @@ class BrowserSourceClient {  constructor() {
     
     // Sound
     if (payload.sound) {
-      const audioEl = this.createAudioElement(payload.sound);
-      alertEl.appendChild(audioEl);
-      promises.push(this.playAudio(audioEl));
+      // Use persistent audio player for Mac/OBS compatibility
+      promises.push(this.playAudioPersistent(payload.sound));
     }
     
     // Add to DOM
@@ -253,7 +293,24 @@ class BrowserSourceClient {  constructor() {
       }
     }, 300);
   }
-  
+  /**
+   * Convert file path to media server URL
+   */
+  getMediaUrl(filePath) {
+    if (!filePath) return '';
+    
+    // Encode the file path as base64 for safe transmission in URL
+    // Use btoa() which is available in all browsers
+    try {
+      // btoa() requires the string to be in UTF-8
+      const encoded = btoa(unescape(encodeURIComponent(filePath)));
+      return `http://localhost:3737/media/${encodeURIComponent(encoded)}`;
+    } catch (error) {
+      console.error('[BrowserSource] Error encoding file path:', error);
+      return '';
+    }
+  }
+
   /**
    * Create text element
    */
@@ -269,14 +326,13 @@ class BrowserSourceClient {  constructor() {
     
     return textEl;
   }
-  
-  /**
+    /**
    * Create image element
    */
   createImageElement(imageConfig) {
     const imageEl = document.createElement('img');
     imageEl.className = 'alert-image';
-    imageEl.src = `file://${imageConfig.file_path}`;
+    imageEl.src = this.getMediaUrl(imageConfig.file_path);
     
     if (imageConfig.width) {
       imageEl.style.width = `${imageConfig.width}px`;
@@ -287,14 +343,13 @@ class BrowserSourceClient {  constructor() {
     
     return imageEl;
   }
-  
-  /**
+    /**
    * Create video element
    */
   createVideoElement(videoConfig) {
     const videoEl = document.createElement('video');
     videoEl.className = 'alert-video';
-    videoEl.src = `file://${videoConfig.file_path}`;
+    videoEl.src = this.getMediaUrl(videoConfig.file_path);
     videoEl.autoplay = true;
     videoEl.muted = false;
     videoEl.volume = videoConfig.volume !== undefined ? videoConfig.volume / 100 : 1.0;
@@ -308,14 +363,13 @@ class BrowserSourceClient {  constructor() {
     
     return videoEl;
   }
-  
-  /**
+    /**
    * Create audio element
    */
   createAudioElement(soundConfig) {
     const audioEl = document.createElement('audio');
     audioEl.className = 'alert-audio';
-    audioEl.src = `file://${soundConfig.file_path}`;
+    audioEl.src = this.getMediaUrl(soundConfig.file_path);
     audioEl.autoplay = true;
     audioEl.volume = soundConfig.volume !== undefined ? soundConfig.volume / 100 : 1.0;
     
@@ -336,7 +390,62 @@ class BrowserSourceClient {  constructor() {
   }
   
   /**
-   * Play audio
+   * Play audio using persistent audio element (Mac/OBS compatible)
+   */
+  playAudioPersistent(soundConfig) {
+    return new Promise((resolve) => {
+      if (!this.audioPlayer) {
+        console.error('[BrowserSource] Audio player not initialized');
+        resolve();
+        return;
+      }
+      
+      // Ensure audio is unlocked
+      if (!this.audioUnlocked) {
+        this.unlockAudio();
+      }
+      
+      console.log('[BrowserSource] Playing audio:', soundConfig.file_path);
+      
+      // Set up event handlers
+      const onEnded = () => {
+        console.log('[BrowserSource] Audio playback ended');
+        cleanup();
+        resolve();
+      };
+      
+      const onError = (error) => {
+        console.error('[BrowserSource] Audio playback error:', error);
+        cleanup();
+        resolve();
+      };
+      
+      const cleanup = () => {
+        this.audioPlayer.removeEventListener('ended', onEnded);
+        this.audioPlayer.removeEventListener('error', onError);
+      };
+      
+      this.audioPlayer.addEventListener('ended', onEnded);
+      this.audioPlayer.addEventListener('error', onError);
+      
+      // Set volume and source
+      this.audioPlayer.volume = soundConfig.volume !== undefined ? soundConfig.volume : 1.0;
+      this.audioPlayer.src = this.getMediaUrl(soundConfig.file_path);
+      
+      // Play
+      const playPromise = this.audioPlayer.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((error) => {
+          console.error('[BrowserSource] Play failed:', error);
+          cleanup();
+          resolve();
+        });
+      }
+    });
+  }
+  
+  /**
+   * Play audio (legacy - creates new audio element each time)
    */
   playAudio(audioEl) {
     return new Promise((resolve) => {
