@@ -35,18 +35,6 @@ jobs:
   build-mac:
     needs: check-version
     if: needs.check-version.outputs.tag_exists == 'false'
-    runs-on: macos-latestacOS Installer
-
-on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
-  workflow_dispatch:
-
-jobs:
-  build:
     runs-on: macos-latest
     
     steps:
@@ -70,7 +58,7 @@ jobs:
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: stream-synth-macos
+          name: stream-synth-macos-dmg
           path: release/*.dmg
           retention-days: 30
 
@@ -80,13 +68,3 @@ jobs:
           name: stream-synth-macos-zip
           path: release/*.zip
           retention-days: 30
-
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: release/*
-          draft: false
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
