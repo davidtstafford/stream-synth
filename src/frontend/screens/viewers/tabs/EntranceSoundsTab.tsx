@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as db from '../../../services/database';
 import * as entranceSounds from '../../../services/viewer-entrance-sounds';
+import { BrowserSourceURLDisplay } from '../../../components/BrowserSourceURLDisplay';
 
 export const EntranceSoundsTab: React.FC = () => {
   const [viewers, setViewers] = useState<db.ViewerWithSubscription[]>([]);
@@ -200,6 +201,13 @@ export const EntranceSoundsTab: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Browser Source URLs */}
+      <BrowserSourceURLDisplay 
+        path="/browser-source/entrance-sounds"
+        title="🎉 Dedicated Browser Source for Entrance Sounds:"
+        description="Add this as a separate Browser Source in OBS specifically for entrance sounds. Recommended size: 1920x1080 (full screen overlay)"
+      />
 
       {/* Search bar */}
       <div style={{ marginBottom: '20px' }}>

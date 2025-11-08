@@ -122,25 +122,18 @@ export async function getEntranceSoundCount(): Promise<{ total: number; enabled:
  */
 export async function pickAudioFile(): Promise<string | null> {
   try {
-    const { dialog } = window.require('@electron/remote');
-    const result = await dialog.showOpenDialog({
-      title: 'Select Audio File',
+    const filePath = await ipcRenderer.invoke('file:open-dialog', {
       filters: [
         { 
           name: 'Audio Files', 
           extensions: ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'] 
         }
-      ],
-      properties: ['openFile']
+      ]
     });
 
-    if (result.canceled || result.filePaths.length === 0) {
-      return null;
-    }
-
-    return result.filePaths[0];
+    return filePath || null;
   } catch (error: any) {
     console.error('[EntranceSounds] Error picking file:', error);
-    throw new Error(error.message || 'Failed to open file picker');
+    return null; // Return null on error instead of throwing
   }
 }

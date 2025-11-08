@@ -118,6 +118,10 @@ export class BrowserSourceServer {
     else if (url === '/browser-source/tts' || url === '/browser-source-tts.html') {
       this.serveFile(res, 'browser-source-tts.html', 'text/html');
     }
+    // Route: /browser-source/entrance-sounds -> serve browser-source-entrance-sounds.html
+    else if (url === '/browser-source/entrance-sounds' || url === '/browser-source-entrance-sounds.html') {
+      this.serveFile(res, 'browser-source-entrance-sounds.html', 'text/html');
+    }
     // Route: /browser-source.js -> serve browser-source.js
     else if (url === '/browser-source.js') {
       this.serveFile(res, 'browser-source.js', 'application/javascript');
@@ -129,6 +133,10 @@ export class BrowserSourceServer {
     // Route: /media/* -> serve media files (audio, image, video)
     else if (url.startsWith('/media/')) {
       this.serveMediaFile(req, res, url);
+    }
+    // Route: /audio-file?path=... -> serve audio file by query parameter
+    else if (url === '/audio-file') {
+      this.serveAudioFileByQuery(req, res);
     }
     // Route: /health -> health check endpoint
     else if (url === '/health') {
@@ -170,10 +178,15 @@ export class BrowserSourceServer {
           <p>For Text-to-Speech overlay in OBS:</p>
           <p><code>http://localhost:${this.port}/browser-source/tts</code></p>
           
+          <h2>🎉 Entrance Sounds Browser Source URL</h2>
+          <p>For viewer entrance sounds in OBS:</p>
+          <p><code>http://localhost:${this.port}/browser-source/entrance-sounds</code></p>
+          
           <h2>🔗 Endpoints</h2>
           <ul>
-            <li><code>/browser-source</code> - Browser source overlay page</li>
+            <li><code>/browser-source</code> - Browser source overlay page (alerts, event actions)</li>
             <li><code>/browser-source/tts</code> - TTS browser source page</li>
+            <li><code>/browser-source/entrance-sounds</code> - Entrance sounds browser source page</li>
             <li><code>/health</code> - Health check endpoint</li>
           </ul>
         </body>
@@ -303,6 +316,86 @@ export class BrowserSourceServer {
       res.end('Internal Server Error');
     }
   }
+
+  /**
+   * Serve audio file by query parameter
+   * URL format: /audio-file?path=URL_ENCODED_PATH
+   */
+  private serveAudioFileByQuery(req: http.IncomingMessage, res: http.ServerResponse): void {
+    try {
+      const url = new URL(req.url || '', `http://localhost:${this.port}`);
+      const encodedPath = url.searchParams.get('path');
+      
+      if (!encodedPath) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('Bad Request: No file path provided');
+        return;
+      }
+
+      // Decode the file path
+      const filePath = decodeURIComponent(encodedPath);
+
+      // Verify file exists
+      if (!fs.existsSync(filePath)) {
+        console.error(`[BrowserSourceServer] Audio file not found: ${filePath}`);
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('File Not Found');
+        return;
+      }
+
+      // Get file extension for content type
+      const ext = path.extname(filePath).toLowerCase();
+      
+      // Map audio extensions to content types
+      const audioContentTypes: Record<string, string> = {
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg',
+        '.m4a': 'audio/mp4',
+        '.aac': 'audio/aac',
+        '.flac': 'audio/flac'
+      };
+      
+      const contentType = audioContentTypes[ext] || 'audio/mpeg';
+
+      // Get file stats for proper headers
+      fs.stat(filePath, (err, stats) => {
+        if (err) {
+          console.error(`[BrowserSourceServer] Error getting file stats: ${filePath}`, err);
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Internal Server Error');
+          return;
+        }
+
+        // Stream the file
+        const fileStream = fs.createReadStream(filePath);
+        
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Length': stats.size,
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=3600',
+          'Access-Control-Allow-Origin': '*'
+        });
+
+        fileStream.pipe(res);
+
+        fileStream.on('error', (error) => {
+          console.error(`[BrowserSourceServer] Error streaming audio file: ${filePath}`, error);
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+          }
+          res.end('Internal Server Error');
+        });
+      });
+
+    } catch (error) {
+      console.error('[BrowserSourceServer] Error serving audio file:', error);
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Internal Server Error');
+    }
+  }
+
   private setupSocketHandlers(): void {
     if (!this.io) return;
     

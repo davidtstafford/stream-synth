@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
-import * as ttsService from '../../../services/tts';
+import React, { useState, useEffect } from 'react';
+import * as tts from '../../../services/tts';
+import { BrowserSourceURLDisplay } from '../../../components/BrowserSourceURLDisplay';
 import { AzureSetupGuide, WebSpeechSetupGuide, GoogleSetupGuide } from './VoiceSettingGuides';
+
+// Import namespace alias for type compatibility
+import * as ttsService from '../../../services/tts';
 
 // VoiceGroup interface is defined in parent component, but we need to mirror it here
 // This is defined in tts.tsx as well - kept in sync for type safety
@@ -683,27 +687,12 @@ export const VoiceSettingsTab: React.FC<Props> = ({
               </div>
             </div>
 
-            <div style={{ 
-              padding: '12px', 
-              backgroundColor: '#0d1f2d', 
-              border: '1px solid #0078d4', 
-              borderRadius: '4px',
-              marginBottom: '15px'
-            }}>
-              <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>🔗 Browser Source URL:</div>
-              <div style={{ 
-                fontFamily: 'monospace', 
-                padding: '8px', 
-                backgroundColor: '#1a1a1a', 
-                borderRadius: '4px',
-                wordBreak: 'break-all'
-              }}>
-                http://localhost:3737/browser-source/tts
-              </div>
-              <div style={{ fontSize: '0.85em', color: '#888', marginTop: '8px' }}>
-                Add this URL as a Browser Source in OBS (recommended size: 800x600)
-              </div>
-            </div>
+            {/* Browser Source URLs */}
+            <BrowserSourceURLDisplay 
+              path="/browser-source/tts"
+              title="🔗 Browser Source URLs:"
+              description="Add either URL as a Browser Source in OBS (recommended size: 800x600)"
+            />
 
             {/* WebSpeech Warning */}
             {settings.voiceId && !settings.voiceId.startsWith('azure_') && !settings.voiceId.startsWith('google_') && (
