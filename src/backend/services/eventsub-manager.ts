@@ -324,14 +324,17 @@ export class EventSubManager extends EventEmitter {
 
     console.log('[EventSub] Subscribing to', eventTypes.length, 'event types');
 
-    for (const eventType of eventTypes) {
-      try {
-        await this.subscribeToEvent(eventType);
-        this.subscriptions.add(eventType);
-      } catch (error) {
-        console.error(`[EventSub] Failed to subscribe to ${eventType}:`, error);
-      }
-    }
+    // Subscribe to all events in parallel to minimize startup window
+    // Use Promise.allSettled to continue even if some fail
+    const subscriptionPromises = eventTypes.map((eventType) =>
+      this.subscribeToEvent(eventType)
+        .then(() => this.subscriptions.add(eventType))
+        .catch((error) => {
+          console.error(`[EventSub] Failed to subscribe to ${eventType}:`, error);
+        })
+    );
+
+    await Promise.allSettled(subscriptionPromises);
 
     console.log('[EventSub] Subscription complete');
   }  /**

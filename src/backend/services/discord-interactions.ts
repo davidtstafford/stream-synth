@@ -533,7 +533,8 @@ async function handleHelpCommand(interaction: any): Promise<void> {
                '2. Find a voice you like\n' +
                '3. Copy the Voice ID\n' +
                '4. In Twitch chat: `~setvoice <Voice ID>`\n' +
-               '5. Done! Your TTS voice is set',
+               '5. Adjust with: `~setvoicepitch <0.5-2.0>` or `~setvoicespeed <0.5-2.0>`\n' +
+               '6. Done! Your TTS voice is set',
         inline: false
       },
       {
@@ -595,10 +596,33 @@ async function handleHelpCommand(interaction: any): Promise<void> {
         inline: false
       },
       {
+        name: '🎵 ~setvoicepitch (Twitch Chat)',
+        value: '**Usage:** `~setvoicepitch <value>`\n\n' +
+               '**Range:** 0.5 (lower) to 2.0 (higher)\n\n' +
+               '**Examples:**\n' +
+               '• `~setvoicepitch 0.8` - Lower pitch\n' +
+               '• `~setvoicepitch 1.0` - Normal (default)\n' +
+               '• `~setvoicepitch 1.5` - Higher pitch\n\n' +
+               '**Requirements:** Must have set a voice with `~setvoice` first',
+        inline: false
+      },
+      {
+        name: '⏱️ ~setvoicespeed (Twitch Chat)',
+        value: '**Usage:** `~setvoicespeed <value>`\n\n' +
+               '**Range:** 0.5 (slower) to 2.0 (faster)\n\n' +
+               '**Examples:**\n' +
+               '• `~setvoicespeed 0.8` - Slower speech\n' +
+               '• `~setvoicespeed 1.0` - Normal (default)\n' +
+               '• `~setvoicespeed 1.5` - Faster speech\n\n' +
+               '**Requirements:** Must have set a voice with `~setvoice` first',
+        inline: false
+      },
+      {
         name: '💡 Tips & Tricks',
         value: '✓ Combine filters in `/findvoice` for precision\n' +
                '✓ Try `/randomvoice` for discovery\n' +
                '✓ Use `/voicedemo` before setting a voice\n' +
+               '✓ Use `~setvoicepitch` and `~setvoicespeed` to customize your voice\n' +
                '✓ Use `/searchvoice` to find voices fast\n' +
                '✓ All voices synced from Stream Synth app',
         inline: false

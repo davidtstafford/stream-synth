@@ -60,7 +60,15 @@ export class ChatCommandHandler {
       const fullCommand = `${config.command_prefix}${config.command_name}`;
       
       // Check if message starts with this command
+      // Must be followed by space, end of string, or nothing (not part of a longer command)
       if (message.startsWith(fullCommand)) {
+        // Make sure it's not part of a longer command (e.g., ~setvoice should not match ~setvoicespeed)
+        const charAfterCommand = message.charAt(fullCommand.length);
+        if (charAfterCommand && charAfterCommand !== ' ') {
+          // This command name is a substring of a longer command, skip it
+          continue;
+        }
+
         // Check permissions
         if (!this.hasPermission(config.permission_level, context)) {
           console.log(`[ChatCommand] ${context.username} lacks permission for ${config.command_name}`);
@@ -174,6 +182,12 @@ export class ChatCommandHandler {
       
       case 'setvoice':
         return this.handleSetVoice(args, context);
+      
+      case 'setvoicepitch':
+        return this.handleSetVoicePitch(args, context);
+      
+      case 'setvoicespeed':
+        return this.handleSetVoiceSpeed(args, context);
       
       case 'mutevoice':
         return this.handleMuteVoice(args, context);
@@ -338,7 +352,99 @@ export class ChatCommandHandler {
     } else {
       return `⏰ @${targetUsername} now has a ${gapSeconds} second TTS cooldown for ${periodMins} minute(s)`;
     }
-  }/**
+  }
+
+  /**
+   * Command: ~setvoicepitch <value>
+   * Adjust pitch of viewer's TTS voice (0.5 = lower, 1.0 = normal, 2.0 = higher)
+   */
+  private async handleSetVoicePitch(args: string[], context: ChatCommandContext): Promise<string> {
+    if (args.length === 0) {
+      throw new Error('Usage: ~setvoicepitch <value> (0.5-2.0)');
+    }
+
+    const pitchValue = parseFloat(args[0]);
+
+    // Validate pitch is a number and in range 0.5-2.0
+    if (isNaN(pitchValue) || pitchValue < 0.5 || pitchValue > 2.0) {
+      throw new Error('Pitch must be between 0.5 and 2.0. Example: ~setvoicepitch 1.2');
+    }
+
+    // Get or create viewer
+    const viewer = this.viewersRepo.getOrCreate(
+      context.userId,
+      context.username,
+      context.username
+    );
+
+    if (!viewer) {
+      throw new Error('Failed to create viewer record');
+    }
+
+    // Check if viewer has a voice preference set
+    const voicePref = this.voicePrefsRepo.getByViewerId(viewer.id);
+    if (!voicePref) {
+      throw new Error('You need to set a voice first! Use ~setvoice <voice_id>');
+    }
+
+    // Update pitch
+    this.voicePrefsRepo.upsert({
+      viewer_id: viewer.id,
+      voice_id: voicePref.voice_id,
+      provider: voicePref.provider,
+      pitch: pitchValue,
+      speed: voicePref.speed
+    });
+
+    return `🎵 @${context.username}, your voice pitch has been set to ${pitchValue} (${pitchValue < 1.0 ? 'lower' : pitchValue > 1.0 ? 'higher' : 'normal'})`;
+  }
+
+  /**
+   * Command: ~setvoicespeed <value>
+   * Adjust speed of viewer's TTS voice (0.5 = slower, 1.0 = normal, 2.0 = faster)
+   */
+  private async handleSetVoiceSpeed(args: string[], context: ChatCommandContext): Promise<string> {
+    if (args.length === 0) {
+      throw new Error('Usage: ~setvoicespeed <value> (0.5-2.0)');
+    }
+
+    const speedValue = parseFloat(args[0]);
+
+    // Validate speed is a number and in range 0.5-2.0
+    if (isNaN(speedValue) || speedValue < 0.5 || speedValue > 2.0) {
+      throw new Error('Speed must be between 0.5 and 2.0. Example: ~setvoicespeed 1.5');
+    }
+
+    // Get or create viewer
+    const viewer = this.viewersRepo.getOrCreate(
+      context.userId,
+      context.username,
+      context.username
+    );
+
+    if (!viewer) {
+      throw new Error('Failed to create viewer record');
+    }
+
+    // Check if viewer has a voice preference set
+    const voicePref = this.voicePrefsRepo.getByViewerId(viewer.id);
+    if (!voicePref) {
+      throw new Error('You need to set a voice first! Use ~setvoice <voice_id>');
+    }
+
+    // Update speed
+    this.voicePrefsRepo.upsert({
+      viewer_id: viewer.id,
+      voice_id: voicePref.voice_id,
+      provider: voicePref.provider,
+      pitch: voicePref.pitch,
+      speed: speedValue
+    });
+
+    return `⏱️ @${context.username}, your voice speed has been set to ${speedValue} (${speedValue < 1.0 ? 'slower' : speedValue > 1.0 ? 'faster' : 'normal'})`;
+  }
+
+  /**
    * Command: ~mutetts (globally disable TTS)
    */
   private async handleMuteTTS(context: ChatCommandContext): Promise<string> {

@@ -723,6 +723,8 @@ export function runMigrations(db: Database.Database): void {
       ('hello', '~', 1, 'viewer', 30),
       ('voices', '~', 1, 'viewer', 60),
       ('setvoice', '~', 1, 'viewer', 10),
+      ('setvoicepitch', '~', 1, 'viewer', 10),
+      ('setvoicespeed', '~', 1, 'viewer', 10),
       ('mutevoice', '~', 1, 'moderator', 5),
       ('unmutevoice', '~', 1, 'moderator', 5),
       ('cooldownvoice', '~', 1, 'moderator', 5),
