@@ -179,7 +179,6 @@ export class EventSubEventRouter extends EventEmitter {
         case 'channel.prediction.end':
         case 'channel.prediction.lock':
         case 'channel.prediction.progress':
-        case 'channel.raid':
         case 'channel.update':
         case 'stream.online':
         case 'stream.offline':

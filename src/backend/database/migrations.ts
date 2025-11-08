@@ -847,5 +847,12 @@ export function runMigrations(db: Database.Database): void {
     INSERT OR IGNORE INTO discord_settings (id, bot_status) VALUES (1, 'disconnected')
   `);
 
+  // ===== CLEANUP: REMOVE UNSUPPORTED EVENTS =====
+  // Remove channel.raid - Twitch requires either from_broadcaster_user_id or to_broadcaster_user_id
+  // but we don't know which one to use, so this event cannot be subscribed to
+  db.exec(`
+    DELETE FROM event_subscriptions WHERE event_type = 'channel.raid'
+  `);
+
   console.log('[Migrations] Database schema initialization complete');
 }

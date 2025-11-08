@@ -6,7 +6,6 @@ export interface EventSubscriptions {
   'channel.subscription.end': boolean;
   'channel.subscription.gift': boolean;  'channel.subscription.message': boolean;
   'channel.cheer': boolean;
-  'channel.raid': boolean;
   'channel.ban': boolean;
   'channel.unban': boolean;
   'channel.moderator.add': boolean;
@@ -73,7 +72,6 @@ export const EVENT_GROUPS: Record<string, string[]> = {
     'channel.subscription.gift',
     'channel.subscription.message',
     'channel.cheer',
-    'channel.raid',
     'channel.ban',
     'channel.unban',
     'channel.moderator.add',
@@ -138,7 +136,6 @@ export const DEFAULT_SUBSCRIPTIONS: (keyof EventSubscriptions)[] = [
   'channel.subscribe',
   'channel.subscription.gift',
   'channel.cheer',
-  'channel.raid',
   'channel.ban', // Real-time ban tracking
   'channel.unban', // Real-time unban tracking
   'channel.moderator.add', // Real-time moderator grants
@@ -162,7 +159,7 @@ export const BROADCASTER_ONLY_EVENTS: (keyof EventSubscriptions)[] = [
   'channel.subscription.end',
   'channel.subscription.gift',
   'channel.subscription.message',
-  'channel.cheer',  'channel.raid',
+  'channel.cheer',
   'channel.ban',
   'channel.unban',
   'channel.moderator.add',
@@ -225,9 +222,6 @@ export const EVENT_DISPLAY_INFO: Record<keyof EventSubscriptions, { name: string
   'channel.cheer': { 
     name: 'Bits Cheered', 
     description: 'User cheers bits in the channel' 
-  },  'channel.raid': { 
-    name: 'Incoming Raid', 
-    description: 'Channel receives a raid from another broadcaster' 
   },
   'channel.ban': { 
     name: 'User Banned', 

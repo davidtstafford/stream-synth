@@ -355,6 +355,12 @@ export class EventSubManager extends EventEmitter {
                eventType === 'channel.chat_settings.update') {
       // Chat events require user_id to be the authenticated user's ID
       condition.user_id = this.userId;
+    } else if (eventType === 'channel.shoutout.create' ||
+               eventType === 'channel.shoutout.receive' ||
+               eventType === 'channel.shield_mode.begin' ||
+               eventType === 'channel.shield_mode.end') {
+      // These events require moderator_user_id - use broadcaster as moderator
+      condition.moderator_user_id = this.channelId;
     }
 
     // Determine the correct version for each event type
