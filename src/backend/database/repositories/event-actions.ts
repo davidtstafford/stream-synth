@@ -107,13 +107,15 @@ export class EventActionsRepository extends BaseRepository<EventAction> {
         text_enabled, text_template, text_duration, text_position, text_style,
         sound_enabled, sound_file_path, sound_volume,
         image_enabled, image_file_path, image_duration, image_position, image_width, image_height,
-        video_enabled, video_file_path, video_volume, video_position, video_width, video_height
+        video_enabled, video_file_path, video_volume, video_position, video_width, video_height,
+        browser_source_channel
       ) VALUES (
         @channel_id, @event_type, @is_enabled,
         @text_enabled, @text_template, @text_duration, @text_position, @text_style,
         @sound_enabled, @sound_file_path, @sound_volume,
         @image_enabled, @image_file_path, @image_duration, @image_position, @image_width, @image_height,
-        @video_enabled, @video_file_path, @video_volume, @video_position, @video_width, @video_height
+        @video_enabled, @video_file_path, @video_volume, @video_position, @video_width, @video_height,
+        @browser_source_channel
       )
     `);
 
@@ -145,6 +147,8 @@ export class EventActionsRepository extends BaseRepository<EventAction> {
       video_position: payload.video_position || 'center',
       video_width: payload.video_width || null,
       video_height: payload.video_height || null,
+      
+      browser_source_channel: payload.browser_source_channel || 'default',
     });
 
     const action = this.getById(result.lastInsertRowid as number);

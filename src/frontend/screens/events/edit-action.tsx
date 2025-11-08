@@ -364,6 +364,7 @@ export const EditActionScreen: React.FC<EditActionProps> = ({
                   value={formData.browser_source_channel || 'default'}
                   onChange={(e) => updateField('browser_source_channel', e.target.value)}
                 >
+                  <option value="default">📺 Default</option>
                   {channels.map(channel => (
                     <option key={channel.id} value={channel.name}>
                       {channel.icon} {channel.display_name}

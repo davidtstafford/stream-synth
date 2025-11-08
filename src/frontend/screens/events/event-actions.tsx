@@ -214,9 +214,10 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
       if (!matchesSearch) return false;
     }
     
-    // Channel filter
+    // Browser Source Channel filter - only show actions assigned to this output channel
     if (selectedChannelFilter !== 'all') {
-      if (action.browser_source_channel !== selectedChannelFilter) return false;
+      const actionChannel = action.browser_source_channel || 'default';
+      if (actionChannel !== selectedChannelFilter) return false;
     }
     
     return true;
@@ -319,6 +320,7 @@ export const EventActionsScreen: React.FC<EventActionsScreenProps> = ({ channelI
               title="Filter by browser source channel"
             >
               <option value="all">All Channels</option>
+              <option value="default">📺 Default</option>
               {channels.map(channel => (
                 <option key={channel.id} value={channel.name}>
                   {channel.icon} {channel.display_name}
