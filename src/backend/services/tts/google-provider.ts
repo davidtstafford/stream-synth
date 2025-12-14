@@ -73,7 +73,19 @@ export class GoogleTTSProvider implements TTSProvider {
       const googleVoices = data.voices || [];
       console.log(`[Google TTS] Retrieved ${googleVoices.length} voices from API`);
       
-      const voices: TTSVoice[] = googleVoices.map((voice: any) => this.mapGoogleVoice(voice));
+      // Filter out incomplete voice aliases that don't follow Google's standard naming pattern
+      // Valid patterns: "en-US-Standard-A", "en-US-Neural2-C", "hr-HR-Chirp3-HD-Puck"
+      // Invalid: "Puck", "Laomedeia" (these are aliases that require model specification)
+      const validVoices = googleVoices.filter((voice: any) => {
+        const name = voice.name || '';
+        // Valid Google voice names should contain at least one hyphen
+        // This filters out simple aliases like "Puck" while keeping full names like "en-US-Chirp3-HD-Puck"
+        return name.includes('-');
+      });
+      
+      console.log(`[Google TTS] Filtered to ${validVoices.length} valid voices (removed ${googleVoices.length - validVoices.length} incomplete aliases)`);
+      
+      const voices: TTSVoice[] = validVoices.map((voice: any) => this.mapGoogleVoice(voice));
       console.log(`[Google TTS] Mapped to ${voices.length} internal voice objects`);
       return voices;
     } catch (error) {
