@@ -389,7 +389,7 @@ export const TTS: React.FC = () => {
         const matchesSearch = !searchTerm ||
           voice.name.toLowerCase().includes(searchLower) ||
           voice.language_name.toLowerCase().includes(searchLower) ||
-          voice.region.toLowerCase().includes(searchLower) ||
+          (voice.region && voice.region.toLowerCase().includes(searchLower)) ||
           voice.id.toString().includes(searchTerm);
 
         const matchesProvider = providerFilter === 'all' || voice.provider === providerFilter;
