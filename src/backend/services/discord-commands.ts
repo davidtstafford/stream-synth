@@ -45,7 +45,7 @@ function createSearchVoiceCommand(): any {
 function createProvidersCommand(): any {
   return new SlashCommandBuilder()
     .setName('providers')
-    .setDescription('Show information about available TTS providers (WebSpeech, Azure, Google)');
+    .setDescription('Show information about available TTS providers (WebSpeech, Azure, Google, AWS)');
 }
 
 /**
@@ -106,12 +106,13 @@ function createFindVoiceCommand(): any {
     .addStringOption(option =>
       option
         .setName('provider')
-        .setDescription('Filter by provider (WebSpeech, Azure, Google)')
+        .setDescription('Filter by provider (WebSpeech, Azure, Google, AWS)')
         .setRequired(false)
         .addChoices(
           { name: 'WebSpeech', value: 'webspeech' },
           { name: 'Azure', value: 'azure' },
-          { name: 'Google', value: 'google' }
+          { name: 'Google', value: 'google' },
+          { name: 'AWS', value: 'aws' }
         )
     );
 }
@@ -131,7 +132,8 @@ function createListLanguagesCommand(): any {
         .addChoices(
           { name: 'WebSpeech', value: 'webspeech' },
           { name: 'Azure', value: 'azure' },
-          { name: 'Google', value: 'google' }
+          { name: 'Google', value: 'google' },
+          { name: 'AWS', value: 'aws' }
         )
     );
 }

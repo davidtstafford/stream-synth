@@ -45,6 +45,8 @@ export class VoicesRepository extends BaseRepository<VoiceRecord> {
         return 'azure_voices';
       case 'google':
         return 'google_voices';
+      case 'aws':
+        return 'aws_voices';
       default:
         throw new Error(`Unknown provider: ${provider}`);
     }

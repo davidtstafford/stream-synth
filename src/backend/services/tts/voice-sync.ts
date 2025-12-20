@@ -224,6 +224,70 @@ export class VoiceSyncService {
     return voiceIds.length;
   }
 
+  async syncAWSVoices(voices: any[]): Promise<number> {
+    console.log(`[Voice Sync] Syncing ${voices.length} AWS voices`);
+    
+    if (!voices || voices.length === 0) {
+      console.log('[Voice Sync] No AWS voices available');
+      this.voicesRepo.updateProviderStatus('aws', true, 0);
+      return 0;
+    }
+      // Purge existing voices for this provider (clean slate)
+    this.voicesRepo.purgeProvider('aws');
+    
+    const voiceIds: string[] = [];
+    
+    // Upsert all voices with deterministic numeric IDs
+    voices.forEach(voice => {      // Determine language and country using language service
+      const voiceLanguageInfo = LanguageService.normalizeVoiceLanguage({
+        language: voice.language,
+        languageName: voice.languageName
+      });
+      const languageName = voiceLanguageInfo?.languageName || voice.languageName || voice.language || 'Unknown';
+      // Store full country name for UI display (e.g., "United States" not "US")
+      const region = voiceLanguageInfo?.countryName || voiceLanguageInfo?.countryCode || null;
+      
+      // Extract metadata (if stored as string, parse it; if already object, use it)
+      let existingMetadata = {};
+      if (typeof voice.metadata === 'string') {
+        try {
+          existingMetadata = JSON.parse(voice.metadata);
+        } catch (e) {
+          // If parsing fails, keep empty object
+        }
+      } else if (voice.metadata) {
+        existingMetadata = voice.metadata;
+      }
+      
+      // Enhance metadata with language info
+      const enhancedMetadata = {
+        ...existingMetadata,
+        shortName: voice.shortName,
+        languageCode: voiceLanguageInfo?.languageCode,
+        countryCode: voiceLanguageInfo?.countryCode,
+        countryName: voiceLanguageInfo?.countryName
+      };
+      
+      // TTSVoice uses 'id' property, already has aws_ prefix from provider
+      this.voicesRepo.upsertVoice({
+        voice_id: voice.id,
+        provider: 'aws',
+        name: voice.name,
+        language_name: languageName,
+        region: region,
+        gender: voice.gender,
+        metadata: JSON.stringify(enhancedMetadata)
+      });
+      voiceIds.push(voice.id);
+    });
+
+    // Update provider status
+    this.voicesRepo.updateProviderStatus('aws', true, voiceIds.length);
+    
+    console.log(`[Voice Sync] Synced ${voiceIds.length} AWS voices`);
+    return voiceIds.length;
+  }
+
   // Get stats
   getStats() {
     return this.voicesRepo.getStats();

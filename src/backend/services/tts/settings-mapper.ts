@@ -13,7 +13,7 @@ export class SettingsMapper {
   static fromDatabase(dbSettings: Record<string, any>): TTSSettings {
     return {
       enabled: dbSettings.tts_enabled ?? true,
-      provider: (dbSettings.tts_provider ?? 'webspeech') as 'webspeech' | 'azure' | 'google',
+      provider: (dbSettings.tts_provider ?? 'webspeech') as 'webspeech' | 'azure' | 'google' | 'aws',
       voiceId: dbSettings.tts_voice_id ?? '',
       volume: dbSettings.tts_volume ?? 80,
       rate: dbSettings.tts_rate ?? 1.0,
@@ -22,10 +22,15 @@ export class SettingsMapper {
       webspeechEnabled: dbSettings.webspeech_enabled !== undefined ? dbSettings.webspeech_enabled as boolean : true,
       azureEnabled: dbSettings.azure_enabled !== undefined ? dbSettings.azure_enabled as boolean : false,
       googleEnabled: dbSettings.google_enabled !== undefined ? dbSettings.google_enabled as boolean : false,
+      awsEnabled: dbSettings.aws_enabled !== undefined ? dbSettings.aws_enabled as boolean : false,
       // Provider credentials
       azureApiKey: dbSettings.azure_api_key ?? '',
       azureRegion: dbSettings.azure_region ?? '',
       googleApiKey: dbSettings.google_api_key ?? '',
+      awsAccessKeyId: dbSettings.aws_access_key_id ?? '',
+      awsSecretAccessKey: dbSettings.aws_secret_access_key ?? '',
+      awsRegion: dbSettings.aws_region ?? '',
+      awsIncludeNeuralVoices: dbSettings.aws_include_neural_voices !== undefined ? dbSettings.aws_include_neural_voices as boolean : true,
       // Basic TTS Rules
       filterCommands: dbSettings.filter_commands ?? true,
       filterBots: dbSettings.filter_bots ?? true,
@@ -75,10 +80,15 @@ export class SettingsMapper {
     if (settings.webspeechEnabled !== undefined) dbSettings.webspeech_enabled = settings.webspeechEnabled;
     if (settings.azureEnabled !== undefined) dbSettings.azure_enabled = settings.azureEnabled;
     if (settings.googleEnabled !== undefined) dbSettings.google_enabled = settings.googleEnabled;
+    if (settings.awsEnabled !== undefined) dbSettings.aws_enabled = settings.awsEnabled;
     // Provider credentials
     if (settings.azureApiKey !== undefined) dbSettings.azure_api_key = settings.azureApiKey;
     if (settings.azureRegion !== undefined) dbSettings.azure_region = settings.azureRegion;
     if (settings.googleApiKey !== undefined) dbSettings.google_api_key = settings.googleApiKey;
+    if (settings.awsAccessKeyId !== undefined) dbSettings.aws_access_key_id = settings.awsAccessKeyId;
+    if (settings.awsSecretAccessKey !== undefined) dbSettings.aws_secret_access_key = settings.awsSecretAccessKey;
+    if (settings.awsRegion !== undefined) dbSettings.aws_region = settings.awsRegion;
+    if (settings.awsIncludeNeuralVoices !== undefined) dbSettings.aws_include_neural_voices = settings.awsIncludeNeuralVoices;
     // Basic filters
     if (settings.filterCommands !== undefined) dbSettings.filter_commands = settings.filterCommands;
     if (settings.filterBots !== undefined) dbSettings.filter_bots = settings.filterBots;

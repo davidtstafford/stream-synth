@@ -200,17 +200,26 @@ async function handleProvidersCommand(interaction: any): Promise<void> {
         inline: true
       },
       {
+        name: '� AWS Polly',
+        value: '**Quality:** High\n' +
+               '**Latency:** Fast\n' +
+               '**Languages:** 30+\n' +
+               '**Cost:** Paid\n' +
+               '**Best for:** Neural voices, reliable',
+        inline: true
+      },
+      {
         name: '💡 How to Choose',
         value: '• **Budget-conscious?** → Try WebSpeech first\n' +
                '• **Need variety?** → Azure has the most languages\n' +
-               '• **High quality?** → Google and Azure are both great\n' +
+               '• **High quality?** → Google, Azure, and AWS are all great\n' +
                '• **International stream?** → Check `/listlanguages provider:Azure`',
         inline: false
       },
       {
         name: '🔄 Switching Providers',
-        value: 'Use `/findvoice provider:Azure` to browse one provider\'s voices.\n' +
-               'All three providers are integrated with Stream Synth!',
+        value: 'Use `/findvoice provider:AWS` to browse one provider\'s voices.\n' +
+               'All four providers are integrated with Stream Synth!',
         inline: false
       }
     )
@@ -563,6 +572,7 @@ async function handleHelpCommand(interaction: any): Promise<void> {
                '• **WebSpeech** - Built-in browser voices\n' +
                '• **Azure** - Microsoft\'s professional voices\n' +
                '• **Google** - Google Cloud\'s high-quality voices\n' +
+               '• **AWS** - Amazon Polly\'s neural voices\n' +
                'Each has different languages and accents!',
         inline: false
       },

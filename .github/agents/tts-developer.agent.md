@@ -51,12 +51,12 @@ When helping with TTS development:
 - **WebSpeech API**: Browser-based, free, macOS AVFoundation voices, handled in renderer process
 - **Azure Cognitive Services**: Cloud-based, requires API key + region, backend provider
 - **Google Cloud TTS**: Cloud-based, requires API key, backend provider
-- **AWS Polly** (planned): Next provider to be integrated
+- **AWS Polly**: Cloud-based, requires access key + secret + region, backend provider with neural/standard voice filtering
 
 **Key Architecture Principles:**
-- Voice IDs follow pattern: `{provider}_{voiceName}` (e.g., `google_en-US-Neural2-C`, `azure_en-US-AriaNeural`, `webspeech_Alex`)
+- Voice IDs follow pattern: `{provider}_{voiceName}` (e.g., `google_en-US-Neural2-C`, `azure_en-US-AriaNeural`, `webspeech_Alex`, `aws_Joanna`)
 - Hybrid routing: Voice ID prefix determines which provider handles the request
-- Database stores all voices centrally with provider-specific tables (webspeech_voices, azure_voices, google_voices)
+- Database stores all voices centrally with provider-specific tables (webspeech_voices, azure_voices, google_voices, aws_voices)
 - Settings stored in key-value pairs in settings table
 - Each viewer can have personal voice, pitch, and speed settings
 
@@ -80,12 +80,14 @@ CREATE TABLE webspeech_voices (
 
 CREATE TABLE azure_voices (...);          -- Same schema
 CREATE TABLE google_voices (...);         -- Same schema
+CREATE TABLE aws_voices (...);            -- Same schema
 
 -- Unified view of all voices
 CREATE VIEW all_voices AS 
   SELECT * FROM webspeech_voices 
   UNION ALL SELECT * FROM azure_voices 
-  UNION ALL SELECT * FROM google_voices;
+  UNION ALL SELECT * FROM google_voices
+  UNION ALL SELECT * FROM aws_voices;
 
 -- TTS Provider Status
 CREATE TABLE tts_provider_status (
@@ -274,6 +276,12 @@ const handleComplete = () => {
 - **GoogleSetupGuide.tsx** - Google Cloud Text-to-Speech
   - Steps: Introduction → Create Project → Enable API → Create Credentials → Enter API Key → Test → Success
   - Links to Google Cloud Console
+  - Voice preview on successful connection
+
+- **AWSSetupGuide.tsx** - Amazon Polly Text-to-Speech
+  - Steps: Introduction → Create Account → Create IAM User → Get Credentials → Enter Credentials → Test → Success
+  - Includes region selector (20+ AWS regions)
+  - Neural voice toggle for cost control
   - Voice preview on successful connection
   
 - **StreamDeckSetupGuide.tsx** - StreamDeck integration
@@ -487,12 +495,12 @@ interface TTSProvider {
 }
 
 interface TTSVoice {
-  id: string;                    // google_en-US-Neural2-C
+  id: string;                    // google_en-US-Neural2-C, aws_Joanna
   name: string;                  // Neural2-C or full name
   language: string;              // en-US
   languageName: string;          // English (US)
   gender: 'male' | 'female' | 'neutral';
-  provider: 'webspeech' | 'azure' | 'google';
+  provider: 'webspeech' | 'azure' | 'google' | 'aws';
   styles?: string[];             // Azure voice styles
   sampleRateHertz?: number;      // Google sample rate
   shortName?: string;            // Provider's internal name
@@ -518,6 +526,17 @@ interface TTSOptions {
 - Uses SSML for advanced control
 - Returns audio as base64-encoded MP3
 
+#### AWS Provider (`aws-provider.ts`)
+**Important Notes:**
+- Supports both neural and standard voices
+- Neural voices cost 4x more than standard voices
+- `includeNeuralVoices` setting filters voice list
+- Automatically selects best engine (neural if available and enabled)
+- Voice IDs: `aws_Joanna`, `aws_Matthew`, etc.
+- Returns audio as MP3 stream
+- Requires IAM user with AmazonPollyFullAccess permission
+- 70+ voices across 30+ languages
+
 ### 5. Voice ID Generation
 
 **Pattern:** `{provider}_{originalName}`
@@ -526,6 +545,7 @@ Examples:
 - WebSpeech: `webspeech_Alex`, `webspeech_Samantha`
 - Azure: `azure_en-US-AriaNeural`, `azure_en-GB-RyanNeural`
 - Google: `google_en-US-Neural2-C`, `google_hr-HR-Chirp3-HD-Puck`
+- AWS: `aws_Joanna`, `aws_Matthew`, `aws_Mizuki`
 
 **Resolving Voice IDs:**
 For Azure voices, the system looks up `shortName` from metadata:
@@ -543,6 +563,8 @@ private resolveVoiceId(voiceId: string): string {
   return voiceId;
 }
 ```
+
+For AWS voices, shortName is the AWS voice ID (e.g., "Joanna").
 
 ### 6. Voice Syncing Process
 
@@ -605,6 +627,51 @@ await voicesRepo.updateProviderStatus('google', {
 - Viewer identified by Discord user ID
 - Same voice/pitch/speed rules apply
 - Can be muted via command: `!tts mute discord`
+
+**Discord Slash Commands for TTS:**
+
+**Command Files:**
+- `/src/backend/services/discord-commands.ts` - Command definitions
+- `/src/backend/services/discord-interactions.ts` - Command handlers
+- `/src/backend/services/discord-voice-discovery.ts` - Voice filtering/search logic
+
+**Available Commands:**
+```typescript
+/providers - Show information about TTS providers (WebSpeech, Azure, Google, AWS)
+/findvoice - Find voices by language, gender, or provider
+  Options:
+    - language: string (e.g., "English", "French")
+    - gender: male/female/non-binary
+    - provider: webspeech/azure/google/aws
+    
+/listlanguages - List available languages
+  Options:
+    - provider: webspeech/azure/google/aws (optional)
+    
+/voicedemo - Test a voice with sample text
+  Options:
+    - voiceid: string (required)
+    - text: string (optional, max 200 chars)
+    
+/randomvoice - Get random voice suggestion
+/searchvoice - Search voices by name
+/help - Show help information
+```
+
+**Provider Information Embed:**
+The `/providers` command shows all four providers:
+- 🔊 **WebSpeech**: Standard quality, very fast, 40+ languages, free
+- ☁️ **Google Cloud**: High quality, fast, 80+ languages, paid
+- ☁️ **Microsoft Azure**: High quality, fast, 100+ languages, paid
+- 🟠 **AWS Polly**: High quality, fast, 30+ languages, paid
+
+**Important Implementation Notes:**
+1. When adding a new TTS provider, you MUST update three Discord files:
+   - `discord-commands.ts`: Add provider choice to `/findvoice` and `/listlanguages`
+   - `discord-interactions.ts`: Add provider info to `/providers` embed and `/help` text
+   - Voice discovery service automatically picks up new providers from database
+2. Provider choices must match voice ID prefixes (e.g., 'aws' → `aws_Joanna`)
+3. All Discord commands pull voices directly from database `all_voices` view
 
 ### 9. Browser Source for OBS
 
@@ -1188,6 +1255,140 @@ import { reloadTTSSettings } from '../core/ipc-handlers/tts';
 await reloadTTSSettings();
 ```
 
+#### Issue: New provider voices not appearing in dropdowns
+**Cause:** VoicesRepository missing provider case in getTableName()
+**Solution:** Add case for new provider:
+```typescript
+private getTableName(provider: string): string {
+  switch (provider) {
+    case 'webspeech': return 'webspeech_voices';
+    case 'azure': return 'azure_voices';
+    case 'google': return 'google_voices';
+    case 'aws': return 'aws_voices'; // Add new provider
+    default: throw new Error(`Unknown provider: ${provider}`);
+  }
+}
+```
+
+#### Issue: all_voices view missing new provider table
+**Cause:** SQLite views created with CREATE IF NOT EXISTS don't update when new tables are added
+**Solution:** Use DROP VIEW + CREATE VIEW pattern:
+```typescript
+db.exec(`DROP VIEW IF EXISTS all_voices`);
+db.exec(`
+  CREATE VIEW all_voices AS
+    SELECT * FROM webspeech_voices
+    UNION ALL SELECT * FROM azure_voices
+    UNION ALL SELECT * FROM google_voices
+    UNION ALL SELECT * FROM aws_voices
+`);
+```
+
+#### Issue: Frontend not filtering new provider voices
+**Cause:** Voice ID prefix checks missing for new provider
+**Solution:** Add prefix check in getFilteredGroups():
+```typescript
+const isWebSpeech = voiceIdStr.startsWith('webspeech_');
+const isAzure = voiceIdStr.startsWith('azure_');
+const isGoogle = voiceIdStr.startsWith('google_');
+const isAWS = voiceIdStr.startsWith('aws_'); // Add new check
+
+// Filter based on enabled providers
+if (isWebSpeech && !settings.webspeechEnabled) return null;
+if (isAzure && !settings.azureEnabled) return null;
+if (isGoogle && !settings.googleEnabled) return null;
+if (isAWS && !settings.awsEnabled) return null; // Add filter
+```
+
+#### Issue: Test voice not playing audio for cloud providers
+**Cause:** Frontend testVoice() and speak() missing routing logic for new provider
+**Solution:** Add provider check in both functions:
+```typescript
+// In testVoice()
+const isAWSVoice = voiceId?.startsWith('aws_');
+if (isAzureVoice || isGoogleVoice || isAWSVoice) {
+  // Route to backend
+}
+
+// In speak()
+const isAWSVoice = voiceId?.startsWith('aws_');
+if (isAzureVoice || isGoogleVoice || isAWSVoice) {
+  // Route to backend
+}
+```
+
+#### Issue: CHECK constraint preventing new provider in viewer preferences
+**Cause:** Database CHECK constraint hardcoded provider list
+**Solution:** Drop and recreate table with updated constraint (SQLite doesn't support ALTER CONSTRAINT):
+```typescript
+db.exec(`DROP TABLE IF EXISTS viewer_voice_preferences`);
+db.exec(`
+  CREATE TABLE viewer_voice_preferences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    viewer_id TEXT NOT NULL,
+    provider TEXT NOT NULL CHECK (provider IN ('webspeech', 'azure', 'google', 'aws')),
+    ...
+  )
+`);
+```
+
+#### Issue: Viewer settings showing disabled provider voices
+**Cause:** getFilteredVoices() not checking provider enabled settings
+**Solution:** Filter voices by enabled providers:
+```typescript
+const getFilteredVoices = () => {
+  return allVoices.filter(voice => {
+    // Filter by enabled providers
+    if (voice.provider === 'webspeech' && !settings?.webspeechEnabled) return false;
+    if (voice.provider === 'azure' && !settings?.azureEnabled) return false;
+    if (voice.provider === 'google' && !settings?.googleEnabled) return false;
+    if (voice.provider === 'aws' && !settings?.awsEnabled) return false;
+    // ... other filters
+  });
+};
+```
+
+#### Issue: Discord bot not recognizing new TTS provider
+**Cause:** Discord slash command choices not updated for new provider
+**Solution:** Add provider choice to Discord commands:
+```typescript
+// In discord-commands.ts - /findvoice and /listlanguages
+.addStringOption(option =>
+  option
+    .setName('provider')
+    .setDescription('Filter by provider (WebSpeech, Azure, Google, AWS)')
+    .addChoices(
+      { name: 'WebSpeech', value: 'webspeech' },
+      { name: 'Azure', value: 'azure' },
+      { name: 'Google', value: 'google' },
+      { name: 'AWS', value: 'aws' } // Add new provider
+    )
+);
+
+// In discord-interactions.ts - /providers embed
+.addFields({
+  name: '🟠 AWS Polly',
+  value: '**Quality:** High\n**Latency:** Fast\n**Languages:** 30+\n**Cost:** Paid',
+  inline: true
+});
+```
+
+#### Issue: Provider initialization circular dependency
+**Cause:** Calling getVoices() before setting isInitialized flag
+**Solution:** Set isInitialized = true BEFORE calling getVoices():
+```typescript
+async initialize(credentials?: ProviderCredentials): Promise<void> {
+  // Setup provider SDK
+  this.polly = new Polly({ ... });
+  
+  // Mark as initialized BEFORE fetching voices
+  this.isInitialized = true;
+  
+  // Now safe to call getVoices()
+  await this.getVoices();
+}
+```
+
 ### 12. Performance Considerations
 
 - Voice syncing can take 10-15 seconds for providers with 2000+ voices
@@ -1218,6 +1419,18 @@ When making TTS changes, always test:
 18. ✅ Setup guide test connection succeeds with valid credentials
 19. ✅ Setup guide shows appropriate errors for invalid credentials
 20. ✅ Setup guide navigation (back/next) works properly
+
+**When adding a new TTS provider, ALSO test:**
+21. ✅ VoicesRepository has case for new provider in getTableName()
+22. ✅ all_voices view includes new provider's table (use DROP VIEW + CREATE VIEW)
+23. ✅ Frontend filtering checks for new provider prefix
+24. ✅ testVoice() and speak() route new provider to backend
+25. ✅ Test audio plays correctly from new provider
+26. ✅ CHECK constraints include new provider in relevant tables
+27. ✅ Viewer settings filter by enabled/disabled provider
+28. ✅ Discord bot accepts new provider in /findvoice and /listlanguages
+29. ✅ Discord /providers command lists new provider
+30. ✅ Provider initialization sets isInitialized before calling getVoices()
 
 ### 13a. Debugging & Logging
 
@@ -1262,6 +1475,7 @@ db.prepare('SELECT COUNT(*) as count FROM tts_settings').get();
 - `src/backend/services/tts/base.ts` - Type definitions and interfaces
 - `src/backend/services/tts/google-provider.ts` - Google TTS provider
 - `src/backend/services/tts/azure-provider.ts` - Azure TTS provider
+- `src/backend/services/tts/aws-provider.ts` - AWS Polly TTS provider
 - `src/backend/services/tts/webspeech.ts` - WebSpeech API handler
 - `src/backend/services/tts/voice-sync.ts` - Voice syncing logic
 - `src/backend/services/tts/voice-id-generator.ts` - Voice ID generation (deprecated)
@@ -1299,8 +1513,15 @@ db.prepare('SELECT COUNT(*) as count FROM tts_settings').get();
 - `src/frontend/screens/tts/tabs/VoiceSettingGuides/WebSpeechSetupGuide.tsx`
 - `src/frontend/screens/tts/tabs/VoiceSettingGuides/AzureSetupGuide.tsx`
 - `src/frontend/screens/tts/tabs/VoiceSettingGuides/GoogleSetupGuide.tsx`
+- `src/frontend/screens/tts/tabs/VoiceSettingGuides/AWSSetupGuide.tsx`
 - `src/frontend/screens/tts/tabs/VoiceSettingGuides/StreamDeckSetupGuide.tsx`
 - `src/frontend/screens/tts/tabs/VoiceSettingGuides/index.ts`
+
+**Discord Bot:**
+- `src/backend/services/discord-bot-client.ts` - Discord bot main client
+- `src/backend/services/discord-commands.ts` - Slash command definitions
+- `src/backend/services/discord-interactions.ts` - Command handlers and embeds
+- `src/backend/services/discord-voice-discovery.ts` - Voice filtering and search
 
 **Other Services:**
 - `src/backend/services/chat-command-handler.ts` - Chat command processing (!tts, !voice, etc.)
@@ -1457,8 +1678,14 @@ ipcRegistry.register<Input, Output>(
 7. Add UI controls in `VoiceSettingsTab.tsx` (toggle, credentials, setup button)
 8. Add IPC handler for testing credentials
 9. Export guide from `VoiceSettingGuides/index.ts`
-10. Test full workflow: setup → credential entry → voice sync → voice selection → speak
-11. Update this documentation
+10. **Update Discord bot commands** (MANDATORY):
+    - Add provider choice to `/findvoice` in `discord-commands.ts`
+    - Add provider choice to `/listlanguages` in `discord-commands.ts`
+    - Add provider info to `/providers` embed in `discord-interactions.ts`
+    - Add provider to `/help` text in `discord-interactions.ts`
+    - Update description strings to include new provider name
+11. Test full workflow: setup → credential entry → voice sync → voice selection → speak → Discord commands
+12. Update this documentation
 
 **Setup Guide Creation Pattern:**
 1. Copy existing guide as template (Azure or Google)
@@ -1567,6 +1794,73 @@ NEVER leave this documentation outdated. It's the source of truth for all TTS wo
 
 ```markdown
 ## Change Log
+
+### 2025-12-20: Discord Bot AWS Integration
+- **Feature**: Added AWS Polly support to Discord slash commands
+- **Updated Files**:
+  - `discord-commands.ts` - Added AWS choice to /findvoice and /listlanguages provider options
+  - `discord-interactions.ts` - Added AWS Polly info to /providers embed and /help command
+- **Key Changes**:
+  - /findvoice now accepts `provider:aws` parameter
+  - /listlanguages now accepts `provider:aws` parameter
+  - /providers command shows AWS Polly specifications (30+ languages, neural voices, paid)
+  - /help command lists AWS in provider section
+  - Description strings updated from "WebSpeech, Azure, Google" to include AWS
+- **Testing**: Discord bot now recognizes AWS voices in voice discovery
+- **Bug Fixed**: Discord bot returned "Unknown provider" error for AWS voices
+- **Sections Updated**: 8 (Discord Bot Integration), 11 (Common Issues), 14 (Key Files)
+
+### 2025-12-20: AWS Polly Provider Added
+- **Feature**: Complete AWS Polly integration with neural/standard voice filtering
+- **New Files**: 
+  - `aws-provider.ts` - AWS Polly TTS provider implementation
+  - `AWSSetupGuide.tsx` - Interactive setup wizard for AWS credentials
+- **Updated Files**:
+  - `base.ts` - Added 'aws' to provider union types
+  - `migrations.ts` - Added aws_voices table, updated all_voices view (DROP/CREATE), updated viewer_voice_preferences CHECK constraint
+  - `manager.ts` - Registered AWS provider and routing logic
+  - `settings-mapper.ts` - Added AWS credential and settings fields
+  - `VoiceSettingsTab.tsx` - Added AWS provider UI controls with neural toggle
+  - `tts.tsx` - Added AWS to getAvailableProviders() and getFilteredGroups()
+  - `ViewerVoiceSettingsTab.tsx` - Added AWS filtering and settings prop
+  - `tts.ts` (IPC handlers) - Added aws:test-connection and aws:sync-voices
+  - `voice-sync.ts` - Added syncAWSVoices method
+  - `voices.ts` (repository) - Added 'aws' case to getTableName()
+  - `tts.ts` (frontend service) - Added aws_ prefix checks to testVoice() and speak()
+  - `tts-access-control.ts` - Fixed getGlobalDefaultVoice() column name (tts_voice_id)
+  - `package.json` - Added @aws-sdk/client-polly dependency
+- **Key Features**:
+  - Neural/standard voice filtering via checkbox (cost control)
+  - 40 standard voices or 103 total voices (70+ with neural enabled)
+  - 30+ languages supported
+  - Free tier: 5M chars/month (standard) or 1M chars/month (neural)
+  - IAM user setup with AmazonPollyFullAccess
+  - 21 AWS regions supported
+  - Region display shows both code and name (e.g., "us-east-1 - US East (N. Virginia)")
+- **Bugs Fixed During Implementation**:
+  1. Circular initialization bug (getVoices called before isInitialized=true)
+  2. VoicesRepository missing 'aws' case in getTableName()
+  3. tts:sync-voices handler missing 'aws' case
+  4. all_voices view didn't include aws_voices (needed DROP VIEW + CREATE VIEW)
+  5. Frontend filtering missing aws_ prefix checks
+  6. testVoice() and speak() missing aws_ routing
+  7. AWS test voices not sending audio to renderer
+  8. Access control reading wrong column (voice_id vs tts_voice_id)
+  9. CHECK constraint excluding 'aws' in viewer_voice_preferences
+  10. Viewer settings showing disabled provider voices
+- **Sections Updated**: 1, 2, 3, 4, 5, 10, 11, 14
+  - `settings-mapper.ts` - Added AWS credential and settings fields
+  - `VoiceSettingsTab.tsx` - Added AWS provider UI controls
+  - `tts.ts` (IPC handlers) - Added aws:test-connection and aws:sync-voices
+  - `voice-sync.ts` - Added syncAWSVoices method
+  - `package.json` - Added @aws-sdk/client-polly dependency
+- **Key Features**:
+  - Neural/standard voice filtering via checkbox (cost control)
+  - 70+ voices across 30+ languages
+  - Free tier: 5M chars/month (standard) or 1M chars/month (neural)
+  - IAM user setup with AmazonPollyFullAccess
+  - 20+ AWS region support
+- **Sections Updated**: 1, 2, 3, 4, 5, 14
 
 ### 2025-12-20: Google Voice Filtering Fix
 - **Issue**: Voices like "Puck" caused "model name required" error

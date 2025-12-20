@@ -201,8 +201,11 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_viewer_tts_rules_cooldown_expires ON viewer_tts_rules(cooldown_expires_at)
   `);
 
+  // Drop and recreate viewer_voice_preferences to update CHECK constraint to include 'aws'
+  db.exec(`DROP TABLE IF EXISTS viewer_voice_preferences`);
+
   db.exec(`
-    CREATE TABLE IF NOT EXISTS viewer_voice_preferences (
+    CREATE TABLE viewer_voice_preferences (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       viewer_id TEXT NOT NULL UNIQUE,
       voice_id TEXT NOT NULL,
@@ -212,7 +215,7 @@ export function runMigrations(db: Database.Database): void {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (viewer_id) REFERENCES viewers(id) ON DELETE CASCADE,
-      CHECK (provider IN ('webspeech', 'azure', 'google')),
+      CHECK (provider IN ('webspeech', 'azure', 'google', 'aws')),
       CHECK (pitch >= 0.5 AND pitch <= 2.0),
       CHECK (speed >= 0.5 AND speed <= 2.0)
     )
@@ -316,12 +319,39 @@ export function runMigrations(db: Database.Database): void {
   `);
 
   db.exec(`
-    CREATE VIEW IF NOT EXISTS all_voices AS
+    CREATE TABLE IF NOT EXISTS aws_voices (
+      numeric_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      voice_id TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      language_name TEXT NOT NULL,
+      region TEXT,
+      gender TEXT,
+      provider TEXT DEFAULT 'aws',
+      metadata TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_aws_voices_numeric_id ON aws_voices(numeric_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_aws_voices_language ON aws_voices(language_name)
+  `);
+
+  // Drop and recreate all_voices view to include aws_voices
+  db.exec(`DROP VIEW IF EXISTS all_voices`);
+  
+  db.exec(`
+    CREATE VIEW all_voices AS
     SELECT * FROM webspeech_voices
     UNION ALL
     SELECT * FROM azure_voices
     UNION ALL
     SELECT * FROM google_voices
+    UNION ALL
+    SELECT * FROM aws_voices
   `);
 
   db.exec(`

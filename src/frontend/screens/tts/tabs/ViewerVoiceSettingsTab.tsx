@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as ttsService from '../../../services/tts';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -47,9 +48,10 @@ interface Message {
 interface Props {
   voiceGroups: VoiceGroup[];
   accessMode: 'access_all' | 'limited_access' | 'premium_voice_access';
+  settings: ttsService.TTSSettings | null;
 }
 
-export const ViewerVoiceSettingsTab: React.FC<Props> = ({ voiceGroups, accessMode }) => {
+export const ViewerVoiceSettingsTab: React.FC<Props> = ({ voiceGroups, accessMode, settings }) => {
   const [rules, setRules] = useState<ViewerVoicePreferenceWithInfo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Viewer[]>([]);
@@ -210,6 +212,23 @@ export const ViewerVoiceSettingsTab: React.FC<Props> = ({ voiceGroups, accessMod
   const getFilteredVoices = () => {
     let filtered = voiceGroups.flatMap(group => group.voices);
     
+    // Filter by enabled providers
+    if (settings) {
+      filtered = filtered.filter(voice => {
+        const voiceIdStr = voice.voice_id || '';
+        const isWebSpeech = !voiceIdStr.startsWith('azure_') && !voiceIdStr.startsWith('google_') && !voiceIdStr.startsWith('aws_');
+        const isAzure = voiceIdStr.startsWith('azure_');
+        const isGoogle = voiceIdStr.startsWith('google_');
+        const isAWS = voiceIdStr.startsWith('aws_');
+
+        if (isWebSpeech && !(settings.webspeechEnabled ?? true)) return false;
+        if (isAzure && !(settings.azureEnabled ?? false)) return false;
+        if (isGoogle && !(settings.googleEnabled ?? false)) return false;
+        if (isAWS && !(settings.awsEnabled ?? false)) return false;
+        return true;
+      });
+    }
+    
     if (providerFilter !== 'all') {
       filtered = filtered.filter(v => v.provider === providerFilter);
     }
@@ -253,7 +272,7 @@ export const ViewerVoiceSettingsTab: React.FC<Props> = ({ voiceGroups, accessMod
     const voice = voiceGroups.flatMap(g => g.voices).find(v => v.voice_id === editingRule.voice_id);
     if (!voice) return null;
     
-    const isPremium = voice.provider === 'azure' || voice.provider === 'google';
+    const isPremium = voice.provider === 'azure' || voice.provider === 'google' || voice.provider === 'aws';
     
     if (isPremium && accessMode === 'premium_voice_access') {
       return '⚠️ This voice requires Premium Voice Access. If this viewer doesn\'t have access (subscriber/VIP/active redeem), the global default voice will be used instead.';
@@ -359,6 +378,7 @@ export const ViewerVoiceSettingsTab: React.FC<Props> = ({ voiceGroups, accessMod
               <option value="webspeech">WebSpeech</option>
               <option value="azure">Azure</option>
               <option value="google">Google</option>
+              <option value="aws">AWS</option>
             </select>
             
             <select 

@@ -6,14 +6,14 @@ export interface TTSVoice {
   language: string;
   languageName: string;
   gender: 'male' | 'female' | 'neutral';
-  provider: 'webspeech' | 'azure' | 'google';
+  provider: 'webspeech' | 'azure' | 'google' | 'aws';
   styles?: string[];
   sampleRateHertz?: number;
 }
 
 export interface TTSSettings {
   enabled: boolean;
-  provider: 'webspeech' | 'azure' | 'google'; // Deprecated - kept for backwards compatibility
+  provider: 'webspeech' | 'azure' | 'google' | 'aws'; // Deprecated - kept for backwards compatibility
   voiceId: string;
   volume: number;
   rate: number;
@@ -22,10 +22,15 @@ export interface TTSSettings {
   webspeechEnabled?: boolean;
   azureEnabled?: boolean;
   googleEnabled?: boolean;
+  awsEnabled?: boolean;
   // Provider Credentials
   azureApiKey?: string;
   azureRegion?: string;
   googleApiKey?: string;
+  awsAccessKeyId?: string;
+  awsSecretAccessKey?: string;
+  awsRegion?: string;
+  awsIncludeNeuralVoices?: boolean;
   // Basic TTS Rules
   filterCommands?: boolean;
   filterBots?: boolean;
@@ -435,14 +440,15 @@ export async function testVoice(voiceId: string, options?: TTSOptions, message?:
   // Determine provider from voice ID prefix
   const isAzureVoice = voiceId?.startsWith('azure_');
   const isGoogleVoice = voiceId?.startsWith('google_');
+  const isAWSVoice = voiceId?.startsWith('aws_');
   
-  // Use Web Speech for non-Azure/Google voices
-  if (!isAzureVoice && !isGoogleVoice) {
+  // Use Web Speech for non-cloud voices
+  if (!isAzureVoice && !isGoogleVoice && !isAWSVoice) {
     await webSpeechSpeak(testMessage, voiceId, options || {});
     return;
   }
   
-  // For Azure/Google, call backend with object parameter
+  // For Azure/Google/AWS, call backend with object parameter
   await ipcRenderer.invoke('tts:test-voice', { voiceId, options, message });
 }
 
@@ -453,14 +459,15 @@ export async function speak(text: string, options?: TTSOptions): Promise<void> {
   const voiceId = options?.voiceId || settings.voiceId;
   const isAzureVoice = voiceId?.startsWith('azure_');
   const isGoogleVoice = voiceId?.startsWith('google_');
-    // Use Web Speech for non-Azure/Google voices
-  if (!isAzureVoice && !isGoogleVoice) {
+  const isAWSVoice = voiceId?.startsWith('aws_');
+    // Use Web Speech for non-cloud voices
+  if (!isAzureVoice && !isGoogleVoice && !isAWSVoice) {
     console.log('[TTS Service] speak() - Using Web Speech for voiceId:', voiceId);
     await webSpeechSpeak(text, voiceId, options || {});
     return;
   }
   
-  // For Azure/Google, call backend with object parameter
+  // For Azure/Google/AWS, call backend with object parameter
   console.log('[TTS Service] speak() - Using backend provider for voiceId:', voiceId, 'options:', options);
   await ipcRenderer.invoke('tts:speak', { text, options });
 }

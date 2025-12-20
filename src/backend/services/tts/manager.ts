@@ -1,6 +1,7 @@
 import { TTSProvider, TTSVoice, TTSSettings, TTSOptions } from './base';
 import { AzureTTSProvider } from './azure-provider';
 import { GoogleTTSProvider } from './google-provider';
+import { AWSPollyProvider } from './aws-provider';
 import { TTSRepository } from '../../database/repositories/tts';
 import { VoicesRepository } from '../../database/repositories/voices';
 import { ViewerTTSRulesRepository } from '../../database/repositories/viewer-tts-rules';
@@ -62,6 +63,9 @@ export class TTSManager {
     
     // Register Google provider
     this.providers.set('google', new GoogleTTSProvider());
+    
+    // Register AWS provider
+    this.providers.set('aws', new AWSPollyProvider());
   }
 
   /**
@@ -116,6 +120,11 @@ export class TTSManager {
       await this.setProvider('google');
     }
     
+    if (this.settings!.awsEnabled && this.settings!.awsAccessKeyId && this.settings!.awsSecretAccessKey) {
+      console.log('[TTS] Initializing AWS provider (enabled and has credentials)');
+      await this.setProvider('aws');
+    }
+    
     console.log('[TTS] Manager initialized. Providers ready:', Array.from(this.providers.keys()).join(', '));
   }/**
    * Load settings from database
@@ -153,6 +162,11 @@ export class TTSManager {
       initOptions.region = this.settings.azureRegion;
     } else if (providerName === 'google' && this.settings) {
       initOptions.apiKey = this.settings.googleApiKey;
+    } else if (providerName === 'aws' && this.settings) {
+      initOptions.accessKeyId = this.settings.awsAccessKeyId;
+      initOptions.secretAccessKey = this.settings.awsSecretAccessKey;
+      initOptions.region = this.settings.awsRegion;
+      initOptions.includeNeuralVoices = this.settings.awsIncludeNeuralVoices ?? true;
     }
     
     await this.currentProvider.initialize(initOptions);
@@ -233,10 +247,11 @@ export class TTSManager {
    * Get provider name from voice ID prefix
    * Helper method to centralize routing logic
    */
-  private getProviderFromVoiceId(voiceId: string): 'webspeech' | 'azure' | 'google' {
+  private getProviderFromVoiceId(voiceId: string): 'webspeech' | 'azure' | 'google' | 'aws' {
     if (voiceId?.startsWith('webspeech_')) return 'webspeech';
     if (voiceId?.startsWith('azure_')) return 'azure';
     if (voiceId?.startsWith('google_')) return 'google';
+    if (voiceId?.startsWith('aws_')) return 'aws';
     // Fallback to settings provider
     return this.settings?.provider || 'webspeech';
   }
@@ -329,14 +344,9 @@ export class TTSManager {
     await providerInstance.test(actualVoiceId, ttsOptions, message);
     console.log('[TTS Manager] testVoice() - Provider test completed');
     
-    // For Azure voices, retrieve audio data and send to renderer
-    if (provider === 'azure') {
-      this.sendAudioToRenderer('azure', ttsOptions);
-    }
-
-    // For Google voices, retrieve audio data and send to renderer
-    if (provider === 'google') {
-      this.sendAudioToRenderer('google', ttsOptions);
+    // For cloud providers (Azure/Google/AWS), retrieve audio data and send to renderer
+    if (provider === 'azure' || provider === 'google' || provider === 'aws') {
+      this.sendAudioToRenderer(provider, ttsOptions);
     }
   }
   /**
@@ -411,7 +421,7 @@ export class TTSManager {
    * Determine provider from voice ID prefix (public wrapper for IPC handlers)
    * Provides centralized routing logic across all TTS operations
    */
-  determineProviderFromVoiceId(voiceId: string): 'webspeech' | 'azure' | 'google' {
+  determineProviderFromVoiceId(voiceId: string): 'webspeech' | 'azure' | 'google' | 'aws' {
     return this.getProviderFromVoiceId(voiceId);
   }
   /**
@@ -1006,6 +1016,49 @@ export class TTSManager {
             }
           } else {
             console.error('[TTS] Google provider not available for voice:', voiceId);
+          }
+        } else if (voiceId.startsWith('aws_')) {
+          // Use AWS provider
+          const awsProvider = this.providers.get('aws');
+          if (awsProvider) {
+            await awsProvider.speak(textToSpeak, voiceId, {
+              volume: this.settings?.volume,
+              rate: item.rate ?? this.settings?.rate,
+              pitch: item.pitch ?? this.settings?.pitch
+            });
+            
+            // Get audio data
+            const audioData = (awsProvider as any).getLastAudioData();
+            
+            // Send to browser source if enabled
+            if (this.browserSourceBridge && this.settings?.browserSourceEnabled && audioData) {
+              this.browserSourceBridge.addToQueue('aws', {
+                audioData: audioData,
+                volume: this.settings?.volume,
+                rate: item.rate ?? this.settings?.rate,
+                pitch: item.pitch ?? this.settings?.pitch
+              });
+            }
+            
+            // Get audio data and send to renderer for playback (unless muted)
+            const shouldPlayInApp = !(this.settings?.browserSourceEnabled && this.settings?.browserSourceMuteApp);
+            if (shouldPlayInApp) {
+              this.sendAudioToRenderer('aws', {
+                volume: this.settings?.volume,
+                rate: item.rate ?? this.settings?.rate,
+                pitch: item.pitch ?? this.settings?.pitch
+              });
+              
+              // Wait for frontend to confirm audio playback is complete
+              console.log('[TTS] Waiting for AWS audio playback to finish...');
+              await this.waitForAudioFinished();
+            } else {
+              // Browser source will handle playback, just wait a bit for queue processing
+              console.log('[TTS] App TTS muted (browser source mode)');
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+          } else {
+            console.error('[TTS] AWS provider not available for voice:', voiceId);
           }
         } else {
           console.error('[TTS] Unknown voice provider for voice_id:', voiceId);
