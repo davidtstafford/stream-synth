@@ -759,7 +759,9 @@ export function runMigrations(db: Database.Database): void {
       ('unmutevoice', '~', 1, 'moderator', 5),
       ('cooldownvoice', '~', 1, 'moderator', 5),
       ('mutetts', '~', 1, 'moderator', 30),
-      ('unmutetts', '~', 1, 'moderator', 30)
+      ('unmutetts', '~', 1, 'moderator', 30),
+      ('blockword', '~', 1, 'moderator', 5),
+      ('unblockword', '~', 1, 'moderator', 5)
   `);
   // ===== BROWSER SOURCE CHANNELS (Phase 10.5) =====
 

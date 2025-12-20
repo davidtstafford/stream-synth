@@ -202,6 +202,12 @@ export class ChatCommandHandler {
       case 'unmutetts':
         return this.handleUnmuteTTS(context);
       
+      case 'blockword':
+        return this.handleBlockWord(args, context);
+      
+      case 'unblockword':
+        return this.handleUnblockWord(args, context);
+      
       default:
         throw new Error('Unknown command');
     }
@@ -489,6 +495,78 @@ export class ChatCommandHandler {
     await reloadTTSSettings();
     
     return '🔊 TTS has been globally enabled';
+  }
+
+  /**
+   * Command: ~blockword <word>
+   * Add a word or phrase to the TTS blocklist
+   */
+  private async handleBlockWord(args: string[], context: ChatCommandContext): Promise<string> {
+    if (args.length === 0) {
+      throw new Error('Usage: ~blockword <word or phrase>');
+    }
+
+    const word = args.join(' ').trim().toLowerCase();
+    
+    if (!word) {
+      throw new Error('Please provide a word or phrase to block');
+    }
+
+    if (word.length > 50) {
+      throw new Error('Word/phrase too long (max 50 characters)');
+    }
+
+    // Get current settings
+    const settings = this.ttsRepo.getSettings();
+    const currentBlocklist = settings?.blockedWords || [];
+
+    // Check if already blocked
+    if (currentBlocklist.includes(word)) {
+      return `⚠️ "${word}" is already in the blocklist`;
+    }
+
+    // Add to blocklist and sort
+    const newBlocklist = [...currentBlocklist, word].sort();
+    this.ttsRepo.saveSettings({ blockedWords: newBlocklist });
+    
+    // Reload TTS manager settings
+    await reloadTTSSettings();
+    
+    return `🚫 Added "${word}" to TTS blocklist (${newBlocklist.length} total)`;
+  }
+
+  /**
+   * Command: ~unblockword <word>
+   * Remove a word or phrase from the TTS blocklist
+   */
+  private async handleUnblockWord(args: string[], context: ChatCommandContext): Promise<string> {
+    if (args.length === 0) {
+      throw new Error('Usage: ~unblockword <word or phrase>');
+    }
+
+    const word = args.join(' ').trim().toLowerCase();
+    
+    if (!word) {
+      throw new Error('Please provide a word or phrase to unblock');
+    }
+
+    // Get current settings
+    const settings = this.ttsRepo.getSettings();
+    const currentBlocklist = settings?.blockedWords || [];
+
+    // Check if word is in blocklist
+    if (!currentBlocklist.includes(word)) {
+      return `⚠️ "${word}" is not in the blocklist`;
+    }
+
+    // Remove from blocklist
+    const newBlocklist = currentBlocklist.filter((w: string) => w !== word);
+    this.ttsRepo.saveSettings({ blockedWords: newBlocklist });
+    
+    // Reload TTS manager settings
+    await reloadTTSSettings();
+    
+    return `✅ Removed "${word}" from TTS blocklist (${newBlocklist.length} remaining)`;
   }
 
   /**

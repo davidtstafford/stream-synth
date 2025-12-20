@@ -494,7 +494,20 @@ export class TTSManager {
     if (this.settings.filterBots && this.isBot(username)) {
       console.log('[TTS] Skipping bot:', username);
       return;
-    }// Check user cooldown
+    }
+
+    // Skip broadcaster if filter enabled (check against userId)
+    if (this.settings.filterBroadcaster && userId) {
+      const SessionsRepository = require('../database/repositories/sessions').SessionsRepository;
+      const sessionsRepo = new SessionsRepository();
+      const currentSession = sessionsRepo.getCurrentSession();
+      if (currentSession && userId === currentSession.broadcaster_id) {
+        console.log('[TTS] Skipping broadcaster message:', username);
+        return;
+      }
+    }
+
+    // Check user cooldown
     if (this.settings.userCooldownEnabled && !this.checkUserCooldown(username)) {
       console.log('[TTS] User on cooldown:', username);
       return;
@@ -622,8 +635,10 @@ export class TTSManager {
    * Check if username is a bot
    */
   private isBot(username: string): boolean {
-    const botNames = ['nightbot', 'streamelements', 'streamlabs', 'moobot', 'fossabot', 'wizebot'];
-    return botNames.includes(username.toLowerCase());
+    const defaultBotNames = ['nightbot', 'streamelements', 'streamlabs', 'moobot', 'fossabot', 'wizebot'];
+    const customBots = this.settings?.customBotList || [];
+    const allBots = [...defaultBotNames, ...customBots.map(b => b.toLowerCase())];
+    return allBots.includes(username.toLowerCase());
   }
 
   /**

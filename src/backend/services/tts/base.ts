@@ -47,6 +47,8 @@ export interface TTSSettings {
   // Basic TTS Rules
   filterCommands?: boolean;
   filterBots?: boolean;
+  customBotList?: string[];
+  filterBroadcaster?: boolean;
   filterUrls?: boolean;
   announceUsername?: boolean;
   minMessageLength?: number;
