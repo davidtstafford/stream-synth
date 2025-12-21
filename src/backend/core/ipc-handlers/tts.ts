@@ -217,6 +217,8 @@ export function setupTTSHandlers(): void {  // ===== TTS: Core Operations =====
             count = await voiceSyncService.syncAzureVoices(input.voices);
           } else if (input.provider === 'google') {
             count = await voiceSyncService.syncGoogleVoices(input.voices);
+          } else if (input.provider === 'aws') {
+            count = await voiceSyncService.syncAWSVoices(input.voices);
           } else {
             throw new Error(`Unknown provider: ${input.provider}`);
           }
@@ -518,6 +520,105 @@ export function setupTTSHandlers(): void {  // ===== TTS: Core Operations =====
         }
 
         console.log('[Google] Voice sync complete');
+
+        return {
+          voiceCount: voices.length
+        };
+      }
+    }
+  );
+
+  // ===== AWS Provider =====
+  ipcRegistry.register<{ accessKeyId: string; secretAccessKey: string; region: string; includeNeuralVoices?: boolean }, { voiceCount?: number; previewVoices?: any[] }>(
+    'aws:test-connection',
+    {
+      validate: (credentials) => {
+        if (!credentials.accessKeyId || credentials.accessKeyId.trim().length === 0) {
+          return 'Access Key ID is required.';
+        }
+        if (!credentials.secretAccessKey || credentials.secretAccessKey.trim().length === 0) {
+          return 'Secret Access Key is required.';
+        }
+        if (!credentials.region || credentials.region.trim().length === 0) {
+          return 'Region is required.';
+        }
+        return null;
+      },
+      execute: async (credentials) => {
+        console.log('[AWS] Testing connection with credentials');
+        const { accessKeyId, secretAccessKey, region, includeNeuralVoices } = credentials;
+        console.log('[AWS] Starting connection test with region:', region);
+
+        console.log('[AWS] [1/5] Initializing TTS manager...');
+        const manager = await initializeTTS();
+        console.log('[AWS] [2/5] Getting AWS provider from manager...');
+        const awsProvider = manager['providers'].get('aws');
+
+        if (!awsProvider) {
+          throw new Error('AWS provider not available');
+        }
+
+        console.log('[AWS] [3/5] Initializing AWS provider with credentials...');
+        await awsProvider.initialize({ accessKeyId, secretAccessKey, region, includeNeuralVoices });
+        console.log('[AWS] [4/5] Calling getVoices()...');
+
+        const voices = await awsProvider.getVoices();
+        console.log('[AWS] [5/5] Got voices, preparing preview...');
+
+        // Get preview voices (first 10)
+        const previewVoices = voices.slice(0, 10).map((v: any) => ({
+          name: v.name,
+          language: v.language,
+          gender: v.gender
+        }));
+
+        console.log('[AWS] Connection test successful, found', voices.length, 'voices');
+        console.log('[AWS] Test completed successfully, returning result to frontend');
+
+        return {
+          voiceCount: voices.length,
+          previewVoices
+        };
+      }
+    }
+  );
+
+  ipcRegistry.register<{ accessKeyId: string; secretAccessKey: string; region: string; includeNeuralVoices?: boolean }, { voiceCount?: number }>(
+    'aws:sync-voices',
+    {
+      validate: (credentials) => {
+        if (!credentials.accessKeyId) return 'Access Key ID is required';
+        if (!credentials.secretAccessKey) return 'Secret Access Key is required';
+        if (!credentials.region) return 'Region is required';
+        return null;
+      },
+      execute: async (credentials) => {
+        console.log('[AWS] Syncing voices to database...');
+
+        const { accessKeyId, secretAccessKey, region, includeNeuralVoices } = credentials;
+
+        // Initialize AWS provider and fetch voices
+        const manager = await initializeTTS();
+        const awsProvider = manager['providers'].get('aws');
+
+        if (!awsProvider) {
+          throw new Error('AWS provider not available');
+        }
+
+        // Initialize provider with credentials
+        await awsProvider.initialize({ accessKeyId, secretAccessKey, region, includeNeuralVoices });
+
+        // Get voices from AWS
+        const voices = await awsProvider.getVoices();
+
+        console.log(`[AWS] Fetched ${voices.length} voices from AWS`);
+
+        // Sync to database
+        if (voiceSyncService) {
+          await voiceSyncService.syncAWSVoices(voices);
+        }
+
+        console.log('[AWS] Voice sync complete');
 
         return {
           voiceCount: voices.length

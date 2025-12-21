@@ -10,10 +10,11 @@ export interface TTSVoice {
   language: string;              // Language code (e.g., "en-US")
   languageName: string;          // Human-readable language (e.g., "English (US)")
   gender: 'male' | 'female' | 'neutral';
-  provider: 'webspeech' | 'azure' | 'google';
+  provider: 'webspeech' | 'azure' | 'google' | 'aws';
   styles?: string[];             // Voice styles (Azure only)
   sampleRateHertz?: number;      // Sample rate (Google only)
-  shortName?: string;            // Full provider voice name (Azure: "en-US-AriaNeural")
+  shortName?: string;            // Full provider voice name (Azure: "en-US-AriaNeural", AWS: "Joanna")
+  metadata?: string;             // Provider-specific metadata
 }
 
 export interface TTSOptions {
@@ -25,7 +26,7 @@ export interface TTSOptions {
 
 export interface TTSSettings {
   enabled: boolean;
-  provider: 'webspeech' | 'azure' | 'google'; // Deprecated - kept for backwards compatibility, use provider flags instead
+  provider: 'webspeech' | 'azure' | 'google' | 'aws'; // Deprecated - kept for backwards compatibility, use provider flags instead
   voiceId: string;
   volume: number;
   rate: number;
@@ -34,13 +35,20 @@ export interface TTSSettings {
   webspeechEnabled?: boolean;
   azureEnabled?: boolean;
   googleEnabled?: boolean;
+  awsEnabled?: boolean;
   // Provider Credentials
   azureApiKey?: string;
   azureRegion?: string;
   googleApiKey?: string;
+  awsAccessKeyId?: string;
+  awsSecretAccessKey?: string;
+  awsRegion?: string;
+  awsIncludeNeuralVoices?: boolean;
   // Basic TTS Rules
   filterCommands?: boolean;
   filterBots?: boolean;
+  customBotList?: string[];
+  filterBroadcaster?: boolean;
   filterUrls?: boolean;
   announceUsername?: boolean;
   minMessageLength?: number;
@@ -74,7 +82,13 @@ export interface TTSProvider {
   /**
    * Initialize the provider with credentials if needed
    */
-  initialize(credentials?: { apiKey?: string; region?: string }): Promise<void>;
+  initialize(credentials?: { 
+    apiKey?: string; 
+    region?: string;
+    accessKeyId?: string;
+    secretAccessKey?: string;
+    includeNeuralVoices?: boolean;
+  }): Promise<void>;
   
   /**
    * Get list of available voices

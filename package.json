@@ -1,6 +1,6 @@
 {
   "name": "stream-synth",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Stream Synth - A desktop app for Twitch integration",
   "main": "dist/backend/main.js",
   "scripts": {
@@ -37,6 +37,7 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
+    "@aws-sdk/client-polly": "^3.956.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/socket.io": "^3.0.1",
     "@types/tmi.js": "^1.8.6",

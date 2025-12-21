@@ -41,7 +41,21 @@ export const TTSRulesTab: React.FC<Props> = ({ settings, onSettingChange }) => {
             />
             <span className="checkbox-text">
               Filter Bot Messages
-              <span className="setting-hint">Skip messages from Nightbot, StreamElements, Streamlabs, Moobot, Fossabot, Wizebot</span>
+              <span className="setting-hint">Skip messages from known bots (Nightbot, StreamElements, Streamlabs, Moobot, Fossabot, Wizebot) + custom bot list</span>
+            </span>
+          </label>
+        </div>
+
+        <div className="setting-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={settings.filterBroadcaster ?? false}
+              onChange={(e) => onSettingChange('filterBroadcaster', e.target.checked)}
+            />
+            <span className="checkbox-text">
+              Filter Broadcaster Messages
+              <span className="setting-hint">Skip messages from the broadcaster (you) - useful if you don't want bot responses read aloud</span>
             </span>
           </label>
         </div>
@@ -59,6 +73,13 @@ export const TTSRulesTab: React.FC<Props> = ({ settings, onSettingChange }) => {
             </span>
           </label>
         </div>
+
+        {/* Custom Bot List */}
+        {settings.filterBots && (
+          <div className="setting-group" style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #444' }}>
+            <CustomBotListEditor settings={settings} onSettingChange={onSettingChange} />
+          </div>
+        )}
       </div>
 
       {/* Username Announcement */}
@@ -364,23 +385,11 @@ export const TTSRulesTab: React.FC<Props> = ({ settings, onSettingChange }) => {
         <h4>🚫 Blocked Words</h4>
         <p className="section-description">
           Add words or phrases that should not be read aloud by TTS. They will be silently removed from messages.
+          <br />
+          <strong>Moderators can also use chat commands:</strong> <code>~blockword &lt;word&gt;</code> and <code>~unblockword &lt;word&gt;</code>
         </p>
 
         <BlockedWordsEditor settings={settings} onSettingChange={onSettingChange} />
-      </div>
-
-      {/* Future Features */}
-      <div className="rules-section">
-        <h4>✨ Coming Soon</h4>
-        <ul className="feature-list">
-          <li>Per-viewer voice assignments</li>
-          <li>Chat command: <code>~setmyvoice [voice_id]</code></li>
-          <li>Muted viewers list</li>
-          <li>Account age requirements</li>
-          <li>Watch time requirements</li>
-          <li>Role-based voice rules (subscribers, mods, VIPs)</li>
-          <li>Priority queue for specific users</li>
-        </ul>
       </div>
     </div>
   );
@@ -523,6 +532,159 @@ const BlockedWordsEditor: React.FC<BlockedWordsEditorProps> = ({ settings, onSet
           <p className="setting-hint">
             {blockedWords.length} word(s) will be silently removed from messages before TTS processing.
           </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Component for managing custom bot list
+ */
+interface CustomBotListEditorProps {
+  settings: ttsService.TTSSettings;
+  onSettingChange: (key: keyof ttsService.TTSSettings, value: any) => Promise<void>;
+}
+
+const CustomBotListEditor: React.FC<CustomBotListEditorProps> = ({ settings, onSettingChange }) => {
+  const [inputValue, setInputValue] = React.useState('');
+  const [error, setError] = React.useState('');
+
+  const customBots = settings.customBotList ?? [];
+  const defaultBots = ['nightbot', 'streamelements', 'streamlabs', 'moobot', 'fossabot', 'wizebot'];
+
+  const handleAddBot = async () => {
+    const botName = inputValue.trim().toLowerCase();
+    
+    if (!botName) {
+      setError('Please enter a bot username');
+      return;
+    }
+
+    if (defaultBots.includes(botName)) {
+      setError('This bot is already in the default list');
+      return;
+    }
+
+    if (customBots.includes(botName)) {
+      setError('Bot already in custom list');
+      return;
+    }
+
+    if (botName.length > 25) {
+      setError('Username too long (max 25 characters)');
+      return;
+    }
+
+    if (!/^[a-z0-9_]+$/.test(botName)) {
+      setError('Invalid username (only lowercase letters, numbers, and underscores)');
+      return;
+    }
+
+    const newList = [...customBots, botName].sort();
+    await onSettingChange('customBotList', newList);
+    setInputValue('');
+    setError('');
+  };
+
+  const handleRemoveBot = async (botName: string) => {
+    const newList = customBots.filter((b: string) => b !== botName);
+    await onSettingChange('customBotList', newList);
+  };
+
+  return (
+    <div className="custom-bot-list-editor">
+      <label className="setting-label" style={{ marginBottom: '8px' }}>
+        🤖 Custom Bot List:
+        <span className="setting-hint" style={{ display: 'block', fontWeight: 'normal', marginTop: '4px' }}>
+          Add additional bot usernames to filter (default bots: {defaultBots.join(', ')})
+        </span>
+      </label>
+      
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+        <input
+          type="text"
+          placeholder="Enter bot username..."
+          value={inputValue}
+          onChange={(e) => {
+            setInputValue(e.target.value);
+            setError('');
+          }}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              handleAddBot();
+            }
+          }}
+          style={{
+            flex: 1,
+            padding: '8px',
+            borderRadius: '4px',
+            border: '1px solid #555',
+            backgroundColor: '#333',
+            color: 'white',
+            fontSize: '14px'
+          }}
+        />
+        <button
+          onClick={handleAddBot}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#9147ff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          Add Bot
+        </button>
+      </div>
+      
+      {error && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '8px' }}>{error}</p>}
+
+      {customBots.length > 0 && (
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '8px',
+          padding: '10px',
+          backgroundColor: '#2a2a2a',
+          borderRadius: '4px',
+          border: '1px solid #555'
+        }}>
+          {customBots.map((botName: string) => (
+            <div
+              key={botName}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#4a9eff',
+                color: 'white',
+                padding: '4px 8px',
+                borderRadius: '3px',
+                fontSize: '12px'
+              }}
+            >
+              <span>{botName}</span>
+              <button
+                onClick={() => handleRemoveBot(botName)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'white',
+                  cursor: 'pointer',
+                  padding: '0 4px',
+                  fontSize: '14px',
+                  lineHeight: '1'
+                }}
+                title="Remove"
+              >
+                ×
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>

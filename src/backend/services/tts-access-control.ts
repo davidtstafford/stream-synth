@@ -278,7 +278,7 @@ export class TTSAccessControlService {
    */
   private getGlobalDefaultVoice(): string {
     const settings = this.ttsRepo.getSettings();
-    return settings.voice_id || '';
+    return settings.tts_voice_id || '';
   }
 
   /**

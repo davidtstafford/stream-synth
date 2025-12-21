@@ -56,39 +56,14 @@ export const DiscordBotSetupGuide: React.FC<DiscordBotSetupGuideProps> = ({ onCl
       instructions: [
         'Go to Discord Developer Portal: https://discord.com/developers/applications',
         'Click "New Application" and give it a name',
-        'Go to the "Bot" section and click "Add Bot"',
-        'Copy your bot token (you\'ll need this in Step 2)',
+        'Go to the "Bot" section (left sidebar) and click "Add Bot"',
+        'Copy your bot token (click "Reset Token" if needed, then "Copy")',
         'Keep this token SECRET - don\'t share it with anyone!'
       ],
       tips: [
         '💡 Your bot token is like a password - if someone has it, they can control your bot',
-        '💡 You can regenerate the token if it\'s ever compromised'
-      ]
-    },
-    {
-      title: 'Add Redirect URI & Get Invite URL',
-      instructions: [
-        'Go to the "OAuth2" section (left sidebar)',
-        'First, add a Redirect URI in the "Redirects" section:',
-        '  • Click "Add Redirect"',
-        '  • Enter: http://localhost:3000',
-        '    (Stream Synth runs locally on your machine)',
-        'Then select your redirect URI:',
-        '  • In "Select redirect URL" dropdown, pick: http://localhost:3000',
-        '    (This step is required or the URL won\'t generate!)',
-        'In "OAuth2 URL Generator" select the SCOPE:',
-        '  • bot',
-        'Under "BOT PERMISSIONS" select these permissions:',
-        '  • Send Messages',
-        '  • Embed Links',
-        '  • Read Message History',
-        '  • Use Slash Commands',
-        'Copy the generated URL at the bottom (blue box labeled "GENERATED URL")'
-      ],
-      tips: [
-        '💡 IMPORTANT: You must add AND select the redirect URI - without both steps, no URL generates',
-        '💡 Use http://localhost:3000 since Stream Synth is a local desktop app',
-        '💡 Don\'t visit this URL yet - wait until Step 3 after you\'ve configured Stream Synth'
+        '💡 You can regenerate the token if it\'s ever compromised',
+        '💡 You\'ll paste this token into Stream Synth in the next step'
       ]
     },
     {
@@ -97,11 +72,11 @@ export const DiscordBotSetupGuide: React.FC<DiscordBotSetupGuideProps> = ({ onCl
         'Paste your bot token (from Step 1) into the input box below',
         'Click the "▶ Start Bot in Stream Synth" button',
         'Wait for the success message (it will take 1-2 seconds)',
-        'Once successful, you\'ll automatically move to Step 4',
+        'Once successful, you\'ll automatically move to Step 3',
         'The guide stays open so you can continue with the next steps'
       ],
       tips: [
-        '🎯 The bot MUST be running in Stream Synth BEFORE you authorize it in Discord',
+        '🎯 The bot MUST be running in Stream Synth BEFORE you invite it to Discord',
         '💡 The token is stored securely in encrypted form and never leaves your computer',
         '💡 If "Start Bot" fails, check: Bot token is correct, Discord API is accessible',
         '⚠️ If you see "Disconnected" after the check mark, wait 5 seconds and try again'
@@ -109,37 +84,56 @@ export const DiscordBotSetupGuide: React.FC<DiscordBotSetupGuideProps> = ({ onCl
       hasTokenInput: true
     },
     {
-      title: 'Invite Bot to Your Discord Server',
+      title: 'Generate Bot Invite URL',
       instructions: [
-        'Open the OAuth2 URL from Step 2 in your browser',
-        'Select your Discord server from the dropdown',
-        'Review the permissions (bot, slash commands, etc.)',
-        'Click "Authorize"',
-        'Complete the CAPTCHA verification if prompted',
-        '⚠️ You may see "Safari can\'t connect to server \'localhost\'" - this is EXPECTED and HARMLESS',
-        '    The bot has already been authorized and added to your server - the error is just a browser limitation'
+        'Go back to Discord Developer Portal',
+        'Go to the "OAuth2" → "URL Generator" section (left sidebar)',
+        'Under "SCOPES" select:',
+        '  ✓ bot',
+        '  ✓ applications.commands',
+        'Under "BOT PERMISSIONS" select:',
+        '  ✓ Send Messages',
+        '  ✓ Embed Links',
+        '  ✓ Read Message History',
+        '  ✓ Use Slash Commands',
+        'Copy the generated URL at the bottom (you\'ll use this in Step 4)'
       ],
       tips: [
-        '✓ You\'ve successfully authorized if: Bot appears in your server member list',
-        '✓ Even if you see the "localhost" connection error, the authorization succeeded',
-        '💡 You need "Manage Server" permission in Discord to authorize the bot',
-        '💡 Desktop apps can\'t use normal OAuth callbacks, but the invitation still works!'
+        '💡 DO NOT add any redirect URIs - bots don\'t need OAuth2 redirects',
+        '💡 ONLY select "bot" and "applications.commands" scopes - nothing else',
+        '💡 The generated URL should start with: https://discord.com/oauth2/authorize?client_id=...'
+      ]
+    },
+    {
+      title: 'Invite Bot to Your Discord Server',
+      instructions: [
+        'Open the invite URL from Step 3 in your browser',
+        'Select your Discord server from the dropdown',
+        'Review the permissions (Send Messages, Slash Commands, etc.)',
+        'Click "Authorize"',
+        'Complete the CAPTCHA verification if prompted',
+        'The bot should now appear in your server\'s member list!'
+      ],
+      tips: [
+        '✓ Success: Bot appears in your server member list with an "APP" or "BOT" tag',
+        '💡 You need "Manage Server" permission in Discord to invite bots',
+        '💡 If commands don\'t work immediately, wait 1-2 minutes for Discord to sync them'
       ]
     },
     {
       title: 'Start Using Voice Discovery',
       instructions: [
         'Go to any channel in your Discord server',
+        'Type / and you should see your bot\'s commands appear',
         'Use the command: /findvoice',
         'Search for or preview available voices',
-        'Viewers activate voices with ~setvoice in your Twitch chat',
-        'Available voices update automatically as you add TTS providers',
+        'Viewers set their voices with ~setvoice in your Twitch chat',
         'Check /help for all available commands'
       ],
       tips: [
         '💡 All voice searching happens in Discord, keeping your Twitch chat clean',
-        '💡 Voice selections happen in Twitch chat (/setvoice) for stream integration',
-        '💡 If commands don\'t show up, try clicking outside the text box and typing again'
+        '💡 Voice selections happen in Twitch chat (~setvoice) for stream integration',
+        '💡 If commands don\'t show up, try clicking outside the text box and typing / again'
       ]
     }
   ];

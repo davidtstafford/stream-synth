@@ -111,7 +111,7 @@ export const TTS: React.FC = () => {
     }
   };
 
-  const handleProviderToggle = async (provider: 'webspeech' | 'azure' | 'google', enabled: boolean) => {
+  const handleProviderToggle = async (provider: 'webspeech' | 'azure' | 'google' | 'aws', enabled: boolean) => {
     try {
       console.log(`[TTS] Toggling ${provider} provider:`, enabled);
 
@@ -130,7 +130,7 @@ export const TTS: React.FC = () => {
     }
   };
 
-  const handleProviderRescan = async (provider: 'webspeech' | 'azure' | 'google') => {
+  const handleProviderRescan = async (provider: 'webspeech' | 'azure' | 'google' | 'aws') => {
     try {
       setRescanningProvider(provider);
       setRescanMessages(prev => ({ ...prev, [provider]: 'Rescanning...' }));
@@ -181,6 +181,30 @@ export const TTS: React.FC = () => {
           setRescanMessages(prev => ({ ...prev, [provider]: `✓ Google rescanned: ${data.voiceCount} voices found` }));
         } else {
           throw new Error(result.error || 'Google rescan failed');
+        }
+      } else if (provider === 'aws') {
+        const currentSettings = await ttsService.getSettings();
+        if (!currentSettings?.awsAccessKeyId || !currentSettings?.awsSecretAccessKey || !currentSettings?.awsRegion) {
+          throw new Error('AWS not configured. Please set up AWS Polly first.');
+        }
+          console.log(`[TTS] Rescanning AWS with stored credentials for region: ${currentSettings.awsRegion}`);
+        const result = await ipcRenderer.invoke('aws:sync-voices', {
+          accessKeyId: currentSettings.awsAccessKeyId,
+          secretAccessKey: currentSettings.awsSecretAccessKey,
+          region: currentSettings.awsRegion,
+          includeNeuralVoices: currentSettings.awsIncludeNeuralVoices ?? true
+        });
+
+        if (result.success) {
+          const data = result.data;
+          console.log(`[TTS] AWS rescan complete: ${data.voiceCount} voices found`);
+          
+          await syncAndLoadVoices();
+          await loadVoiceStats();
+
+          setRescanMessages(prev => ({ ...prev, [provider]: `✓ AWS rescanned: ${data.voiceCount} voices found` }));
+        } else {
+          throw new Error(result.error || 'AWS rescan failed');
         }
       } else {
         let currentVoices: any[] = [];
@@ -366,6 +390,9 @@ export const TTS: React.FC = () => {
     if (settings.googleEnabled ?? false) {
       providers.push({ value: 'google', label: '🔵 Google' });
     }
+    if (settings.awsEnabled ?? false) {
+      providers.push({ value: 'aws', label: '🟠 AWS' });
+    }
     
     return providers;
   };
@@ -377,13 +404,15 @@ export const TTS: React.FC = () => {
       ...group,
       voices: group.voices.filter(voice => {
         const voiceIdStr = voice.voice_id || '';
-        const isWebSpeech = !voiceIdStr.startsWith('azure_') && !voiceIdStr.startsWith('google_');
+        const isWebSpeech = !voiceIdStr.startsWith('azure_') && !voiceIdStr.startsWith('google_') && !voiceIdStr.startsWith('aws_');
         const isAzure = voiceIdStr.startsWith('azure_');
         const isGoogle = voiceIdStr.startsWith('google_');
+        const isAWS = voiceIdStr.startsWith('aws_');
 
         if (isWebSpeech && !(settings.webspeechEnabled ?? true)) return false;
         if (isAzure && !(settings.azureEnabled ?? false)) return false;
         if (isGoogle && !(settings.googleEnabled ?? false)) return false;
+        if (isAWS && !(settings.awsEnabled ?? false)) return false;
 
         const searchLower = searchTerm.toLowerCase();
         const matchesSearch = !searchTerm ||
@@ -548,6 +577,7 @@ export const TTS: React.FC = () => {
           <ViewerVoiceSettingsTab
             voiceGroups={voiceGroups}
             accessMode={'access_all'}
+            settings={settings}
           />
         </div>
       )}

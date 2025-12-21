@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as tts from '../../../services/tts';
 import { BrowserSourceURLDisplay } from '../../../components/BrowserSourceURLDisplay';
-import { AzureSetupGuide, WebSpeechSetupGuide, GoogleSetupGuide, StreamDeckSetupGuide } from './VoiceSettingGuides';
+import { AzureSetupGuide, WebSpeechSetupGuide, GoogleSetupGuide, AWSSetupGuide, StreamDeckSetupGuide } from './VoiceSettingGuides';
 
 // Import namespace alias for type compatibility
 import * as ttsService from '../../../services/tts';
@@ -38,8 +38,8 @@ interface Props {
   onTestVoice: () => Promise<void>;
   onStop: () => Promise<void>;
   onTestMessageChange: (message: string) => void;
-  onProviderToggle: (provider: 'webspeech' | 'azure' | 'google', enabled: boolean) => Promise<void>;
-  onProviderRescan: (provider: 'webspeech' | 'azure' | 'google') => Promise<void>;
+  onProviderToggle: (provider: 'webspeech' | 'azure' | 'google' | 'aws', enabled: boolean) => Promise<void>;
+  onProviderRescan: (provider: 'webspeech' | 'azure' | 'google' | 'aws') => Promise<void>;
   onSearchChange: (term: string) => void;
   onLanguageFilterChange: (filter: string) => void;
   onGenderFilterChange: (filter: string) => void;
@@ -89,6 +89,7 @@ export const VoiceSettingsTab: React.FC<Props> = ({
   const [showAzureGuide, setShowAzureGuide] = useState(false);
   const [showWebSpeechGuide, setShowWebSpeechGuide] = useState(false);
   const [showGoogleGuide, setShowGoogleGuide] = useState(false);
+  const [showAWSGuide, setShowAWSGuide] = useState(false);
   const [showStreamDeckGuide, setShowStreamDeckGuide] = useState(false);
   
   const filteredGroups = getFilteredGroups();
@@ -135,6 +136,33 @@ export const VoiceSettingsTab: React.FC<Props> = ({
       setShowGoogleGuide(false);
     } catch (error) {
       console.error('[VoiceSettingsTab] Error saving Google credentials:', error);
+    }
+  };
+
+  const handleAWSGuideComplete = async (accessKeyId: string, secretAccessKey: string, region: string, includeNeuralVoices: boolean) => {
+    try {
+      console.log('[VoiceSettingsTab] AWS setup complete, saving credentials and syncing voices...');
+      await onSettingChange('awsAccessKeyId', accessKeyId);
+      await onSettingChange('awsSecretAccessKey', secretAccessKey);
+      await onSettingChange('awsRegion', region);
+      await onSettingChange('awsIncludeNeuralVoices', includeNeuralVoices);
+      
+      // Sync AWS voices to database before enabling
+      console.log('[VoiceSettingsTab] Syncing AWS voices...');
+      const { ipcRenderer } = window.require('electron');
+      const syncResult = await ipcRenderer.invoke('aws:sync-voices', { 
+        accessKeyId, 
+        secretAccessKey, 
+        region,
+        includeNeuralVoices
+      });
+      console.log('[VoiceSettingsTab] Sync result:', syncResult);
+      
+      // Enable AWS provider
+      await onProviderToggle('aws', true);
+      setShowAWSGuide(false);
+    } catch (error) {
+      console.error('[VoiceSettingsTab] Error saving AWS credentials:', error);
     }
   };
 
@@ -456,6 +484,130 @@ export const VoiceSettingsTab: React.FC<Props> = ({
             </ul>
           </div>
         </div>
+
+        {/* AWS Provider */}
+        <div className="provider-toggle-section" style={{ padding: '15px', border: '1px solid #444', borderRadius: '8px', backgroundColor: '#1a1a1a' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={settings.awsEnabled ?? false}
+                onChange={(e) => onProviderToggle('aws', e.target.checked)}
+              />
+              <span className="checkbox-text" style={{ fontSize: '1.1em', fontWeight: 'bold' }}>
+                🟠 AWS Polly (Premium)
+              </span>
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setShowAWSGuide(true)}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: '0.95em',
+                  backgroundColor: '#ff9900',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap'
+                }}
+                title={settings?.awsAccessKeyId ? 'Click to edit AWS setup' : 'Click to set up AWS Polly'}
+              >
+                {settings?.awsAccessKeyId ? '✏️ Edit Setup' : '⚙️ Setup'}
+              </button>
+              {settings?.awsAccessKeyId && (
+                <button
+                  onClick={() => onProviderRescan('aws')}
+                  disabled={rescanningProvider === 'aws'}
+                  style={{
+                    padding: '10px 16px',
+                    fontSize: '0.95em',
+                    backgroundColor: rescanningProvider === 'aws' ? '#555' : '#28a745',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: rescanningProvider === 'aws' ? 'not-allowed' : 'pointer',
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap',
+                    opacity: rescanningProvider === 'aws' ? 0.6 : 1
+                  }}
+                  title="Rescan AWS voices for changes"
+                >
+                  {rescanningProvider === 'aws' ? '⟳ Rescanning...' : '⟳ Rescan'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Neural Voices Toggle */}
+          {settings?.awsAccessKeyId && (
+            <div style={{ marginLeft: '28px', marginBottom: '12px', marginTop: '12px' }}>
+              <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.awsIncludeNeuralVoices ?? true}
+                  onChange={async (e) => {
+                    const newValue = e.target.checked;
+                    await onSettingChange('awsIncludeNeuralVoices', newValue);
+                    // Auto-rescan after toggling neural voices
+                    setTimeout(() => {
+                      onProviderRescan('aws');
+                    }, 500);
+                  }}
+                  style={{ marginRight: '8px' }}
+                />
+                <span style={{ color: '#e0e0e0', fontSize: '0.95em' }}>
+                  Include Neural Voices (4x cost)
+                </span>
+              </label>
+              <div style={{ marginLeft: '28px', fontSize: '0.85em', color: '#888', marginTop: '4px' }}>
+                {settings.awsIncludeNeuralVoices 
+                  ? '✓ Neural voices enabled - higher quality, higher cost'
+                  : '✓ Standard voices only - lower cost, good quality'}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginLeft: '28px', color: '#888', marginBottom: '12px' }}>
+            <div>✓ 70+ lifelike voices across 30+ languages</div>
+            <div>✓ Neural and standard voice options</div>
+            <div>✓ Free tier: 5M chars/month (Standard) or 1M chars/month (Neural) for 12 months</div>
+          </div>
+          {rescanMessages['aws'] && (
+            <div style={{
+              marginBottom: '12px',
+              marginLeft: '28px',
+              padding: '8px 12px',
+              backgroundColor: rescanMessages['aws'].startsWith('✓') ? '#1a3a1a' : '#3a1a1a',
+              border: `1px solid ${rescanMessages['aws'].startsWith('✓') ? '#28a745' : '#dc3545'}`,
+              borderRadius: '4px',
+              fontSize: '0.9em',
+              color: rescanMessages['aws'].startsWith('✓') ? '#28a745' : '#dc3545'
+            }}>
+              {rescanMessages['aws']}
+            </div>
+          )}
+          {/* Best Practices Callout */}
+          <div style={{
+            marginTop: '12px',
+            padding: '10px',
+            backgroundColor: '#3a2a1a',
+            borderLeft: '4px solid #ff9900',
+            borderRadius: '4px',
+            fontSize: '0.85em',
+            lineHeight: '1.5',
+            color: '#e0e0e0'
+          }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>💡 Best Practices:</div>
+            <ul style={{ margin: '0', paddingLeft: '20px' }}>
+              <li>Use neural voices for best quality (4x cost of standard)</li>
+              <li>Toggle neural voices on/off in setup to control costs</li>
+              <li>Monitor usage to stay within free tier limits</li>
+              <li>Combine with Azure or Google for geographic optimization</li>
+            </ul>
+          </div>
+        </div>
         </div>
       </div>
 
@@ -772,6 +924,14 @@ export const VoiceSettingsTab: React.FC<Props> = ({
         <GoogleSetupGuide
           onClose={() => setShowGoogleGuide(false)}
           onComplete={handleGoogleGuideComplete}
+        />
+      )}
+
+      {/* AWS Setup Guide Modal */}
+      {showAWSGuide && (
+        <AWSSetupGuide
+          onClose={() => setShowAWSGuide(false)}
+          onComplete={handleAWSGuideComplete}
         />
       )}
 
