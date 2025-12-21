@@ -3,6 +3,7 @@ import { EVENT_GROUPS, DEFAULT_SUBSCRIPTIONS, MANDATORY_SUBSCRIPTIONS, BROADCAST
 import { subscribeToEvent, unsubscribeFromEvent } from '../services/twitch-api';
 import { connectIRC, disconnectIRC } from '../services/irc-api';
 import * as db from '../services/database';
+import * as chatCommands from '../services/chat-commands';
 
 interface EventSubscriptionsProps {
   clientId: string;
@@ -32,6 +33,27 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
     return initial;
   });
   const [ircConnected, setIrcConnected] = useState<boolean>(false);
+
+  // Listen for IRC status changes from backend
+  useEffect(() => {
+    const { ipcRenderer } = window.require('electron');
+    
+    const handleIRCStatus = (status: any) => {
+      setIrcConnected(status.connected);
+      console.log('[EventSubscriptions] IRC status updated:', status.connected);
+    };
+    
+    ipcRenderer.on('irc:status', handleIRCStatus);
+    
+    // Get initial status
+    ipcRenderer.invoke('irc:get-status').then((status: any) => {
+      setIrcConnected(status.connected);
+    });
+    
+    return () => {
+      ipcRenderer.removeListener('irc:status', handleIRCStatus);
+    };
+  }, []);
 
   // Auto-subscribe to mandatory events when session is established
   useEffect(() => {
@@ -63,7 +85,12 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
                 !eventType.startsWith('irc.')) {
               subscribeToEvent(eventType, accessToken, clientId, sessionId, broadcasterId, userId);
             }
-          });} else {
+          });
+          
+          // NOTE: IRC connection is handled by connection.tsx
+          // We don't need to connect here, just track the state
+          console.log('[EventSubscriptions] IRC connection managed by connection screen');
+        } else {
           // No saved preferences, enable all events by default (already in initial state)
           const allEvents = Object.values(EVENT_GROUPS).flat();
           
@@ -81,16 +108,9 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
             }
           });
           
-          // Connect to IRC for IRC events
-          const hasIRCEvents = allEvents.some(key => key.startsWith('irc.'));
-          if (hasIRCEvents && !ircConnected && broadcasterLogin) {
-            try {
-              await connectIRC(broadcasterLogin, accessToken, broadcasterLogin);
-              setIrcConnected(true);
-            } catch (error) {
-              console.error('Failed to connect to IRC:', error);
-            }
-          }
+          // NOTE: IRC connection is handled by connection.tsx
+          // We don't need to connect here, just track the state
+          console.log('[EventSubscriptions] IRC connection managed by connection screen');
         }
       } catch (error) {
         console.error('Failed to restore subscriptions:', error);
@@ -136,17 +156,11 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
     
     if (isIRCEvent) {
       // Handle IRC events differently
+      // NOTE: IRC connection is handled by connection.tsx
+      // We only prevent accidental disconnection here
       if (newValue) {
-        // Enable IRC event - connect to IRC if not already connected
-        if (!ircConnected) {
-          try {
-            // Connect to IRC with broadcaster's channel
-            await connectIRC(broadcasterLogin, accessToken, broadcasterLogin);
-            setIrcConnected(true);
-          } catch (error) {
-            console.error('Failed to connect to IRC:', error);
-          }
-        }
+        // IRC event enabled - connection.tsx will handle connecting
+        console.log('[EventSubscriptions] IRC event enabled, connection handled by connection screen');
       } else {
         // Disable IRC event - check if any IRC events are still enabled
         const anyIRCEventEnabled = Object.entries(subscriptions).some(
@@ -154,12 +168,22 @@ export const EventSubscriptions: React.FC<EventSubscriptionsProps> = ({
         );
         
         if (!anyIRCEventEnabled && ircConnected) {
-          // No IRC events enabled, disconnect
-          try {
-            await disconnectIRC();
-            setIrcConnected(false);
-          } catch (error) {
-            console.error('Failed to disconnect from IRC:', error);
+          // Check if any chat commands are enabled before disconnecting
+          // Chat commands need IRC to send response messages
+          const commandsResult = await chatCommands.getAllCommands();
+          const anyCommandEnabled = commandsResult.success && 
+            commandsResult.data?.some(cmd => cmd.enabled);
+          
+          if (!anyCommandEnabled) {
+            // No IRC events enabled and no chat commands enabled, safe to disconnect
+            try {
+              await disconnectIRC();
+              setIrcConnected(false);
+            } catch (error) {
+              console.error('Failed to disconnect from IRC:', error);
+            }
+          } else {
+            console.log('[EventSubscriptions] Keeping IRC connected for chat commands');
           }
         }
       }
