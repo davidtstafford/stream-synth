@@ -434,33 +434,7 @@ const SetupGuideModal: React.FC<SetupGuideModalProps> = ({ onClose, onTokenEnter
       )
     },
     {
-      title: '2. Configure OAuth2 & Get Invite Link',
-      content: (
-        <>
-          <ol>
-            <li>Go to "OAuth2" section (left sidebar)</li>
-            <li>Under "Redirects", click "Add Redirect"</li>
-            <li>Enter: <code>http://localhost:3000</code> and save</li>
-            <li>In "OAuth2 URL Generator", select redirect URL: <code>http://localhost:3000</code></li>
-            <li>Under "Scopes", check: <strong>bot</strong></li>
-            <li>Under "Bot Permissions", check:
-              <ul>
-                <li>Send Messages</li>
-                <li>Embed Links</li>
-                <li>Read Message History</li>
-                <li>Use Slash Commands</li>
-              </ul>
-            </li>
-            <li>Copy the "Generated URL" at the bottom (you'll use this in Step 4)</li>
-          </ol>
-          <div className="tip">
-            💡 You must select the redirect URL for the generated URL to appear
-          </div>
-        </>
-      )
-    },
-    {
-      title: '3. Enter Your Bot Token',
+      title: '2. Enter Your Bot Token',
       content: (
         <>
           <p>Paste the bot token you copied in Step 1:</p>
@@ -502,18 +476,51 @@ const SetupGuideModal: React.FC<SetupGuideModalProps> = ({ onClose, onTokenEnter
       )
     },
     {
+      title: '3. Generate Bot Invite URL',
+      content: (
+        <>
+          <ol>
+            <li>Go back to Discord Developer Portal</li>
+            <li>Go to "OAuth2" → "URL Generator" section (left sidebar)</li>
+            <li>Under "SCOPES" select:
+              <ul>
+                <li>✓ bot</li>
+                <li>✓ applications.commands</li>
+              </ul>
+            </li>
+            <li>Under "BOT PERMISSIONS" select:
+              <ul>
+                <li>Send Messages</li>
+                <li>Embed Links</li>
+                <li>Read Message History</li>
+                <li>Use Slash Commands</li>
+              </ul>
+            </li>
+            <li>Copy the generated URL at the bottom (you'll use this in Step 4)</li>
+          </ol>
+          <div className="tip">
+            💡 DO NOT add any redirect URIs - bots don't need OAuth2 redirects
+          </div>
+          <div className="tip">
+            💡 ONLY select "bot" and "applications.commands" scopes
+          </div>
+        </>
+      )
+    },
+    {
       title: '4. Invite Bot to Your Server',
       content: (
         <>
           <ol>
-            <li>Open the OAuth2 URL you copied in Step 2</li>
+            <li>Open the invite URL from Step 3 in your browser</li>
             <li>Select your Discord server from the dropdown</li>
-            <li>Review the permissions</li>
+            <li>Review the permissions (Send Messages, Slash Commands, etc.)</li>
             <li>Click "Authorize"</li>
-            <li>Complete the CAPTCHA if prompted</li>
+            <li>Complete the CAPTCHA verification if prompted</li>
+            <li>The bot should now appear in your server's member list!</li>
           </ol>
           <div className="tip">
-            💡 You may see a "localhost connection" error - this is normal! The authorization still succeeded.
+            ✓ Success: Bot appears in your server member list with an "APP" or "BOT" tag
           </div>
         </>
       )
@@ -525,9 +532,14 @@ const SetupGuideModal: React.FC<SetupGuideModalProps> = ({ onClose, onTokenEnter
           <ol>
             <li>Close this guide and click "Start Bot" in the main UI</li>
             <li>Go to any channel in your Discord server</li>
-            <li>Type <code>/findvoice</code> to search for voices</li>
-            <li>Viewers activate voices with <code>~setvoice</code> in your Twitch chat</li>
+            <li>Type / and you should see your bot's commands appear</li>
+            <li>Use the command: <code>/findvoice</code></li>
+            <li>Viewers set their voices with <code>~setvoice</code> in your Twitch chat</li>
+            <li>Check <code>/help</code> for all available commands</li>
           </ol>
+          <div className="tip">
+            💡 All voice searching happens in Discord, keeping your Twitch chat clean
+          </div>
           <div className="tip">
             ✓ All done! Your bot is ready to help viewers discover voices.
           </div>
