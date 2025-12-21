@@ -1,6 +1,6 @@
 {
   "name": "stream-synth",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Stream Synth - A desktop app for Twitch integration",
   "main": "dist/backend/main.js",
   "scripts": {
